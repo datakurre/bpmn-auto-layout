@@ -1628,10 +1628,13 @@ function repairSegmentCollisions(
   let bestHits = hits(best);
   if (bestHits === 0) return best;
 
-  // Interior segments move freely; the first and last may only slide along the
-  // edge of the node they attach to, so the polyline still meets its endpoints.
   const srcNode = layout.nodes.get(flow?.sourceRef?.id);
   const tgtNode = layout.nodes.get(flow?.targetRef?.id);
+  const visibilityRoute = findRectilinearRoute(best, obstacles, srcNode, tgtNode);
+  if (visibilityRoute && hits(visibilityRoute) === 0) return visibilityRoute;
+
+  // Interior segments move freely; the first and last may only slide along the
+  // edge of the node they attach to, so the polyline still meets its endpoints.
   const staysOnNode = (idx: number, moved: { x: number; y: number }): boolean => {
     const node = idx === 0 ? srcNode : idx === best.length - 1 ? tgtNode : undefined;
     if (!node) return true;
@@ -1762,6 +1765,140 @@ function segmentHitCount(
     }
   }
   return n;
+}
+
+/**
+ * Find a short orthogonal route around rectangular obstacles. This is a small
+ * visibility graph rather than a full grid router: candidate coordinates come
+ * from obstacle edges and the original route, so the result stays angular and
+ * has very few bends. It is only used after the normal rule-based route has
+ * already collided with an activity.
+ */
+function findRectilinearRoute(
+  original: Array<{ x: number; y: number }>,
+  obstacles: NodeLayout[],
+  srcNode: NodeLayout | undefined,
+  tgtNode: NodeLayout | undefined,
+): Array<{ x: number; y: number }> | null {
+  const start = original[0];
+  const end = original[original.length - 1];
+  if (!start || !end || obstacles.length === 0) return null;
+
+  const xs = new Set<number>(original.map((point) => point.x));
+  const ys = new Set<number>(original.map((point) => point.y));
+  for (const obstacle of obstacles) {
+    xs.add(obstacle.x - SEGMENT_CLEARANCE);
+    xs.add(obstacle.x + obstacle.width + SEGMENT_CLEARANCE);
+    ys.add(obstacle.y - SEGMENT_CLEARANCE);
+    ys.add(obstacle.y + obstacle.height + SEGMENT_CLEARANCE);
+  }
+
+  const points: Array<{ x: number; y: number }> = [];
+  const pointIndex = new Map<string, number>();
+  const keyOf = (x: number, y: number): string => `${x}:${y}`;
+  const clearPoint = (x: number, y: number): boolean =>
+    obstacles.every(
+      (obstacle) =>
+        x <= obstacle.x - SEGMENT_CLEARANCE ||
+        x >= obstacle.x + obstacle.width + SEGMENT_CLEARANCE ||
+        y <= obstacle.y - SEGMENT_CLEARANCE ||
+        y >= obstacle.y + obstacle.height + SEGMENT_CLEARANCE,
+    );
+
+  for (const x of xs) {
+    for (const y of ys) {
+      if (!clearPoint(x, y) && !(x === start.x && y === start.y) && !(x === end.x && y === end.y)) continue;
+      const index = points.length;
+      points.push({ x, y });
+      pointIndex.set(keyOf(x, y), index);
+    }
+  }
+
+  const edges = new Map<number, Array<{ to: number; distance: number; direction: 1 | 2 }>>();
+  const addVisiblePair = (a: number, b: number): void => {
+    const first = points[a]!;
+    const second = points[b]!;
+    if (segmentHitCount(first, second, obstacles) > 0) return;
+    const direction: 1 | 2 = Math.abs(first.y - second.y) < 0.5 ? 1 : 2;
+    const distance = Math.abs(first.x - second.x) + Math.abs(first.y - second.y);
+    (edges.get(a) ?? edges.set(a, []).get(a)!).push({ to: b, distance, direction });
+    (edges.get(b) ?? edges.set(b, []).get(b)!).push({ to: a, distance, direction });
+  };
+
+  for (const x of xs) {
+    const row = points
+      .map((point, index) => ({ point, index }))
+      .filter(({ point }) => Math.abs(point.x - x) < 0.5)
+      .sort((a, b) => a.point.y - b.point.y);
+    for (let i = 0; i + 1 < row.length; i += 1) addVisiblePair(row[i]!.index, row[i + 1]!.index);
+  }
+  for (const y of ys) {
+    const column = points
+      .map((point, index) => ({ point, index }))
+      .filter(({ point }) => Math.abs(point.y - y) < 0.5)
+      .sort((a, b) => a.point.x - b.point.x);
+    for (let i = 0; i + 1 < column.length; i += 1) addVisiblePair(column[i]!.index, column[i + 1]!.index);
+  }
+
+  const startIndex = pointIndex.get(keyOf(start.x, start.y));
+  const endIndex = pointIndex.get(keyOf(end.x, end.y));
+  if (startIndex === undefined || endIndex === undefined) return null;
+
+  interface State {
+    point: number;
+    direction: 0 | 1 | 2;
+  }
+  const stateKey = (state: State): string => `${state.point}:${state.direction}`;
+  const initial: State = { point: startIndex, direction: 0 };
+  const distances = new Map<string, number>([[stateKey(initial), 0]]);
+  const previous = new Map<string, string>();
+  const pending: State[] = [initial];
+
+  while (pending.length > 0) {
+    let bestPending = 0;
+    for (let i = 1; i < pending.length; i += 1) {
+      if ((distances.get(stateKey(pending[i]!)) ?? Infinity) < (distances.get(stateKey(pending[bestPending]!)) ?? Infinity)) bestPending = i;
+    }
+    const current = pending.splice(bestPending, 1)[0]!;
+    const currentKey = stateKey(current);
+    const currentDistance = distances.get(currentKey)!;
+    for (const edge of edges.get(current.point) || []) {
+      const nextPoint = points[edge.to]!;
+      if (current.point === startIndex && !leavesOutward([start, nextPoint], srcNode, undefined)) continue;
+      const turnPenalty = current.direction !== 0 && current.direction !== edge.direction ? 70 : 0;
+      const next: State = { point: edge.to, direction: edge.direction };
+      const nextKey = stateKey(next);
+      const distance = currentDistance + edge.distance + turnPenalty;
+      if (distance >= (distances.get(nextKey) ?? Infinity)) continue;
+      distances.set(nextKey, distance);
+      previous.set(nextKey, currentKey);
+      pending.push(next);
+    }
+  }
+
+  const endStates = [...distances.keys()].filter((key) => key.startsWith(`${endIndex}:`));
+  endStates.sort((a, b) => distances.get(a)! - distances.get(b)!);
+  for (const endStateKey of endStates) {
+    const route: Array<{ x: number; y: number }> = [];
+    let cursor: string | undefined = endStateKey;
+    while (cursor) {
+      const pointIndexValue = Number(cursor.split(":")[0]);
+      route.unshift(points[pointIndexValue]!);
+      cursor = previous.get(cursor);
+    }
+    if (!leavesOutward(route, srcNode, tgtNode)) continue;
+    const simplified = route.filter((point, index) => {
+      if (index === 0 || index === route.length - 1) return true;
+      const previousPoint = route[index - 1]!;
+      const nextPoint = route[index + 1]!;
+      return !(
+        (Math.abs(previousPoint.x - point.x) < 0.5 && Math.abs(point.x - nextPoint.x) < 0.5) ||
+        (Math.abs(previousPoint.y - point.y) < 0.5 && Math.abs(point.y - nextPoint.y) < 0.5)
+      );
+    });
+    return simplified;
+  }
+  return null;
 }
 
 /** The Y a routed edge's channel runs at, from the process's channel plan. */
