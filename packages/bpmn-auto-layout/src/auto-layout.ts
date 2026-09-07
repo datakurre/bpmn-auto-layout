@@ -530,7 +530,11 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
         }
 
         nodeTrack.set(targetId, targetTrack);
-        const targetCol = Math.max(parentCol + parentSpan, nodeCol.get(targetId) ?? 0);
+        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
+        const targetCol =
+          targetTrack > parentTrack && isExceptionBranch
+            ? Math.max(0, parentCol - 1)
+            : Math.max(parentCol + parentSpan, nodeCol.get(targetId) ?? 0);
         nodeCol.set(targetId, targetCol);
         queue.push(targetId);
       } else {
@@ -593,6 +597,35 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
       }
       lastRightEdge = currentCol + halfSpan;
     }
+  }
+
+  // Keep a terminal close to the activity that produces it. Aligning every end
+  // event to the farthest terminal can put a small end node into the corridor
+  // needed by another branch, forcing an otherwise simple merge into a large
+  // detour.
+  for (const endNode of topNodes.filter((n) => n.$type.endsWith("EndEvent"))) {
+    const incoming = topFlows.find((flow) => flow.targetRef?.id === endNode.id);
+    const source = incoming ? nodesById.get(incoming.sourceRef?.id) : undefined;
+    if (!source) continue;
+    const track = nodeTrack.get(endNode.id);
+    if (track === undefined || track <= 0 || track !== nodeTrack.get(source.id)) continue;
+    const sourceCol = nodeCol.get(source.id);
+    if (sourceCol === undefined) continue;
+    const sourceSpan = getElementDimensions(source).width / opts.colWidth;
+    let candidate = sourceCol + Math.max(1, sourceSpan);
+    const endSpan = getElementDimensions(endNode).width / opts.colWidth;
+    while (
+      topNodes.some((node) => {
+        if (node.id === endNode.id || nodeTrack.get(node.id) !== track) return false;
+        const nodeColValue = nodeCol.get(node.id);
+        if (nodeColValue === undefined) return false;
+        const nodeSpan = getElementDimensions(node).width / opts.colWidth;
+        return Math.abs(nodeColValue - candidate) < (nodeSpan + endSpan) / 2 + 0.4;
+      })
+    ) {
+      candidate += 1;
+    }
+    nodeCol.set(endNode.id, candidate);
   }
 
   // Horizontally align terminal end events across different tracks when unobstructed
@@ -1465,13 +1498,21 @@ function createProcessDi(
       const src = layout.nodes.get(flow.sourceRef?.id);
       const tgt = layout.nodes.get(flow.targetRef?.id);
       if (!src || !tgt) continue;
-      edgeWaypoints.set(flow.id, repairSegmentCollisions(computeWaypoints(src, tgt, layout, opts, flow), layout, flow));
+       edgeWaypoints.set(flow.id, repairSegmentCollisions(computeWaypoints(src, tgt, layout, opts, flow), layout, flow));
     }
   }
   fanOutAttachPoints(edgeWaypoints, layout);
   for (const flow of layout.allFlows) {
-    const waypoints = edgeWaypoints.get(flow.id);
-    if (waypoints) edgeWaypoints.set(flow.id, repairSegmentCollisions(waypoints, layout, flow));
+    const existing = edgeWaypoints.get(flow.id);
+    if (!existing) continue;
+    const src = layout.nodes.get(flow.sourceRef?.id);
+    const tgt = layout.nodes.get(flow.targetRef?.id);
+    const isLowerMerge = src && tgt && src.track > tgt.track && tgt.element?.$type?.endsWith("Gateway") && !src.element?.$type?.endsWith("Gateway");
+    if (isLowerMerge) {
+      edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, layout, opts, flow));
+      continue;
+    }
+    edgeWaypoints.set(flow.id, repairSegmentCollisions(existing, layout, flow, edgeWaypoints));
   }
 
   const placedLabels: LabelBounds[] = [];
@@ -1644,6 +1685,7 @@ function repairSegmentCollisions(
   waypoints: Array<{ x: number; y: number }>,
   layout: ProcessLayoutResult,
   flow: any,
+  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
 ): Array<{ x: number; y: number }> {
   if (waypoints.length < 2) return waypoints;
   const endpoints = new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
@@ -1652,6 +1694,7 @@ function repairSegmentCollisions(
   const obstacles = Array.from(layout.nodes.values()).filter(
     (n) => !endpoints.has(n.id) && (internalSubProcessFlow || n.element?.$type !== "bpmn:SubProcess"),
   );
+  obstacles.push(...pathObstacles(blockedPaths, flow?.id));
 
   const hits = (pts: Array<{ x: number; y: number }>): number => {
     let n = 0;
@@ -1829,6 +1872,41 @@ function segmentHitCount(
     }
   }
   return n;
+}
+
+function pathObstacles(
+  paths: Map<string, Array<{ x: number; y: number }>>,
+  excludedFlowId?: string,
+): NodeLayout[] {
+  const obstacles: NodeLayout[] = [];
+  for (const [flowId, points] of paths) {
+    if (flowId === excludedFlowId) continue;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const a = points[i]!;
+      const b = points[i + 1]!;
+      const length = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      if (length <= ROUTE_DEPARTURE_GAP) continue;
+      const trim = Math.min(ROUTE_DEPARTURE_GAP / 2, length / 3);
+      const horizontal = Math.abs(a.y - b.y) < 0.5;
+      const x = horizontal ? Math.min(a.x, b.x) + trim : a.x - SEGMENT_CLEARANCE / 2;
+      const y = horizontal ? a.y - SEGMENT_CLEARANCE / 2 : Math.min(a.y, b.y) + trim;
+      const width = horizontal ? length - trim * 2 : SEGMENT_CLEARANCE;
+      const height = horizontal ? SEGMENT_CLEARANCE : length - trim * 2;
+      obstacles.push({
+        id: `${flowId}:${i}`,
+        element: { $type: "bpmn:RouteObstacle" },
+        col: 0,
+        track: 0,
+        x,
+        y,
+        width,
+        height,
+        centerX: x + width / 2,
+        centerY: y + height / 2,
+      });
+    }
+  }
+  return obstacles;
 }
 
 /**
