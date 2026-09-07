@@ -252,15 +252,6 @@ function packIndependentComponents(
     if (ar !== br) parent.set(br, ar);
   };
 
-  // Boundary events are structurally attached to an activity, but their
-  // outgoing sequence flows do not make that relationship visible in the
-  // sequence-flow graph. Keep the handler with its host instead of packing it
-  // as an unrelated component below the main model.
-  for (const node of topNodes) {
-    const attachedTo = node.attachedToRef?.id;
-    if (attachedTo && parent.has(attachedTo)) union(node.id, attachedTo);
-  }
-
   for (const flow of topFlows) {
     const source = flow.sourceRef?.id;
     const target = flow.targetRef?.id;
@@ -1477,10 +1468,6 @@ function createProcessDi(
     }
   }
   fanOutAttachPoints(edgeWaypoints, layout);
-  for (const flow of layout.allFlows) {
-    const waypoints = edgeWaypoints.get(flow.id);
-    if (waypoints) edgeWaypoints.set(flow.id, repairSegmentCollisions(waypoints, layout, flow));
-  }
 
   const placedLabels: LabelBounds[] = [];
 
@@ -1679,27 +1666,6 @@ function repairSegmentCollisions(
     }
   }
 
-  // A gateway is often the point where the lower channel becomes crowded. Try
-  // leaving its side, rising above the graph, and entering the target from the
-  // nearest side before accepting a partially repaired lower route.
-  if (bestHits > 0 && srcNode?.element?.$type?.endsWith("Gateway") && tgtNode && srcNode.track < tgtNode.track) {
-    const upperY = channelY(layout, flow, "above", srcNode.centerX, tgtNode.centerX);
-    const bypassX = srcNode.x + srcNode.width + CHANNEL_CLEARANCE;
-    const entryX = tgtNode.centerX >= bypassX ? tgtNode.x : tgtNode.x + tgtNode.width;
-    const upward = [
-      { x: srcNode.x + srcNode.width, y: srcNode.centerY },
-      { x: bypassX, y: srcNode.centerY },
-      { x: bypassX, y: upperY },
-      { x: entryX, y: upperY },
-      { x: entryX, y: tgtNode.centerY },
-      { x: tgtNode.x + (entryX === tgtNode.x ? 0 : tgtNode.width), y: tgtNode.centerY },
-    ];
-    if (leavesOutward(upward, srcNode, tgtNode) && hits(upward) < bestHits) {
-      best = upward;
-      bestHits = hits(best);
-    }
-  }
-
   // A final approach that still cannot be cleared is one where the target sits
   // directly above (or below) an element wide enough that no slide along the
   // target's own edge escapes it -- craft-graph's `rejected` rising out of the
@@ -1859,8 +1825,10 @@ function computeWaypoints(
         n.id !== tgt.id &&
         n.track === src.track &&
         !n.isSubProcessChild &&
-        n.centerX > src.centerX &&
-        n.centerX < tgt.centerX,
+        n.x < tgt.x &&
+        n.x + n.width > src.x + src.width &&
+        n.y < src.centerY &&
+        n.y + n.height > src.centerY,
     );
 
     const srcExitY = src.element.$type === "bpmn:SubProcess" ? opts.track1Y : src.centerY;
