@@ -600,7 +600,7 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
     const maxEndCol = Math.max(...endEvents.map((n) => nodeCol.get(n.id) ?? 0));
     for (const endNode of endEvents) {
       const currentCol = nodeCol.get(endNode.id) ?? 0;
-      if (currentCol < maxEndCol) {
+      if (currentCol < maxEndCol && maxEndCol - currentCol <= 2) {
         const track = nodeTrack.get(endNode.id) ?? 0;
         const hasObstacle = topNodes.some(
           (n) => n.id !== endNode.id && nodeTrack.get(n.id) === track && (nodeCol.get(n.id) ?? 0) >= currentCol && (nodeCol.get(n.id) ?? 0) <= maxEndCol,
@@ -611,7 +611,6 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
       }
     }
   }
-
   // 4. Compute Coordinates for Top-Level Nodes and Nested SubProcesses
   const layoutNodes = new Map<string, NodeLayout>();
 
@@ -1926,11 +1925,41 @@ function computeWaypoints(
         ];
       }
       const entryX = src.centerX > tgt.x + tgt.width ? tgt.x + tgt.width : tgt.x;
-      return [
+      const direct = [
         { x: src.centerX, y: src.y + src.height },
         { x: src.centerX, y: tgt.centerY },
         { x: entryX, y: tgt.centerY },
       ];
+      const blockers = Array.from(layout.nodes.values()).filter(
+        (n) => n.id !== src.id && n.id !== tgt.id && !n.isSubProcessChild && n.element?.$type !== "bpmn:SubProcess",
+      );
+      const directHits = direct.slice(0, -1).reduce((count, point, index) => count + segmentHitCount(point, direct[index + 1]!, blockers), 0);
+      if (directHits > 0) {
+        const relevant = blockers.filter(
+          (n) =>
+            n.x < Math.max(src.centerX, tgt.centerX) &&
+            n.x + n.width > Math.min(src.centerX, tgt.centerX) &&
+            n.y < tgt.centerY &&
+            n.y + n.height > src.y + src.height,
+        );
+        const crossY = Math.max(tgt.centerY, ...relevant.map((n) => n.y + n.height + CHANNEL_CLEARANCE));
+        for (const direction of [1, -1] as const) {
+          const bypassX =
+            direction > 0
+              ? Math.max(src.x + src.width, ...relevant.map((n) => n.x + n.width)) + CHANNEL_CLEARANCE
+              : Math.min(src.x, ...relevant.map((n) => n.x)) - CHANNEL_CLEARANCE;
+          const bypass = [
+            { x: src.centerX, y: src.y + src.height },
+            { x: bypassX, y: src.y + src.height },
+            { x: bypassX, y: crossY },
+            { x: entryX, y: crossY },
+            { x: entryX, y: tgt.centerY },
+          ];
+          const bypassHits = bypass.slice(0, -1).reduce((count, point, index) => count + segmentHitCount(point, bypass[index + 1]!, blockers), 0);
+          if (bypassHits === 0) return bypass;
+        }
+      }
+      return direct;
     }
     // Exits right of task, drops to target centerY
     return [
