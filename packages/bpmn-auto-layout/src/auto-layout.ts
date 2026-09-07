@@ -73,6 +73,9 @@ interface ProcessLayoutResult {
   channels?: ChannelPlan;
 }
 
+const COMPONENT_GAP = 100;
+const LANDSCAPE_A4_RATIO = 297 / 210;
+
 /**
  * Where a routed edge -- a loop-back, or a forward bypass over intermediate
  * nodes -- runs while it is not alongside its own endpoints.
@@ -216,6 +219,125 @@ function flattenFlowsOf(nodes: any[]): any[] {
     ...(node.$type === "bpmn:SequenceFlow" ? [node] : []),
     ...(node.flowElements ? flattenFlowsOf(node.flowElements) : []),
   ]);
+}
+
+/**
+ * Pack disconnected top-level components after their local layout is known.
+ * Keeping this as a translation step means sequence-flow routing can continue
+ * to use the existing track/column rules inside each component.
+ */
+function packIndependentComponents(
+  nodes: Map<string, NodeLayout>,
+  topNodes: any[],
+  topFlows: any[],
+  mainNodeId: string | undefined,
+): void {
+  if (topNodes.length < 2 || !mainNodeId) return;
+
+  const parent = new Map<string, string>();
+  for (const node of topNodes) parent.set(node.id, node.id);
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    while (parent.get(id) !== id) {
+      const next = parent.get(id)!;
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const ar = find(a);
+    const br = find(b);
+    if (ar !== br) parent.set(br, ar);
+  };
+
+  for (const flow of topFlows) {
+    const source = flow.sourceRef?.id;
+    const target = flow.targetRef?.id;
+    if (source && target && parent.has(source) && parent.has(target)) union(source, target);
+  }
+
+  const components = new Map<string, any[]>();
+  for (const node of topNodes) {
+    const key = find(node.id);
+    (components.get(key) ?? components.set(key, []).get(key)!).push(node);
+  }
+  const mainKey = find(mainNodeId);
+  const secondary = [...components.entries()].filter(([key]) => key !== mainKey).map(([, members]) => members);
+  if (secondary.length === 0) return;
+
+  const idsFor = (members: any[]): Set<string> => {
+    const ids = new Set<string>();
+    const visit = (element: any): void => {
+      if (element?.id) ids.add(element.id);
+      for (const child of element?.flowElements || []) {
+        if (child.$type !== "bpmn:SequenceFlow") visit(child);
+      }
+    };
+    members.forEach(visit);
+    return ids;
+  };
+  const boundsOf = (ids: Set<string>) => {
+    const placed = [...nodes.values()].filter((node) => ids.has(node.id));
+    return {
+      minX: Math.min(...placed.map((node) => node.x)),
+      minY: Math.min(...placed.map((node) => node.y)),
+      maxX: Math.max(...placed.map((node) => node.x + node.width)),
+      maxY: Math.max(...placed.map((node) => node.y + node.height)),
+    };
+  };
+
+  const mainBounds = boundsOf(idsFor(components.get(mainKey)!));
+  const secondaryData = secondary.map((members) => {
+    const ids = idsFor(members);
+    return { ids, bounds: boundsOf(ids) };
+  });
+  const totalSecondaryWidth = secondaryData.reduce((sum, item) => sum + item.bounds.maxX - item.bounds.minX, 0) + COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+  const maxSecondaryWidth = Math.max(...secondaryData.map((item) => item.bounds.maxX - item.bounds.minX));
+  const totalSecondaryHeight = secondaryData.reduce((sum, item) => sum + item.bounds.maxY - item.bounds.minY, 0) + COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+
+  const sideWidth = mainBounds.maxX - mainBounds.minX + COMPONENT_GAP + maxSecondaryWidth;
+  const sideHeight = Math.max(mainBounds.maxY - mainBounds.minY, totalSecondaryHeight);
+  const belowWidth = Math.max(mainBounds.maxX - mainBounds.minX, totalSecondaryWidth);
+  const belowHeight = mainBounds.maxY - mainBounds.minY + COMPONENT_GAP + Math.max(...secondaryData.map((item) => item.bounds.maxY - item.bounds.minY));
+  const score = (width: number, height: number): number => {
+    const ratio = width / Math.max(1, height);
+    return Math.abs(Math.log(ratio / LANDSCAPE_A4_RATIO)) + width * height / 1_000_000_000;
+  };
+  const below = belowWidth < sideWidth || score(belowWidth, belowHeight) <= score(sideWidth, sideHeight);
+
+  if (below) {
+    let x = mainBounds.minX;
+    const y = mainBounds.maxY + COMPONENT_GAP;
+    for (const item of secondaryData) {
+      const width = item.bounds.maxX - item.bounds.minX;
+      const height = item.bounds.maxY - item.bounds.minY;
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values()) if (item.ids.has(node.id)) {
+        node.x += dx;
+        node.y += dy;
+        node.centerX += dx;
+        node.centerY += dy;
+      }
+      x += width + COMPONENT_GAP;
+    }
+  } else {
+    const x = mainBounds.maxX + COMPONENT_GAP;
+    let y = mainBounds.minY;
+    for (const item of secondaryData) {
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values()) if (item.ids.has(node.id)) {
+        node.x += dx;
+        node.y += dy;
+        node.centerX += dx;
+        node.centerY += dy;
+      }
+      y += item.bounds.maxY - item.bounds.minY + COMPONENT_GAP;
+    }
+  }
 }
 
 export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
@@ -583,6 +705,8 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
       centerY,
     });
   }
+
+  packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
 
   // Collect all flows including child subprocess flows
   const allFlows: any[] = [...topFlows];
@@ -1344,6 +1468,10 @@ function createProcessDi(
     }
   }
   fanOutAttachPoints(edgeWaypoints, layout);
+  for (const flow of layout.allFlows) {
+    const waypoints = edgeWaypoints.get(flow.id);
+    if (waypoints) edgeWaypoints.set(flow.id, repairSegmentCollisions(waypoints, layout, flow));
+  }
 
   const placedLabels: LabelBounds[] = [];
 
@@ -1489,8 +1617,10 @@ function repairSegmentCollisions(
 ): Array<{ x: number; y: number }> {
   if (waypoints.length < 3) return waypoints;
   const endpoints = new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
+  const internalSubProcessFlow =
+    layout.nodes.get(flow?.sourceRef?.id)?.isSubProcessChild && layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
   const obstacles = Array.from(layout.nodes.values()).filter(
-    (n) => !endpoints.has(n.id) && n.element?.$type !== "bpmn:SubProcess",
+    (n) => !endpoints.has(n.id) && (internalSubProcessFlow || n.element?.$type !== "bpmn:SubProcess"),
   );
 
   const hits = (pts: Array<{ x: number; y: number }>): number => {
@@ -1537,6 +1667,27 @@ function repairSegmentCollisions(
         bestHits = candidateHits;
         if (bestHits === 0) break;
       }
+    }
+  }
+
+  // A gateway is often the point where the lower channel becomes crowded. Try
+  // leaving its side, rising above the graph, and entering the target from the
+  // nearest side before accepting a partially repaired lower route.
+  if (bestHits > 0 && srcNode?.element?.$type?.endsWith("Gateway") && tgtNode && srcNode.track < tgtNode.track) {
+    const upperY = channelY(layout, flow, "above", srcNode.centerX, tgtNode.centerX);
+    const bypassX = srcNode.x + srcNode.width + CHANNEL_CLEARANCE;
+    const entryX = tgtNode.centerX >= bypassX ? tgtNode.x : tgtNode.x + tgtNode.width;
+    const upward = [
+      { x: srcNode.x + srcNode.width, y: srcNode.centerY },
+      { x: bypassX, y: srcNode.centerY },
+      { x: bypassX, y: upperY },
+      { x: entryX, y: upperY },
+      { x: entryX, y: tgtNode.centerY },
+      { x: tgtNode.x + (entryX === tgtNode.x ? 0 : tgtNode.width), y: tgtNode.centerY },
+    ];
+    if (leavesOutward(upward, srcNode, tgtNode) && hits(upward) < bestHits) {
+      best = upward;
+      bestHits = hits(best);
     }
   }
 
@@ -1605,7 +1756,7 @@ function approachFromSide(
 /** Nudge offsets tried in order: nearest first, both directions. */
 const SEGMENT_NUDGES: number[] = (() => {
   const out: number[] = [];
-  for (let d = 15; d <= 135; d += 15) out.push(d, -d);
+  for (let d = 15; d <= 300; d += 15) out.push(d, -d);
   return out;
 })();
 
