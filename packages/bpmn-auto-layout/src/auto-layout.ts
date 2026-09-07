@@ -76,6 +76,7 @@ interface ProcessLayoutResult {
 const COMPONENT_GAP = 100;
 const LANDSCAPE_A4_RATIO = 297 / 210;
 const ROUTE_BEND_PENALTY = 10_000;
+const ROUTE_DEPARTURE_GAP = 40;
 
 /**
  * Where a routed edge -- a loop-back, or a forward bypass over intermediate
@@ -1468,6 +1469,10 @@ function createProcessDi(
     }
   }
   fanOutAttachPoints(edgeWaypoints, layout);
+  for (const flow of layout.allFlows) {
+    const waypoints = edgeWaypoints.get(flow.id);
+    if (waypoints) edgeWaypoints.set(flow.id, repairSegmentCollisions(waypoints, layout, flow));
+  }
 
   const placedLabels: LabelBounds[] = [];
 
@@ -1585,15 +1590,44 @@ function leavesOutward(
 ): boolean {
   const ok = (attach: { x: number; y: number }, next: { x: number; y: number }, node?: NodeLayout): boolean => {
     if (!node) return true;
-    if (Math.abs(attach.y - node.y) < 0.5) return next.y <= attach.y + 0.5;
-    if (Math.abs(attach.y - (node.y + node.height)) < 0.5) return next.y >= attach.y - 0.5;
-    if (Math.abs(attach.x - node.x) < 0.5) return next.x <= attach.x + 0.5;
-    if (Math.abs(attach.x - (node.x + node.width)) < 0.5) return next.x >= attach.x - 0.5;
+    if (Math.abs(attach.y - node.y) < 0.5) return Math.abs(next.x - attach.x) < 0.5 && next.y <= attach.y + 0.5;
+    if (Math.abs(attach.y - (node.y + node.height)) < 0.5) return Math.abs(next.x - attach.x) < 0.5 && next.y >= attach.y - 0.5;
+    if (Math.abs(attach.x - node.x) < 0.5) return Math.abs(next.y - attach.y) < 0.5 && next.x <= attach.x + 0.5;
+    if (Math.abs(attach.x - (node.x + node.width)) < 0.5) return Math.abs(next.y - attach.y) < 0.5 && next.x >= attach.x - 0.5;
     return true;
   };
   return (
     ok(pts[0]!, pts[1]!, srcNode) && ok(pts[pts.length - 1]!, pts[pts.length - 2]!, tgtNode)
   );
+}
+
+function normalizeCardinalDeparture(
+  pts: Array<{ x: number; y: number }>,
+  node: NodeLayout | undefined,
+): Array<{ x: number; y: number }> {
+  if (!node || pts.length < 2) return pts;
+  const attach = pts[0]!;
+  const next = pts[1]!;
+  if (leavesOutward([attach, next], node, undefined)) return pts;
+
+  let departure: { x: number; y: number };
+  let bridge: { x: number; y: number };
+  if (Math.abs(attach.y - node.y) < 0.5) {
+    departure = { x: attach.x, y: attach.y - ROUTE_DEPARTURE_GAP };
+    bridge = { x: next.x, y: departure.y };
+  } else if (Math.abs(attach.y - (node.y + node.height)) < 0.5) {
+    departure = { x: attach.x, y: attach.y + ROUTE_DEPARTURE_GAP };
+    bridge = { x: next.x, y: departure.y };
+  } else if (Math.abs(attach.x - node.x) < 0.5) {
+    departure = { x: attach.x - ROUTE_DEPARTURE_GAP, y: attach.y };
+    bridge = { x: departure.x, y: next.y };
+  } else if (Math.abs(attach.x - (node.x + node.width)) < 0.5) {
+    departure = { x: attach.x + ROUTE_DEPARTURE_GAP, y: attach.y };
+    bridge = { x: departure.x, y: next.y };
+  } else {
+    return pts;
+  }
+  return [attach, departure, bridge, ...pts.slice(2)];
 }
 
 /**
@@ -1611,7 +1645,7 @@ function repairSegmentCollisions(
   layout: ProcessLayoutResult,
   flow: any,
 ): Array<{ x: number; y: number }> {
-  if (waypoints.length < 3) return waypoints;
+  if (waypoints.length < 2) return waypoints;
   const endpoints = new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
   const internalSubProcessFlow =
     layout.nodes.get(flow?.sourceRef?.id)?.isSubProcessChild && layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
@@ -1625,14 +1659,43 @@ function repairSegmentCollisions(
     return n;
   };
 
-  let best = waypoints;
+  let best = normalizeCardinalDeparture(waypoints, layout.nodes.get(flow?.sourceRef?.id));
   let bestHits = hits(best);
-  if (bestHits === 0) return best;
 
   const srcNode = layout.nodes.get(flow?.sourceRef?.id);
   const tgtNode = layout.nodes.get(flow?.targetRef?.id);
-  const visibilityRoute = findRectilinearRoute(best, obstacles, srcNode, tgtNode);
-  if (visibilityRoute && hits(visibilityRoute) === 0) return visibilityRoute;
+  if (bestHits === 0 && leavesOutward(best, srcNode, tgtNode)) return best;
+  const targetPoints = tgtNode
+    ? [
+        best[best.length - 1]!,
+        { x: tgtNode.centerX, y: tgtNode.y },
+        { x: tgtNode.centerX, y: tgtNode.y + tgtNode.height },
+        { x: tgtNode.x, y: tgtNode.centerY },
+        { x: tgtNode.x + tgtNode.width, y: tgtNode.centerY },
+      ]
+    : [best[best.length - 1]!];
+  let visibilityRoute: Array<{ x: number; y: number }> | null = null;
+  let visibilityQuality: [number, number] | null = null;
+  for (const targetPoint of targetPoints) {
+    const routeInput = [...best.slice(0, -1), targetPoint];
+    const candidate = findRectilinearRoute(routeInput, obstacles, srcNode, tgtNode);
+    if (!candidate || hits(candidate) > 0 || !leavesOutward(candidate, srcNode, tgtNode)) continue;
+    let bends = 0;
+    for (let i = 1; i < candidate.length - 1; i += 1) {
+      const previous = candidate[i - 1]!;
+      const current = candidate[i]!;
+      const next = candidate[i + 1]!;
+      if ((previous.x === current.x) !== (current.x === next.x)) bends += 1;
+    }
+    const length = candidate.slice(0, -1).reduce((sum, point, index) => sum + Math.abs(point.x - candidate[index + 1]!.x) + Math.abs(point.y - candidate[index + 1]!.y), 0);
+    const quality: [number, number] = [bends, length];
+    if (!visibilityQuality || quality[0] < visibilityQuality[0] || (quality[0] === visibilityQuality[0] && quality[1] < visibilityQuality[1])) {
+      visibilityRoute = candidate;
+      visibilityQuality = quality;
+    }
+  }
+  if (visibilityRoute) return visibilityRoute;
+  if (bestHits === 0) return best;
 
   // Interior segments move freely; the first and last may only slide along the
   // edge of the node they attach to, so the polyline still meets its endpoints.
@@ -1787,6 +1850,10 @@ function findRectilinearRoute(
 
   const xs = new Set<number>(original.map((point) => point.x));
   const ys = new Set<number>(original.map((point) => point.y));
+  xs.add(start.x - ROUTE_DEPARTURE_GAP);
+  xs.add(start.x + ROUTE_DEPARTURE_GAP);
+  ys.add(start.y - ROUTE_DEPARTURE_GAP);
+  ys.add(start.y + ROUTE_DEPARTURE_GAP);
   for (const obstacle of obstacles) {
     xs.add(obstacle.x - SEGMENT_CLEARANCE);
     xs.add(obstacle.x + obstacle.width + SEGMENT_CLEARANCE);
@@ -1865,7 +1932,9 @@ function findRectilinearRoute(
     const currentDistance = distances.get(currentKey)!;
     for (const edge of edges.get(current.point) || []) {
       const nextPoint = points[edge.to]!;
-      if (current.point === startIndex && !leavesOutward([start, nextPoint], srcNode, undefined)) continue;
+      if (current.point === startIndex) {
+        if (!leavesOutward([start, nextPoint], srcNode, undefined) || edge.distance < ROUTE_DEPARTURE_GAP) continue;
+      }
       // Prefer a one- or two-bend dogleg over a shorter zig-zag. Distance is
       // still the tie-breaker, but bend count is the dominant visual concern.
       const turnPenalty = current.direction !== 0 && current.direction !== edge.direction ? ROUTE_BEND_PENALTY : 0;
