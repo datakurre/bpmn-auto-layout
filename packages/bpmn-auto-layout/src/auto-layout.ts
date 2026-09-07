@@ -75,6 +75,7 @@ interface ProcessLayoutResult {
 
 const COMPONENT_GAP = 100;
 const LANDSCAPE_A4_RATIO = 297 / 210;
+const ROUTE_BEND_PENALTY = 10_000;
 
 /**
  * Where a routed edge -- a loop-back, or a forward bypass over intermediate
@@ -1865,7 +1866,9 @@ function findRectilinearRoute(
     for (const edge of edges.get(current.point) || []) {
       const nextPoint = points[edge.to]!;
       if (current.point === startIndex && !leavesOutward([start, nextPoint], srcNode, undefined)) continue;
-      const turnPenalty = current.direction !== 0 && current.direction !== edge.direction ? 70 : 0;
+      // Prefer a one- or two-bend dogleg over a shorter zig-zag. Distance is
+      // still the tie-breaker, but bend count is the dominant visual concern.
+      const turnPenalty = current.direction !== 0 && current.direction !== edge.direction ? ROUTE_BEND_PENALTY : 0;
       const next: State = { point: edge.to, direction: edge.direction };
       const nextKey = stateKey(next);
       const distance = currentDistance + edge.distance + turnPenalty;
