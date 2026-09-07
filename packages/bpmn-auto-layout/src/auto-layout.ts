@@ -252,6 +252,15 @@ function packIndependentComponents(
     if (ar !== br) parent.set(br, ar);
   };
 
+  // Boundary events are structurally attached to an activity, but their
+  // outgoing sequence flows do not make that relationship visible in the
+  // sequence-flow graph. Keep the handler with its host instead of packing it
+  // as an unrelated component below the main model.
+  for (const node of topNodes) {
+    const attachedTo = node.attachedToRef?.id;
+    if (attachedTo && parent.has(attachedTo)) union(node.id, attachedTo);
+  }
+
   for (const flow of topFlows) {
     const source = flow.sourceRef?.id;
     const target = flow.targetRef?.id;
