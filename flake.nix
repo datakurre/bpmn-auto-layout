@@ -32,11 +32,11 @@
         {
           bpmn-auto-layout = layout;
           default = pkgs.writeShellApplication {
-            name = "bpmn-autolayout";
+            name = "bpmn-auto-layout";
             runtimeInputs = [ pkgs.nodejs ];
             text = ''
               if [ "$#" -ne 1 ]; then
-                echo "usage: bpmn-autolayout FILE.bpmn" >&2
+                echo "usage: bpmn-auto-layout FILE.bpmn" >&2
                 exit 2
               fi
 
@@ -50,7 +50,7 @@
               await writeFile(file, await layoutProcess(xml));
               NODE
             '';
-            meta.mainProgram = "bpmn-autolayout";
+            meta.mainProgram = "bpmn-auto-layout";
           };
         }
       );
