@@ -20,12 +20,12 @@
             pname = "bpmn-auto-layout";
             version = "0.1.0";
             src = ./packages/bpmn-auto-layout;
-            npmDepsHash = "sha256-MyUtCO8LYdgRtsO04jshNnJWrK2JGdl6NzoNYx4mMUo=";
+            npmDepsHash = "sha256-pd6+yofPb3uf8ia83osisSFOr9wexl0Tc+dgbLAG8wc=";
             npmBuildHook = "";
             buildPhase = "npm run build";
             installPhase = ''
-              mkdir -p $out/lib/node_modules/@graph-agent/bpmn-auto-layout
-              cp -r dist package.json node_modules $out/lib/node_modules/@graph-agent/bpmn-auto-layout/
+              mkdir -p $out/lib/node_modules/bpmn-auto-layout
+              cp -r dist package.json node_modules $out/lib/node_modules/bpmn-auto-layout/
             '';
           };
         in
@@ -43,7 +43,7 @@
               input=$(realpath "$1")
               ${pkgs.nodejs}/bin/node --input-type=module - "$input" <<'NODE'
               import { readFile, writeFile } from "node:fs/promises";
-              import { layoutProcess } from "${layout}/lib/node_modules/@graph-agent/bpmn-auto-layout/dist/index.js";
+              import { layoutProcess } from "${layout}/lib/node_modules/bpmn-auto-layout/dist/index.js";
 
               const file = process.argv[2];
               const xml = await readFile(file, "utf8");

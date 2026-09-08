@@ -3,7 +3,7 @@
 Private, copyable BPMN layout utilities used by graph-agent.
 
 ```ts
-import { layoutProcess, ensureLabelDi } from "@graph-agent/bpmn-auto-layout";
+import { layoutProcess, ensureLabelDi } from "bpmn-auto-layout";
 
 const laidOut = await layoutProcess(xml);
 const complete = await ensureLabelDi(laidOut);

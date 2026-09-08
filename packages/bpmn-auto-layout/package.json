@@ -1,5 +1,5 @@
 {
-  "name": "@graph-agent/bpmn-auto-layout",
+  "name": "bpmn-auto-layout",
   "version": "0.1.0",
   "private": true,
   "description": "Orthogonal BPMN layout and label DI generation",
