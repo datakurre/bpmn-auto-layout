@@ -1026,7 +1026,8 @@ function solveLabelPlacement(
     }
     const tightW = isGateway ? Math.max(30, Math.min(W, Math.round(maxLineChars * 6.8) + 8)) : W;
     const H = lines === 1 ? (isGateway ? 14 : 20) : (lines === 2 ? 27 : lines * 14);
-    const gap = isGateway && lines === 1 ? 2 : 8;
+    const gap = isGateway && lines === 1 ? 0 : 8;
+    const snugOffset = isGateway && lines === 1 ? 0 : 2;
 
     const primaryY = preferredTop ? Math.round(node.y - H - gap) : Math.round(node.y + node.height + gap);
     const altY = preferredTop ? Math.round(node.y + node.height + gap) : Math.round(node.y - H - gap);
@@ -1034,20 +1035,20 @@ function solveLabelPlacement(
     if (isFourDirectionGateway) {
       // 1. Snug top-left diagonal preferred in 4-direction gateway
       // "Diagonally or horizontally placed gateway labels still feel like being too far from the gateway."
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
       // Other snug diagonals as fallbacks
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
     } else if (isLeftFreeGateway) {
       // "Horizontally placed label should be vertically aligned with gateway center."
       // "Diagonally or horizontally placed gateway labels still feel like being too far from the gateway."
       candidates.push({ x: Math.round(node.x - tightW - 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
       // Snug top-left diagonal as fallback
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
     } else if (isRightFreeGateway) {
       candidates.push({ x: Math.round(node.x + node.width + 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
     } else {
       // 1. Primary side centered
       candidates.push({ x: Math.round(node.centerX - tightW / 2), y: primaryY, width: tightW, height: H, lines });
@@ -1064,10 +1065,10 @@ function solveLabelPlacement(
       }
 
       // 4. Snug diagonal positions
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
 
       // 5. Snug horizontal positions
       candidates.push({ x: Math.round(node.x - tightW - 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
@@ -1101,7 +1102,7 @@ function solveLabelPlacement(
     const defaultW = 90;
     const defaultLines = estimateTextLines(name, defaultW);
     const defaultH = defaultLines === 1 ? (isGateway ? 14 : 20) : (defaultLines === 2 ? 27 : defaultLines * 14);
-    const defaultGap = isGateway && defaultLines === 1 ? 2 : 8;
+    const defaultGap = isGateway && defaultLines === 1 ? 0 : 8;
     const defaultY = preferredTop
       ? Math.round(node.y - defaultH - defaultGap)
       : Math.round(node.y + node.height + defaultGap);
