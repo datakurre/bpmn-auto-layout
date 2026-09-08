@@ -1,6 +1,5 @@
 // src/auto-layout.ts
 import { BpmnModdle } from "bpmn-moddle";
-import zeebe from "zeebe-bpmn-moddle/resources/zeebe.json" with { type: "json" };
 var DEFAULT_OPTIONS = {
   colWidth: 150,
   spineY: 70,
@@ -18,6 +17,10 @@ function getElementDimensions(element) {
   if (type === "bpmn:SubProcess") return { width: 360, height: 200 };
   return { width: 100, height: 80 };
 }
+var COMPONENT_GAP = 100;
+var LANDSCAPE_A4_RATIO = 297 / 210;
+var ROUTE_BEND_PENALTY = 1e4;
+var ROUTE_DEPARTURE_GAP = 40;
 var CHANNEL_CLEARANCE = 40;
 var LABEL_SLIDE_SLACK = 45;
 var CHANNEL_LANE_GAP = 30;
@@ -89,9 +92,119 @@ function flattenFlowsOf(nodes) {
     ...node.flowElements ? flattenFlowsOf(node.flowElements) : []
   ]);
 }
+function packIndependentComponents(nodes, topNodes, topFlows, mainNodeId) {
+  if (topNodes.length < 2 || !mainNodeId) return;
+  const parent = /* @__PURE__ */ new Map();
+  for (const node of topNodes) parent.set(node.id, node.id);
+  const find = (id) => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root);
+    while (parent.get(id) !== id) {
+      const next = parent.get(id);
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const union = (a, b) => {
+    const ar = find(a);
+    const br = find(b);
+    if (ar !== br) parent.set(br, ar);
+  };
+  for (const flow of topFlows) {
+    const source = flow.sourceRef?.id;
+    const target = flow.targetRef?.id;
+    if (source && target && parent.has(source) && parent.has(target)) union(source, target);
+  }
+  const components = /* @__PURE__ */ new Map();
+  for (const node of topNodes) {
+    const key = find(node.id);
+    (components.get(key) ?? components.set(key, []).get(key)).push(node);
+  }
+  const mainKey = find(mainNodeId);
+  const secondary = [...components.entries()].filter(([key]) => key !== mainKey).map(([, members]) => members);
+  if (secondary.length === 0) return;
+  const idsFor = (members) => {
+    const ids = /* @__PURE__ */ new Set();
+    const visit = (element) => {
+      if (element?.id) ids.add(element.id);
+      for (const child of element?.flowElements || []) {
+        if (child.$type !== "bpmn:SequenceFlow") visit(child);
+      }
+    };
+    members.forEach(visit);
+    return ids;
+  };
+  const boundsOf = (ids) => {
+    const placed = [...nodes.values()].filter((node) => ids.has(node.id));
+    return {
+      minX: Math.min(...placed.map((node) => node.x)),
+      minY: Math.min(...placed.map((node) => node.y)),
+      maxX: Math.max(...placed.map((node) => node.x + node.width)),
+      maxY: Math.max(...placed.map((node) => node.y + node.height))
+    };
+  };
+  const mainBounds = boundsOf(idsFor(components.get(mainKey)));
+  const secondaryData = secondary.map((members) => {
+    const ids = idsFor(members);
+    return { ids, bounds: boundsOf(ids) };
+  });
+  const totalSecondaryWidth = secondaryData.reduce((sum, item) => sum + item.bounds.maxX - item.bounds.minX, 0) + COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+  const maxSecondaryWidth = Math.max(...secondaryData.map((item) => item.bounds.maxX - item.bounds.minX));
+  const totalSecondaryHeight = secondaryData.reduce((sum, item) => sum + item.bounds.maxY - item.bounds.minY, 0) + COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+  const sideWidth = mainBounds.maxX - mainBounds.minX + COMPONENT_GAP + maxSecondaryWidth;
+  const sideHeight = Math.max(mainBounds.maxY - mainBounds.minY, totalSecondaryHeight);
+  const belowWidth = Math.max(mainBounds.maxX - mainBounds.minX, totalSecondaryWidth);
+  const belowHeight = mainBounds.maxY - mainBounds.minY + COMPONENT_GAP + Math.max(...secondaryData.map((item) => item.bounds.maxY - item.bounds.minY));
+  const score = (width, height) => {
+    const ratio = width / Math.max(1, height);
+    return Math.abs(Math.log(ratio / LANDSCAPE_A4_RATIO)) + width * height / 1e9;
+  };
+  const below = belowWidth < sideWidth || score(belowWidth, belowHeight) <= score(sideWidth, sideHeight);
+  if (below) {
+    let x = mainBounds.minX;
+    const y = mainBounds.maxY + COMPONENT_GAP;
+    for (const item of secondaryData) {
+      const width = item.bounds.maxX - item.bounds.minX;
+      const height = item.bounds.maxY - item.bounds.minY;
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values()) if (item.ids.has(node.id)) {
+        node.x += dx;
+        node.y += dy;
+        node.centerX += dx;
+        node.centerY += dy;
+      }
+      x += width + COMPONENT_GAP;
+    }
+  } else {
+    const x = mainBounds.maxX + COMPONENT_GAP;
+    let y = mainBounds.minY;
+    for (const item of secondaryData) {
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values()) if (item.ids.has(node.id)) {
+        node.x += dx;
+        node.y += dy;
+        node.centerX += dx;
+        node.centerY += dy;
+      }
+      y += item.bounds.maxY - item.bounds.minY + COMPONENT_GAP;
+    }
+  }
+}
+function snapNodesToGrid(nodes, colWidth) {
+  for (const node of nodes.values()) {
+    const snappedCenterX = 75 + Math.round((node.centerX - 75) / colWidth) * colWidth;
+    const dx = snappedCenterX - node.centerX;
+    if (Math.abs(dx) > 20) continue;
+    node.x += dx;
+    node.centerX += dx;
+  }
+}
 async function layoutProcess(xml, options = {}) {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const moddle = new BpmnModdle({ zeebe });
+  const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
   const root = rootElement;
   const processes = (root.rootElements || []).filter((el) => el.$type === "bpmn:Process");
@@ -216,6 +329,7 @@ function computeProcessLayout(process, opts) {
       if (!targetId || !nodesById.has(targetId)) continue;
       if (!nodeTrack.has(targetId)) {
         let targetTrack = parentTrack;
+        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
         if (spineSet.has(parentId) && !spineSet.has(targetId)) {
           const isSpannedByBackEdge = Array.from(backEdges).some((bId) => {
             const bFlow = topFlows.find((f) => f.id === bId);
@@ -227,10 +341,10 @@ function computeProcessLayout(process, opts) {
             }
             return false;
           });
-          targetTrack = isSpannedByBackEdge ? -1 : parentTrack + 1;
+          targetTrack = isExceptionBranch ? parentTrack - 1 : isSpannedByBackEdge ? -1 : parentTrack + 1;
         }
         nodeTrack.set(targetId, targetTrack);
-        const targetCol = Math.max(parentCol + parentSpan, nodeCol.get(targetId) ?? 0);
+        const targetCol = targetTrack > parentTrack && isExceptionBranch ? Math.max(0, parentCol - 1) : Math.max(parentCol + parentSpan, nodeCol.get(targetId) ?? 0);
         nodeCol.set(targetId, targetCol);
         queue.push(targetId);
       } else {
@@ -282,12 +396,34 @@ function computeProcessLayout(process, opts) {
       lastRightEdge = currentCol + halfSpan;
     }
   }
+  for (const endNode of topNodes.filter((n) => n.$type.endsWith("EndEvent"))) {
+    const incoming = topFlows.find((flow) => flow.targetRef?.id === endNode.id);
+    const source = incoming ? nodesById.get(incoming.sourceRef?.id) : void 0;
+    if (!source) continue;
+    const track = nodeTrack.get(endNode.id);
+    if (track === void 0 || track <= 0 || track !== nodeTrack.get(source.id)) continue;
+    const sourceCol = nodeCol.get(source.id);
+    if (sourceCol === void 0) continue;
+    const sourceSpan = getElementDimensions(source).width / opts.colWidth;
+    let candidate = sourceCol + Math.max(1, sourceSpan);
+    const endSpan = getElementDimensions(endNode).width / opts.colWidth;
+    while (topNodes.some((node) => {
+      if (node.id === endNode.id || nodeTrack.get(node.id) !== track) return false;
+      const nodeColValue = nodeCol.get(node.id);
+      if (nodeColValue === void 0) return false;
+      const nodeSpan = getElementDimensions(node).width / opts.colWidth;
+      return Math.abs(nodeColValue - candidate) < (nodeSpan + endSpan) / 2 + 0.4;
+    })) {
+      candidate += 1;
+    }
+    nodeCol.set(endNode.id, candidate);
+  }
   const endEvents = topNodes.filter((n) => n.$type.endsWith("EndEvent"));
   if (endEvents.length > 1) {
     const maxEndCol = Math.max(...endEvents.map((n) => nodeCol.get(n.id) ?? 0));
     for (const endNode of endEvents) {
       const currentCol = nodeCol.get(endNode.id) ?? 0;
-      if (currentCol < maxEndCol) {
+      if (currentCol < maxEndCol && maxEndCol - currentCol <= 2) {
         const track = nodeTrack.get(endNode.id) ?? 0;
         const hasObstacle = topNodes.some(
           (n) => n.id !== endNode.id && nodeTrack.get(n.id) === track && (nodeCol.get(n.id) ?? 0) >= currentCol && (nodeCol.get(n.id) ?? 0) <= maxEndCol
@@ -372,6 +508,8 @@ function computeProcessLayout(process, opts) {
       centerY
     });
   }
+  packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
+  snapNodesToGrid(layoutNodes, opts.colWidth);
   const allFlows = [...topFlows];
   for (const node of topNodes) {
     if (node.$type === "bpmn:SubProcess") {
@@ -560,20 +698,21 @@ function solveLabelPlacement(node, edgeWaypoints, nodes, placedLabels) {
     }
     const tightW = isGateway ? Math.max(30, Math.min(W, Math.round(maxLineChars * 6.8) + 8)) : W;
     const H = lines === 1 ? isGateway ? 14 : 20 : lines === 2 ? 27 : lines * 14;
-    const gap = isGateway && lines === 1 ? 2 : 8;
+    const gap = isGateway ? 0 : 8;
+    const snugOffset = isGateway ? 0 : 2;
     const primaryY = preferredTop ? Math.round(node.y - H - gap) : Math.round(node.y + node.height + gap);
     const altY = preferredTop ? Math.round(node.y + node.height + gap) : Math.round(node.y - H - gap);
     if (isFourDirectionGateway) {
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
     } else if (isLeftFreeGateway) {
       candidates.push({ x: Math.round(node.x - tightW - 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
     } else if (isRightFreeGateway) {
       candidates.push({ x: Math.round(node.x + node.width + 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
     } else {
       candidates.push({ x: Math.round(node.centerX - tightW / 2), y: primaryY, width: tightW, height: H, lines });
       for (const dx of [20, -20, 40, -40, 60, -60]) {
@@ -583,10 +722,10 @@ function solveLabelPlacement(node, edgeWaypoints, nodes, placedLabels) {
       for (const dx of [20, -20, 40, -40]) {
         candidates.push({ x: Math.round(node.centerX - tightW / 2 + dx), y: altY, width: tightW, height: H, lines });
       }
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
-      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - 2), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y - H + snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX - tightW - 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
+      candidates.push({ x: Math.round(node.centerX + 2), y: Math.round(node.y + node.height - snugOffset), width: tightW, height: H, lines });
       candidates.push({ x: Math.round(node.x - tightW - 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
       candidates.push({ x: Math.round(node.x + node.width + 2), y: Math.round(node.centerY - H / 2), width: tightW, height: H, lines });
     }
@@ -613,7 +752,7 @@ function solveLabelPlacement(node, edgeWaypoints, nodes, placedLabels) {
     const defaultW = 90;
     const defaultLines = estimateTextLines(name, defaultW);
     const defaultH = defaultLines === 1 ? isGateway ? 14 : 20 : defaultLines === 2 ? 27 : defaultLines * 14;
-    const defaultGap = isGateway && defaultLines === 1 ? 2 : 8;
+    const defaultGap = isGateway ? 0 : 8;
     const defaultY = preferredTop ? Math.round(node.y - defaultH - defaultGap) : Math.round(node.y + node.height + defaultGap);
     chosen = {
       x: Math.round(node.centerX - defaultW / 2),
@@ -893,6 +1032,18 @@ function createProcessDi(moddle, rootElement, process, layout, opts) {
     }
   }
   fanOutAttachPoints(edgeWaypoints, layout);
+  for (const flow of layout.allFlows) {
+    const existing = edgeWaypoints.get(flow.id);
+    if (!existing) continue;
+    const src = layout.nodes.get(flow.sourceRef?.id);
+    const tgt = layout.nodes.get(flow.targetRef?.id);
+    const isLowerMerge = src && tgt && src.track > tgt.track && tgt.element?.$type?.endsWith("Gateway") && !src.element?.$type?.endsWith("Gateway");
+    if (isLowerMerge) {
+      edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, layout, opts, flow));
+      continue;
+    }
+    edgeWaypoints.set(flow.id, repairSegmentCollisions(existing, layout, flow, edgeWaypoints));
+  }
   const placedLabels = [];
   const edgeLabelBounds = /* @__PURE__ */ new Map();
   for (const flow of layout.allFlows) {
@@ -976,30 +1127,85 @@ function createProcessDi(moddle, rootElement, process, layout, opts) {
 function leavesOutward(pts, srcNode, tgtNode) {
   const ok = (attach, next, node) => {
     if (!node) return true;
-    if (Math.abs(attach.y - node.y) < 0.5) return next.y <= attach.y + 0.5;
-    if (Math.abs(attach.y - (node.y + node.height)) < 0.5) return next.y >= attach.y - 0.5;
-    if (Math.abs(attach.x - node.x) < 0.5) return next.x <= attach.x + 0.5;
-    if (Math.abs(attach.x - (node.x + node.width)) < 0.5) return next.x >= attach.x - 0.5;
+    if (Math.abs(attach.y - node.y) < 0.5) return Math.abs(next.x - attach.x) < 0.5 && next.y <= attach.y + 0.5;
+    if (Math.abs(attach.y - (node.y + node.height)) < 0.5) return Math.abs(next.x - attach.x) < 0.5 && next.y >= attach.y - 0.5;
+    if (Math.abs(attach.x - node.x) < 0.5) return Math.abs(next.y - attach.y) < 0.5 && next.x <= attach.x + 0.5;
+    if (Math.abs(attach.x - (node.x + node.width)) < 0.5) return Math.abs(next.y - attach.y) < 0.5 && next.x >= attach.x - 0.5;
     return true;
   };
   return ok(pts[0], pts[1], srcNode) && ok(pts[pts.length - 1], pts[pts.length - 2], tgtNode);
 }
-function repairSegmentCollisions(waypoints, layout, flow) {
-  if (waypoints.length < 3) return waypoints;
+function normalizeCardinalDeparture(pts, node) {
+  if (!node || pts.length < 2) return pts;
+  const attach = pts[0];
+  const next = pts[1];
+  if (leavesOutward([attach, next], node, void 0)) return pts;
+  let departure;
+  let bridge;
+  if (Math.abs(attach.y - node.y) < 0.5) {
+    departure = { x: attach.x, y: attach.y - ROUTE_DEPARTURE_GAP };
+    bridge = { x: next.x, y: departure.y };
+  } else if (Math.abs(attach.y - (node.y + node.height)) < 0.5) {
+    departure = { x: attach.x, y: attach.y + ROUTE_DEPARTURE_GAP };
+    bridge = { x: next.x, y: departure.y };
+  } else if (Math.abs(attach.x - node.x) < 0.5) {
+    departure = { x: attach.x - ROUTE_DEPARTURE_GAP, y: attach.y };
+    bridge = { x: departure.x, y: next.y };
+  } else if (Math.abs(attach.x - (node.x + node.width)) < 0.5) {
+    departure = { x: attach.x + ROUTE_DEPARTURE_GAP, y: attach.y };
+    bridge = { x: departure.x, y: next.y };
+  } else {
+    return pts;
+  }
+  return [attach, departure, bridge, ...pts.slice(2)];
+}
+function repairSegmentCollisions(waypoints, layout, flow, blockedPaths = /* @__PURE__ */ new Map()) {
+  if (waypoints.length < 2) return waypoints;
   const endpoints = /* @__PURE__ */ new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
+  const internalSubProcessFlow = layout.nodes.get(flow?.sourceRef?.id)?.isSubProcessChild && layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
   const obstacles = Array.from(layout.nodes.values()).filter(
-    (n) => !endpoints.has(n.id) && n.element?.$type !== "bpmn:SubProcess"
+    (n) => !endpoints.has(n.id) && (internalSubProcessFlow || n.element?.$type !== "bpmn:SubProcess")
   );
+  obstacles.push(...pathObstacles(blockedPaths, flow?.id));
   const hits = (pts) => {
     let n = 0;
     for (let i = 0; i < pts.length - 1; i += 1) n += segmentHitCount(pts[i], pts[i + 1], obstacles);
     return n;
   };
-  let best = waypoints;
+  let best = normalizeCardinalDeparture(waypoints, layout.nodes.get(flow?.sourceRef?.id));
   let bestHits = hits(best);
-  if (bestHits === 0) return best;
   const srcNode = layout.nodes.get(flow?.sourceRef?.id);
   const tgtNode = layout.nodes.get(flow?.targetRef?.id);
+  if (bestHits === 0 && leavesOutward(best, srcNode, tgtNode)) return best;
+  const targetPoints = tgtNode ? [
+    best[best.length - 1],
+    { x: tgtNode.centerX, y: tgtNode.y },
+    { x: tgtNode.centerX, y: tgtNode.y + tgtNode.height },
+    { x: tgtNode.x, y: tgtNode.centerY },
+    { x: tgtNode.x + tgtNode.width, y: tgtNode.centerY }
+  ] : [best[best.length - 1]];
+  let visibilityRoute = null;
+  let visibilityQuality = null;
+  for (const targetPoint of targetPoints) {
+    const routeInput = [...best.slice(0, -1), targetPoint];
+    const candidate = findRectilinearRoute(routeInput, obstacles, srcNode, tgtNode);
+    if (!candidate || hits(candidate) > 0 || !leavesOutward(candidate, srcNode, tgtNode)) continue;
+    let bends = 0;
+    for (let i = 1; i < candidate.length - 1; i += 1) {
+      const previous = candidate[i - 1];
+      const current = candidate[i];
+      const next = candidate[i + 1];
+      if (previous.x === current.x !== (current.x === next.x)) bends += 1;
+    }
+    const length = candidate.slice(0, -1).reduce((sum, point, index) => sum + Math.abs(point.x - candidate[index + 1].x) + Math.abs(point.y - candidate[index + 1].y), 0);
+    const quality = [bends, length];
+    if (!visibilityQuality || quality[0] < visibilityQuality[0] || quality[0] === visibilityQuality[0] && quality[1] < visibilityQuality[1]) {
+      visibilityRoute = candidate;
+      visibilityQuality = quality;
+    }
+  }
+  if (visibilityRoute) return visibilityRoute;
+  if (bestHits === 0) return best;
   const staysOnNode = (idx, moved) => {
     const node = idx === 0 ? srcNode : idx === best.length - 1 ? tgtNode : void 0;
     if (!node) return true;
@@ -1059,7 +1265,7 @@ function approachFromSide(pts, tgt, obstacles, stagger = 0) {
 }
 var SEGMENT_NUDGES = (() => {
   const out = [];
-  for (let d = 15; d <= 135; d += 15) out.push(d, -d);
+  for (let d = 15; d <= 300; d += 15) out.push(d, -d);
   return out;
 })();
 var SEGMENT_CLEARANCE = 8;
@@ -1079,6 +1285,137 @@ function segmentHitCount(p, q, obstacles) {
     }
   }
   return n;
+}
+function pathObstacles(paths, excludedFlowId) {
+  const obstacles = [];
+  for (const [flowId, points] of paths) {
+    if (flowId === excludedFlowId) continue;
+    for (let i = 0; i < points.length - 1; i += 1) {
+      const a = points[i];
+      const b = points[i + 1];
+      const length = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
+      if (length <= ROUTE_DEPARTURE_GAP) continue;
+      const trim = Math.min(ROUTE_DEPARTURE_GAP / 2, length / 3);
+      const horizontal = Math.abs(a.y - b.y) < 0.5;
+      const x = horizontal ? Math.min(a.x, b.x) + trim : a.x - SEGMENT_CLEARANCE / 2;
+      const y = horizontal ? a.y - SEGMENT_CLEARANCE / 2 : Math.min(a.y, b.y) + trim;
+      const width = horizontal ? length - trim * 2 : SEGMENT_CLEARANCE;
+      const height = horizontal ? SEGMENT_CLEARANCE : length - trim * 2;
+      obstacles.push({
+        id: `${flowId}:${i}`,
+        element: { $type: "bpmn:RouteObstacle" },
+        col: 0,
+        track: 0,
+        x,
+        y,
+        width,
+        height,
+        centerX: x + width / 2,
+        centerY: y + height / 2
+      });
+    }
+  }
+  return obstacles;
+}
+function findRectilinearRoute(original, obstacles, srcNode, tgtNode) {
+  const start = original[0];
+  const end = original[original.length - 1];
+  if (!start || !end || obstacles.length === 0) return null;
+  const xs = new Set(original.map((point) => point.x));
+  const ys = new Set(original.map((point) => point.y));
+  xs.add(start.x - ROUTE_DEPARTURE_GAP);
+  xs.add(start.x + ROUTE_DEPARTURE_GAP);
+  ys.add(start.y - ROUTE_DEPARTURE_GAP);
+  ys.add(start.y + ROUTE_DEPARTURE_GAP);
+  for (const obstacle of obstacles) {
+    xs.add(obstacle.x - SEGMENT_CLEARANCE);
+    xs.add(obstacle.x + obstacle.width + SEGMENT_CLEARANCE);
+    ys.add(obstacle.y - SEGMENT_CLEARANCE);
+    ys.add(obstacle.y + obstacle.height + SEGMENT_CLEARANCE);
+  }
+  const points = [];
+  const pointIndex = /* @__PURE__ */ new Map();
+  const keyOf = (x, y) => `${x}:${y}`;
+  const clearPoint = (x, y) => obstacles.every(
+    (obstacle) => x <= obstacle.x - SEGMENT_CLEARANCE || x >= obstacle.x + obstacle.width + SEGMENT_CLEARANCE || y <= obstacle.y - SEGMENT_CLEARANCE || y >= obstacle.y + obstacle.height + SEGMENT_CLEARANCE
+  );
+  for (const x of xs) {
+    for (const y of ys) {
+      if (!clearPoint(x, y) && !(x === start.x && y === start.y) && !(x === end.x && y === end.y)) continue;
+      const index = points.length;
+      points.push({ x, y });
+      pointIndex.set(keyOf(x, y), index);
+    }
+  }
+  const edges = /* @__PURE__ */ new Map();
+  const addVisiblePair = (a, b) => {
+    const first = points[a];
+    const second = points[b];
+    if (segmentHitCount(first, second, obstacles) > 0) return;
+    const direction = Math.abs(first.y - second.y) < 0.5 ? 1 : 2;
+    const distance = Math.abs(first.x - second.x) + Math.abs(first.y - second.y);
+    (edges.get(a) ?? edges.set(a, []).get(a)).push({ to: b, distance, direction });
+    (edges.get(b) ?? edges.set(b, []).get(b)).push({ to: a, distance, direction });
+  };
+  for (const x of xs) {
+    const row = points.map((point, index) => ({ point, index })).filter(({ point }) => Math.abs(point.x - x) < 0.5).sort((a, b) => a.point.y - b.point.y);
+    for (let i = 0; i + 1 < row.length; i += 1) addVisiblePair(row[i].index, row[i + 1].index);
+  }
+  for (const y of ys) {
+    const column = points.map((point, index) => ({ point, index })).filter(({ point }) => Math.abs(point.y - y) < 0.5).sort((a, b) => a.point.x - b.point.x);
+    for (let i = 0; i + 1 < column.length; i += 1) addVisiblePair(column[i].index, column[i + 1].index);
+  }
+  const startIndex = pointIndex.get(keyOf(start.x, start.y));
+  const endIndex = pointIndex.get(keyOf(end.x, end.y));
+  if (startIndex === void 0 || endIndex === void 0) return null;
+  const stateKey = (state) => `${state.point}:${state.direction}`;
+  const initial = { point: startIndex, direction: 0 };
+  const distances = /* @__PURE__ */ new Map([[stateKey(initial), 0]]);
+  const previous = /* @__PURE__ */ new Map();
+  const pending = [initial];
+  while (pending.length > 0) {
+    let bestPending = 0;
+    for (let i = 1; i < pending.length; i += 1) {
+      if ((distances.get(stateKey(pending[i])) ?? Infinity) < (distances.get(stateKey(pending[bestPending])) ?? Infinity)) bestPending = i;
+    }
+    const current = pending.splice(bestPending, 1)[0];
+    const currentKey = stateKey(current);
+    const currentDistance = distances.get(currentKey);
+    for (const edge of edges.get(current.point) || []) {
+      const nextPoint = points[edge.to];
+      if (current.point === startIndex) {
+        if (!leavesOutward([start, nextPoint], srcNode, void 0) || edge.distance < ROUTE_DEPARTURE_GAP) continue;
+      }
+      const turnPenalty = current.direction !== 0 && current.direction !== edge.direction ? ROUTE_BEND_PENALTY : 0;
+      const next = { point: edge.to, direction: edge.direction };
+      const nextKey = stateKey(next);
+      const distance = currentDistance + edge.distance + turnPenalty;
+      if (distance >= (distances.get(nextKey) ?? Infinity)) continue;
+      distances.set(nextKey, distance);
+      previous.set(nextKey, currentKey);
+      pending.push(next);
+    }
+  }
+  const endStates = [...distances.keys()].filter((key) => key.startsWith(`${endIndex}:`));
+  endStates.sort((a, b) => distances.get(a) - distances.get(b));
+  for (const endStateKey of endStates) {
+    const route = [];
+    let cursor = endStateKey;
+    while (cursor) {
+      const pointIndexValue = Number(cursor.split(":")[0]);
+      route.unshift(points[pointIndexValue]);
+      cursor = previous.get(cursor);
+    }
+    if (!leavesOutward(route, srcNode, tgtNode)) continue;
+    const simplified = route.filter((point, index) => {
+      if (index === 0 || index === route.length - 1) return true;
+      const previousPoint = route[index - 1];
+      const nextPoint = route[index + 1];
+      return !(Math.abs(previousPoint.x - point.x) < 0.5 && Math.abs(point.x - nextPoint.x) < 0.5 || Math.abs(previousPoint.y - point.y) < 0.5 && Math.abs(point.y - nextPoint.y) < 0.5);
+    });
+    return simplified;
+  }
+  return null;
 }
 function channelY(layout, flow, side, x1, x2) {
   return layout.channels?.channelY(flow?.id ?? "", side, x1, x2) ?? 0;
@@ -1111,7 +1448,7 @@ function computeWaypoints(src, tgt, layout, opts, flow) {
   }
   if (src.track === tgt.track) {
     const hasObstacle = Array.from(layout.nodes.values()).some(
-      (n) => n.id !== src.id && n.id !== tgt.id && n.track === src.track && !n.isSubProcessChild && n.centerX > src.centerX && n.centerX < tgt.centerX
+      (n) => n.id !== src.id && n.id !== tgt.id && n.track === src.track && !n.isSubProcessChild && n.x < tgt.x && n.x + n.width > src.x + src.width && n.y < src.centerY && n.y + n.height > src.centerY
     );
     const srcExitY = src.element.$type === "bpmn:SubProcess" ? opts.track1Y : src.centerY;
     const tgtEntryY = tgt.element.$type === "bpmn:SubProcess" ? opts.track1Y : tgt.centerY;
@@ -1181,11 +1518,34 @@ function computeWaypoints(src, tgt, layout, opts, flow) {
         ];
       }
       const entryX = src.centerX > tgt.x + tgt.width ? tgt.x + tgt.width : tgt.x;
-      return [
+      const direct = [
         { x: src.centerX, y: src.y + src.height },
         { x: src.centerX, y: tgt.centerY },
         { x: entryX, y: tgt.centerY }
       ];
+      const blockers = Array.from(layout.nodes.values()).filter(
+        (n) => n.id !== src.id && n.id !== tgt.id && !n.isSubProcessChild && n.element?.$type !== "bpmn:SubProcess"
+      );
+      const directHits = direct.slice(0, -1).reduce((count, point, index) => count + segmentHitCount(point, direct[index + 1], blockers), 0);
+      if (directHits > 0) {
+        const relevant = blockers.filter(
+          (n) => n.x < Math.max(src.centerX, tgt.centerX) && n.x + n.width > Math.min(src.centerX, tgt.centerX) && n.y < tgt.centerY && n.y + n.height > src.y + src.height
+        );
+        const crossY = Math.max(tgt.centerY, ...relevant.map((n) => n.y + n.height + CHANNEL_CLEARANCE));
+        for (const direction of [1, -1]) {
+          const bypassX = direction > 0 ? Math.max(src.x + src.width, ...relevant.map((n) => n.x + n.width)) + CHANNEL_CLEARANCE : Math.min(src.x, ...relevant.map((n) => n.x)) - CHANNEL_CLEARANCE;
+          const bypass = [
+            { x: src.centerX, y: src.y + src.height },
+            { x: bypassX, y: src.y + src.height },
+            { x: bypassX, y: crossY },
+            { x: entryX, y: crossY },
+            { x: entryX, y: tgt.centerY }
+          ];
+          const bypassHits = bypass.slice(0, -1).reduce((count, point, index) => count + segmentHitCount(point, bypass[index + 1], blockers), 0);
+          if (bypassHits === 0) return bypass;
+        }
+      }
+      return direct;
     }
     return [
       { x: src.x + src.width, y: src.centerY },
@@ -1241,7 +1601,6 @@ function computeWaypoints(src, tgt, layout, opts, flow) {
 
 // src/label-layout.ts
 import { BpmnModdle as BpmnModdle2 } from "bpmn-moddle";
-import zeebe2 from "zeebe-bpmn-moddle/resources/zeebe.json" with { type: "json" };
 function isEventOrGateway(element) {
   return element.$type.endsWith("Event") || element.$type.endsWith("Gateway");
 }
@@ -1252,7 +1611,7 @@ function hasVisibleName(element) {
   return typeof element.name === "string" && element.name.trim().length > 0;
 }
 async function ensureLabelDi(xml) {
-  const moddle = new BpmnModdle2({ zeebe: zeebe2 });
+  const moddle = new BpmnModdle2();
   const { rootElement } = await moddle.fromXML(xml);
   const definitions = rootElement;
   const diagrams = definitions.diagrams ?? [];

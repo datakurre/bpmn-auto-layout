@@ -15,7 +15,6 @@
  *   events and gateways, satisfying bpmnlint's local/label-layout rule.
  */
 import { BpmnModdle } from "bpmn-moddle";
-import zeebe from "zeebe-bpmn-moddle/resources/zeebe.json" with { type: "json" };
 
 export interface AutoLayoutOptions {
   colWidth?: number;
@@ -354,7 +353,7 @@ function snapNodesToGrid(nodes: Map<string, NodeLayout>, colWidth: number): void
 
 export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
-  const moddle = new BpmnModdle({ zeebe });
+  const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
   const root = rootElement as any;
 

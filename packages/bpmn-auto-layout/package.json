@@ -14,12 +14,11 @@
   "files": ["dist", "README.md", "package.json"],
   "scripts": {
     "build": "npm run build:js && npm run build:types",
-    "build:js": "esbuild src/index.ts --bundle --format=esm --platform=node --external:bpmn-moddle --external:zeebe-bpmn-moddle --outfile=dist/index.js --loader:.json=json",
+    "build:js": "esbuild src/index.ts --bundle --format=esm --platform=node --external:bpmn-moddle --outfile=dist/index.js --loader:.json=json",
     "build:types": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "bpmn-moddle": "^10.2.0",
-    "zeebe-bpmn-moddle": "^2.0.0"
+    "bpmn-moddle": "^10.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",

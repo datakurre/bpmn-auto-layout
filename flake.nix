@@ -20,7 +20,7 @@
             pname = "bpmn-auto-layout";
             version = "0.1.0";
             src = ./packages/bpmn-auto-layout;
-            npmDepsHash = "sha256-w5ioxxp4e5oVUwLnDas1ccRFYW0KdBX0n1fW0HMbz+E=";
+            npmDepsHash = "sha256-MyUtCO8LYdgRtsO04jshNnJWrK2JGdl6NzoNYx4mMUo=";
             npmBuildHook = "";
             buildPhase = "npm run build";
             installPhase = ''

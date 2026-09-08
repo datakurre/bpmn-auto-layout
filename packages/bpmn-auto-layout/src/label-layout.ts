@@ -75,7 +75,7 @@ function hasVisibleName(element: ElementLike): boolean {
 
 /** Materialize the same default label rectangles bpmn-js uses before linting or saving. */
 export async function ensureLabelDi(xml: string): Promise<string> {
-  const moddle = new BpmnModdle({ zeebe });
+  const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
   const definitions = rootElement as unknown as DefinitionsLike;
   const diagrams = definitions.diagrams ?? [];
@@ -249,4 +249,3 @@ export function labelLayout() {
   };
 }
 import { BpmnModdle } from "bpmn-moddle";
-import zeebe from "zeebe-bpmn-moddle/resources/zeebe.json" with { type: "json" };
