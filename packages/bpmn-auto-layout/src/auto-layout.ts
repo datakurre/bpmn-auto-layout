@@ -1026,8 +1026,8 @@ function solveLabelPlacement(
     }
     const tightW = isGateway ? Math.max(30, Math.min(W, Math.round(maxLineChars * 6.8) + 8)) : W;
     const H = lines === 1 ? (isGateway ? 14 : 20) : (lines === 2 ? 27 : lines * 14);
-    const gap = isGateway && lines === 1 ? 0 : 8;
-    const snugOffset = isGateway && lines === 1 ? 0 : 2;
+    const gap = isGateway ? 0 : 8;
+    const snugOffset = isGateway ? 0 : 2;
 
     const primaryY = preferredTop ? Math.round(node.y - H - gap) : Math.round(node.y + node.height + gap);
     const altY = preferredTop ? Math.round(node.y + node.height + gap) : Math.round(node.y - H - gap);
@@ -1102,7 +1102,7 @@ function solveLabelPlacement(
     const defaultW = 90;
     const defaultLines = estimateTextLines(name, defaultW);
     const defaultH = defaultLines === 1 ? (isGateway ? 14 : 20) : (defaultLines === 2 ? 27 : defaultLines * 14);
-    const defaultGap = isGateway && defaultLines === 1 ? 0 : 8;
+    const defaultGap = isGateway ? 0 : 8;
     const defaultY = preferredTop
       ? Math.round(node.y - defaultH - defaultGap)
       : Math.round(node.y + node.height + defaultGap);
