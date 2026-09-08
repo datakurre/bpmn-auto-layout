@@ -342,6 +342,16 @@ function packIndependentComponents(
   }
 }
 
+function snapNodesToGrid(nodes: Map<string, NodeLayout>, colWidth: number): void {
+  for (const node of nodes.values()) {
+    const snappedCenterX = 75 + Math.round((node.centerX - 75) / colWidth) * colWidth;
+    const dx = snappedCenterX - node.centerX;
+    if (Math.abs(dx) > 20) continue;
+    node.x += dx;
+    node.centerX += dx;
+  }
+}
+
 export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
   const opts = { ...DEFAULT_OPTIONS, ...options };
   const moddle = new BpmnModdle({ zeebe });
@@ -512,6 +522,7 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
 
       if (!nodeTrack.has(targetId)) {
         let targetTrack = parentTrack;
+        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
         if (spineSet.has(parentId) && !spineSet.has(targetId)) {
           // Check if there is a branch spanned by a back-edge loop on the lower track
           // "session skeleton still fails to use upper gateway routes to avoid lane collision"
@@ -526,11 +537,10 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
             return false;
           });
 
-          targetTrack = isSpannedByBackEdge ? -1 : parentTrack + 1;
+          targetTrack = isExceptionBranch ? parentTrack - 1 : isSpannedByBackEdge ? -1 : parentTrack + 1;
         }
 
         nodeTrack.set(targetId, targetTrack);
-        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
         const targetCol =
           targetTrack > parentTrack && isExceptionBranch
             ? Math.max(0, parentCol - 1)
@@ -741,6 +751,7 @@ function computeProcessLayout(process: any, opts: Required<AutoLayoutOptions>): 
   }
 
   packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
+  snapNodesToGrid(layoutNodes, opts.colWidth);
 
   // Collect all flows including child subprocess flows
   const allFlows: any[] = [...topFlows];
