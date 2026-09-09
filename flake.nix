@@ -1,10 +1,21 @@
 {
   description = "In-place BPMN auto-layout";
 
-  inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    bpmn-to-image = {
+      url = "github:datakurre/bpmn-to-image";
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+  };
 
   outputs =
-    { nixpkgs, ... }:
+    {
+      self,
+      nixpkgs,
+      bpmn-to-image,
+      ...
+    }:
     let
       systems = [
         "x86_64-linux"
@@ -54,6 +65,16 @@
           };
         }
       );
+
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.mkShell {
+          packages = [
+            self.packages.${pkgs.stdenv.hostPlatform.system}.default
+            bpmn-to-image.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-to-image
+            pkgs.python3
+          ];
+        };
+      });
 
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
     };
