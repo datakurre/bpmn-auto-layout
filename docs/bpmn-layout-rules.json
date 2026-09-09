@@ -6,6 +6,14 @@
   "source": {
     "implementation": [
       "packages/bpmn-auto-layout/src/auto-layout.ts",
+      "packages/bpmn-auto-layout/src/element-dimensions.ts",
+      "packages/bpmn-auto-layout/src/graph-analysis.ts",
+      "packages/bpmn-auto-layout/src/node-placement.ts",
+      "packages/bpmn-auto-layout/src/channel-planning.ts",
+      "packages/bpmn-auto-layout/src/edge-routing.ts",
+      "packages/bpmn-auto-layout/src/collision-repair.ts",
+      "packages/bpmn-auto-layout/src/label-placement.ts",
+      "packages/bpmn-auto-layout/src/di-creation.ts",
       "packages/bpmn-auto-layout/src/label-layout.ts"
     ],
     "extraction_method": "Manual extraction from current TypeScript behavior; every rule below is labelled implementation-derived and cites the implementation lines used.",
@@ -16,61 +24,79 @@
       "id": "layout.defaults.grid-and-tracks",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:30-38"],
-      "rule": "Default layout uses 150 px column pitch, spine Y=70, lower tracks at Y=210 and Y=490, 140 px track gap, and nominal channels at Y=140/280/560 before dynamic channel planning."
+      "rule": "Default layout uses 120 px column pitch, spine Y=70, lower tracks at Y=180 and Y=430, 140 px track gap, and nominal channels at Y=140/280/560 before dynamic channel planning."
     },
     {
       "id": "layout.dimensions.by-type",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:46-52"],
-      "rule": "Events are 36x36, gateways 50x50, expanded subprocesses 360x200, and all other node types default to 100x80."
+      "source_lines": ["packages/bpmn-auto-layout/src/element-dimensions.ts:49-55", "packages/bpmn-auto-layout/src/node-placement.ts:570-630"],
+      "rule": "Events are 36x36, gateways 50x50, and all other non-subprocess node types default to 100x80. Expanded subprocess container dimensions are computed dynamically from a recursive child layout: the children's bounding box plus SUBPROCESS_PAD_H=40px on each side and SUBPROCESS_PAD_V=30px on each side, with minimums of 360x200."
     },
     {
       "id": "layout.input.cross-container-sequence-flows",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:190-218", "packages/bpmn-auto-layout/src/auto-layout.ts:363-366"],
-      "rule": "Sequence flows whose source or target belongs to a different immediate process/subprocess container are rejected before layout; existing BPMN diagrams are then removed and regenerated per process."
+      "source_lines": ["packages/bpmn-auto-layout/src/graph-analysis.ts", "packages/bpmn-auto-layout/src/auto-layout.ts:39"],
+      "rule": "Sequence flows whose source or target belongs to a different immediate process/subprocess container are rejected before layout; existing BPMN diagrams are then removed and regenerated."
     },
     {
       "id": "layout.spine.selection",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:402-488"],
-      "rule": "A DFS marks back-edges as loop-backs. The primary spine starts at the first start event and follows non-back-edge outgoing flows, scoring end events high, subprocesses and reject/error/fail/give-up branches low, and looping targets lower than completion exits."
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:206-242", "packages/bpmn-auto-layout/src/node-placement.ts:303-328"],
+      "rule": "A DFS marks back-edges as loop-backs. The primary spine starts at the first start event and follows non-back-edge outgoing flows, scoring end events high, subprocesses and reject/error/fail/give-up branches low, and looping targets lower than completion exits. During branch-track assignment, named exception branches normally use the upper track, except terminal exception branches targeting an end event, which use the lower track so a gateway can fan out horizontally and downward."
     },
     {
       "id": "layout.branch.tracks-and-columns",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:493-582", "packages/bpmn-auto-layout/src/auto-layout.ts:588-606"],
-      "rule": "Spine nodes occupy track 0 and increasing columns. Branches are placed breadth-first relative to their parent; exception branches go upward, ordinary non-spine branches go downward unless a loop-back spans the gateway, and same-track nodes are shifted to avoid width-based overlap."
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:244-422"],
+      "rule": "Spine nodes occupy track 0 and increasing columns with a 50 px edge clearance derived from actual node widths. Branches are placed breadth-first relative to their parent; exception branches go upward, ordinary non-spine branches go downward unless a loop-back spans the gateway, same-track nodes are shifted fractionally to avoid width-based overlap without introducing a whole-column gap, and direct same-track terminal flows are repaired to the same clearance after packing. buildTrackColMapsWithDim accepts an effectiveDim callback so subprocess sizes (computed recursively) drive column/track spacing."
+    },
+    {
+      "id": "layout.spacing.default-flow-gap",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/element-dimensions.ts:57-58", "packages/bpmn-auto-layout/src/node-placement.ts:284-288"],
+      "rule": "Sequential flow-node paths use a uniform 50 px edge-to-edge clearance, matching the default horizontal spacing used by bpmn-js for newly placed flow nodes. Node widths contribute half-widths on both sides of each gap."
     },
     {
       "id": "layout.tracks.dynamic-clearance",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:661-703"],
-      "rule": "When an upper track exists, it becomes the visual spine; lower tracks are offset from the default track pitch. Tracks containing nodes taller than 80 px add cumulative vertical clearance."
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:651-673"],
+      "rule": "When an upper track exists, it becomes the visual spine; lower tracks are offset from the default 140 px track pitch. Tracks containing nodes taller than 80 px add cumulative vertical clearance."
     },
     {
       "id": "layout.subprocess.children",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:705-747"],
-      "rule": "Expanded subprocesses keep the 360x200 outer box and lay child flow nodes left-to-right inside the box with 35 px leading padding and 60 px horizontal gaps."
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:444-519", "packages/bpmn-auto-layout/src/node-placement.ts:570-735"],
+      "rule": "Expanded subprocesses are laid out recursively. computeProcessLayout is called on the subprocess flowElements in local coordinates; the resulting bounding box plus SUBPROCESS_PAD_H=40 px left/right and SUBPROCESS_PAD_V=30 px top/bottom determines the container size (minimum 360x200). After the outer layout finalizes parent positions, layoutSubProcessChildrenRecursive translates child node layouts to absolute coordinates in the parent layoutNodes map with isSubProcessChild=true."
+    },
+    {
+      "id": "layout.collaboration-and-lane-di",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:44-57", "packages/bpmn-auto-layout/src/di-creation.ts:28-37", "packages/bpmn-auto-layout/src/di-creation.ts:40-230"],
+      "rule": "When a bpmn:Collaboration exists, processes referenced by participants are excluded from standalone per-process BPMNDiagram generation. createCollaborationDi emits a single BPMNDiagram containing: participant pool shapes with isHorizontal=true sized from content bounding box plus PAD_LEFT=60, PAD_RIGHT=30, PAD_TOP=30, PAD_BOTTOM=30 (participants stacked with 40 px gaps); lane shapes with isHorizontal=true; all flow-node shapes and sequence-flow edges from each participant process (shifted to absolute coordinates via dx/dy); and named message-flow edges. Standalone processes (not in any collaboration) receive per-process BPMNDiagram with lane shapes derived from member node bounds."
     },
     {
       "id": "layout.components.pack-independent",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:230-341", "packages/bpmn-auto-layout/src/auto-layout.ts:752-753"],
-      "rule": "Disconnected top-level components are packed after local layout, either below or beside the main start-event component, using a 100 px component gap and a landscape A4 aspect-ratio score. Node center X values are then snapped to the 75 + n*150 grid when the move is at most 20 px."
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:35-167", "packages/bpmn-auto-layout/src/node-placement.ts:727-729"],
+      "rule": "Disconnected top-level components are packed after local layout, preferring a compact row below the main start-event component when their total width is at most 75% of the main component, otherwise using the landscape A4 aspect-ratio score. Node center X values are then snapped to the 75 + n*120 grid when the move is at most 2 px."
     },
     {
       "id": "routing.channel-planning",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:111-180", "packages/bpmn-auto-layout/src/auto-layout.ts:1500-1515"],
-      "rule": "Loop-back and bypass channels are derived from the occupied node band with 40 px clearance. Overlapping channel spans are assigned separate 30 px lanes using a two-pass greedy plan before final waypoints are emitted."
+      "source_lines": ["packages/bpmn-auto-layout/src/channel-planning.ts:14-63", "packages/bpmn-auto-layout/src/edge-routing.ts:188-201"],
+      "rule": "Loop-back and bypass channels are derived from the occupied node band with 30 px clearance. Overlapping channel spans are assigned separate 30 px lanes using a two-pass greedy plan before final waypoints are emitted. Same-track gateway bypasses with an upper-track branch use an upper channel so they do not cross that branch; other same-track bypasses use the lower channel."
+    },
+    {
+      "id": "routing.objective-policy",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/layout-policy.ts:6-16", "packages/bpmn-auto-layout/src/layout-policy.ts:18-66", "packages/bpmn-auto-layout/src/auto-layout.ts:1962-1973"],
+      "rule": "Visibility-route candidates are filtered for orthogonality and minimum-turn constraints, then selected deterministically by the configured turn preference, path length, and serialized-point tie-breaker. The default policy requires orthogonal routes, permits zero minimum turns, prefers fewer turns, and imposes no additional path-length factor."
     },
     {
       "id": "routing.waypoint-cases",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:2076-2325"],
-      "rule": "Waypoint routing handles subprocess-internal flows, gateway-to-gateway upside bypasses, loop-backs, same-track forward flows, gateway branches up/down, merges into gateways, and a final orthogonal fallback."
+      "source_lines": ["packages/bpmn-auto-layout/src/edge-routing.ts:126-390"],
+      "rule": "Waypoint routing handles subprocess-internal flows, gateway-to-gateway upside bypasses, loop-backs, same-track forward flows, gateway branches up/down, same-track gateway bypasses through the channel opposite existing vertical gateway branches, upper-track exits to end events via a dedicated above-channel, merges into gateways, and a final orthogonal fallback."
     },
     {
       "id": "routing.repair-and-fanout",
@@ -81,20 +107,20 @@
     {
       "id": "labels.node-placement",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:963-1132", "packages/bpmn-auto-layout/src/auto-layout.ts:1560-1577"],
-      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; candidates that collide with lanes, elements, or previously placed labels are rejected before fallback."
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:430-530", "packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
+      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; single-line primary gateway labels align their top edge with a 4 px gap, while multi-line primary labels shift upward so their bottom edge aligns with the single-line label row. Snug candidates keep a 6 px horizontal clearance. When a selected gateway candidate needs multiple lines to avoid path or element collisions, the formatted line break is serialized into the element name so renderers display the intended rows. Candidates that collide with lanes, elements, or previously placed labels are rejected before fallback."
     },
     {
       "id": "labels.node-gap-by-element-class",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:1025-1032", "packages/bpmn-auto-layout/src/auto-layout.ts:1100-1108"],
-      "rule": "The current label solver uses an 8 px primary/alternate vertical gap for named events and a 0 px gap for named gateways; collision-free candidate selection can choose a different side or offset. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:460-475"],
+      "rule": "The label solver uses an 8 px primary/alternate vertical gap for named events and a 6 px primary/alternate vertical gap for gateways; collision-free candidate selection can choose a different side or offset. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
     },
     {
       "id": "labels.edge-placement",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:1309-1427", "packages/bpmn-auto-layout/src/auto-layout.ts:1532-1547"],
-      "rule": "Named sequence flows receive labels on a preferred horizontal segment of at least 30 px, or otherwise a vertical segment of at least 20 px. Edge labels are placed before node labels so node-label placement can avoid them."
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
+      "rule": "Named sequence flows receive labels on a preferred horizontal segment of at least 30 px, or otherwise a vertical segment of at least 20 px. Horizontal labels are centered on the segment midpoint with a 2 px above-segment clearance when that side is selected. Edge labels are placed before node labels so node-label placement can avoid them."
     },
     {
       "id": "labels.ensure-default-di",
@@ -131,9 +157,19 @@
       "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, total bends, Manhattan length, and non-orthogonal segments."
     },
     {
+      "id": "metric.routing.lattice",
+      "producer": "tools/bpmn_feedback.py report",
+      "definition": "Checks every orthogonal edge segment against the 50 px default route unit, reporting non-multiple segments and the largest distance from a 50 px multiple. A route may contain multiple-unit segments and turns."
+    },
+    {
+      "id": "metric.spacing.horizontal_flow_gap",
+      "producer": "tools/bpmn_feedback.py report",
+      "definition": "Measures edge-to-edge gaps for same-track, left-to-right sequence-flow endpoints with no intervening non-container shape, reporting count, minimum, maximum, and average gap in pixels. Longer bypass and loop flows are excluded."
+    },
+    {
       "id": "metric.grid.center_x_deviation",
       "producer": "tools/bpmn_feedback.py report",
-      "definition": "Measures non-container shape center-X deviation from the implementation grid 75 + n*150, reported as average and maximum absolute deviation."
+      "definition": "Measures non-container shape center-X deviation from the implementation grid 75 + n*120, reported as average and maximum absolute deviation."
     },
     {
       "id": "metric.labels.named_label_coverage",
@@ -149,10 +185,10 @@
   "feedback_observations": [
     {
       "id": "feedback.order-fulfilment-advanced.label-spacing",
-      "status": "candidate heuristic, not yet promoted to implementation rule",
+      "status": "accepted implementation behavior",
       "source": "order-fulfilment-advanced.png",
       "observation": "The overall three-row grid, happy-path spine, branch spacing, event-subprocess alignment, and label-to-node distances are good. The exclusive gateway label 'Order valid?' could use a slightly larger below-node gap; the above-node labels 'Check in parallel' and 'Checks complete' could use a small consistent gap comparable to event labels.",
-      "next_step": "Use metric.labels.node_label_gap and visual reports on multiple gateway orientations before changing the shared gap parameter."
+      "next_step": "Continue visual review with another single label-placement target if needed."
     }
   ],
   "feedback_ingestion": {

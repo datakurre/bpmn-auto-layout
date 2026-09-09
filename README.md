@@ -30,20 +30,46 @@ store cache.
 ## Layout feedback loop
 
 The repository includes a dependency-light Python feedback tool. The flake dev
-shell provides `python3`, `bpmn-auto-layout`, and `bpmn-to-image`:
+shell provides `bpmn-feedback`, `python3`, `bpmn-auto-layout`, `bpmn-to-image`,
+and `make`:
 
 ```sh
-nix develop --command python3 tools/bpmn_feedback.py generate --output fixtures/bpmn-feedback --force
-nix develop --command python3 tools/bpmn_feedback.py report fixtures/bpmn-feedback/*.bpmn
-nix develop --command python3 tools/bpmn_feedback.py feedback --report .bpmn-feedback/reports/report-*/index.html
+nix develop
+make feedback-check
 ```
 
-`generate` writes deterministic BPMN fixtures covering events, tasks, gateways,
-branches, loops, subprocesses, lanes, boundary events, messages, and data
-references. `report` lays out each input BPMN, renders original/transformed SVGs,
-and writes an ephemeral HTML report plus deterministic metrics under
-`.bpmn-feedback/reports/`. `feedback` records checkbox observations, 1–5 Likert
-ratings, and comments as `bpmn-layout-feedback/v1` JSON for later ingestion.
+This generates and checks the current fixture set. The report command
+prints a copy-pasteable `xdg-open` command for viewing it from a host terminal
+and a short report ID. Use that ID with `check` or `latest`.
+The supported CLI commands are `bpmn-feedback generate`, `report`, `check`,
+`latest`, and `selftest`.
+For browser interaction, run `make feedback-ui` on the host and open
+`http://localhost:8000/`. It reads the agent's ephemeral state JSON through a
+read-only FastAPI WebSocket. The dashboard shows only the current agent state,
+aspect, candidate images, descriptions, and quality-gate badges. Click an image
+to open it full-screen, then reply directly to the agent with the best
+candidate and any comment. Click the backdrop or **Close** to return. The
+fixture update route below is the exception because it intentionally mutates
+the fixture files.
+Open `/fixtures` to update every fixture under `fixtures/bpmn-feedback` with the
+current `bpmn-auto-layout` command and view the resulting diagrams in order.
+The same operation is available as `POST /api/fixtures/update`.
+The check is a deterministic quality gate for crossings, route intersections,
+orthogonality, label overlaps, and missing named labels. See
+`.agents/skills/iterate-bpmn-auto-layout/SKILL.md` for the complete single-rule
+iteration protocol.
+
+`generate` writes deterministic BPMN 2.0 and Camunda 7 fixtures covering
+activities, event definitions, gateways, branches, loops, boundary and nested
+subprocesses, call activities, lanes, collaborations, messages, data artifacts,
+Camunda extensions, and dense routing/container stress cases. `report` lays out
+each input BPMN, renders original/transformed SVGs, and writes an ephemeral HTML
+report plus deterministic metrics under
+`.bpmn-feedback/reports/`. Candidate selection and iteration comments happen directly in the agent
+conversation; the browser is only a visual review surface.
+Generated source fixtures are stored under `fixtures/bpmn-feedback/original/`;
+layout commands operate on report copies so pool and collaboration definitions
+cannot be overwritten by a broken layout implementation.
 
 Run a stdlib-only validation with:
 

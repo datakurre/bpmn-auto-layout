@@ -8,11 +8,14 @@ allowed_hosts = [
     "*.cachix.org:443",
     "registry.npmjs.org:443",
 ]
+
+[ports]
+web = 8000
 ```
 
 ## BPMN layout iteration
 
-Use the repository-local skill at `.agents/skills/bpmn-layout-feedback/SKILL.md`
+Use the repository-local skill at `.agents/skills/iterate-bpmn-auto-layout/SKILL.md`
 when changing the layout algorithm or reviewing generated diagrams. The
 feedback loop is intentionally a first version: reports and metrics help find
 problems, but they do not replace human visual review or prove that a layout is
@@ -37,7 +40,7 @@ correct.
 
    ```sh
    nix develop --command python3 tools/bpmn_feedback.py report \
-     fixtures/bpmn-feedback/*.bpmn path/to/problem.bpmn
+     fixtures/bpmn-feedback/original/*.bpmn path/to/problem.bpmn
    ```
 
 5. Compare the report images, `metrics.json`, and the serialized
@@ -75,16 +78,14 @@ The current tools are dependency-light and ephemeral by design:
 
 ```sh
 nix develop --command python3 tools/bpmn_feedback.py report \
-  fixtures/bpmn-feedback/*.bpmn
-nix develop --command python3 tools/bpmn_feedback.py feedback \
-  --report .bpmn-feedback/reports/report-*/index.html
+  fixtures/bpmn-feedback/original/*.bpmn
 ```
 
-Open the generated `index.html` in a browser and use the terminal feedback
-tool to record checkbox observations, 1–5 Likert ratings, and comments. Store
-feedback JSON only under the gitignored `.bpmn-feedback/` directory. Reports
-contain per-diagram original/transformed images, transformed BPMN, and
-deterministic metrics for agent ingestion.
+Run `make feedback-ui` on the host to open the browser review service. The
+agent publishes state and reads user actions through the JSON protocol under
+the gitignored `.bpmn-feedback/agent/` directory. Reports contain per-diagram
+original/transformed images, transformed BPMN, and deterministic metrics for
+agent ingestion.
 
 When ingesting feedback, correlate selected observations and low ratings with
 `metrics.json`, inspect the relevant TypeScript path, and reproduce the issue

@@ -1,0 +1,742 @@
+/**
+ * Node placement — spine detection, track/column assignment, coordinate
+ * computation, subprocess child layout, and component packing.
+ *
+ * This module has no dependency on edge routing or DI creation.
+ */
+
+import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
+import type { ResolvedLayoutOptions } from "./element-dimensions";
+import {
+  DEFAULT_FLOW_GAP,
+  COMPONENT_GAP,
+  LANDSCAPE_A4_RATIO,
+  getElementDimensions,
+} from "./element-dimensions";
+
+/** Snap node center-X values to the column grid when the drift is < 2 px. */
+export function snapNodesToGrid(nodes: Map<string, NodeLayout>, colWidth: number): void {
+  for (const node of nodes.values()) {
+    const snappedCenterX = 75 + Math.round((node.centerX - 75) / colWidth) * colWidth;
+    const dx = snappedCenterX - node.centerX;
+    // Preserve fractional placement used to keep edge-to-edge spacing even;
+    // only remove insignificant floating-point drift from the grid.
+    if (Math.abs(dx) >= 2) continue;
+    node.x += dx;
+    node.centerX += dx;
+  }
+}
+
+/**
+ * Pack disconnected top-level components after their local layout is known.
+ * Keeping this as a translation step means sequence-flow routing can continue
+ * to use the existing track/column rules inside each component.
+ */
+export function packIndependentComponents(
+  nodes: Map<string, NodeLayout>,
+  topNodes: any[],
+  topFlows: any[],
+  mainNodeId: string | undefined,
+): void {
+  if (topNodes.length < 2 || !mainNodeId) return;
+
+  // Union-Find to identify connected components
+  const parent = new Map<string, string>();
+  for (const node of topNodes) parent.set(node.id, node.id);
+  const find = (id: string): string => {
+    let root = id;
+    while (parent.get(root) !== root) root = parent.get(root)!;
+    while (parent.get(id) !== id) {
+      const next = parent.get(id)!;
+      parent.set(id, root);
+      id = next;
+    }
+    return root;
+  };
+  const union = (a: string, b: string): void => {
+    const ar = find(a);
+    const br = find(b);
+    if (ar !== br) parent.set(br, ar);
+  };
+
+  for (const flow of topFlows) {
+    const source = flow.sourceRef?.id;
+    const target = flow.targetRef?.id;
+    if (source && target && parent.has(source) && parent.has(target)) union(source, target);
+  }
+
+  const components = new Map<string, any[]>();
+  for (const node of topNodes) {
+    const key = find(node.id);
+    (components.get(key) ?? components.set(key, []).get(key)!).push(node);
+  }
+  const mainKey = find(mainNodeId);
+  const secondary = [...components.entries()]
+    .filter(([key]) => key !== mainKey)
+    .map(([, members]) => members);
+  if (secondary.length === 0) return;
+
+  const idsFor = (members: any[]): Set<string> => {
+    const ids = new Set<string>();
+    const visit = (element: any): void => {
+      if (element?.id) ids.add(element.id);
+      for (const child of element?.flowElements || []) {
+        if (child.$type !== "bpmn:SequenceFlow") visit(child);
+      }
+    };
+    members.forEach(visit);
+    return ids;
+  };
+  const boundsOf = (ids: Set<string>) => {
+    const placed = [...nodes.values()].filter((node) => ids.has(node.id));
+    return {
+      minX: Math.min(...placed.map((node) => node.x)),
+      minY: Math.min(...placed.map((node) => node.y)),
+      maxX: Math.max(...placed.map((node) => node.x + node.width)),
+      maxY: Math.max(...placed.map((node) => node.y + node.height)),
+    };
+  };
+
+  const mainBounds = boundsOf(idsFor(components.get(mainKey)!));
+  const secondaryData = secondary.map((members) => {
+    const ids = idsFor(members);
+    return { ids, bounds: boundsOf(ids) };
+  });
+  const totalSecondaryWidth =
+    secondaryData.reduce((sum, item) => sum + item.bounds.maxX - item.bounds.minX, 0) +
+    COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+  const maxSecondaryWidth = Math.max(
+    ...secondaryData.map((item) => item.bounds.maxX - item.bounds.minX),
+  );
+  const totalSecondaryHeight =
+    secondaryData.reduce((sum, item) => sum + item.bounds.maxY - item.bounds.minY, 0) +
+    COMPONENT_GAP * Math.max(0, secondaryData.length - 1);
+
+  const sideWidth = mainBounds.maxX - mainBounds.minX + COMPONENT_GAP + maxSecondaryWidth;
+  const sideHeight = Math.max(mainBounds.maxY - mainBounds.minY, totalSecondaryHeight);
+  const belowWidth = Math.max(mainBounds.maxX - mainBounds.minX, totalSecondaryWidth);
+  const belowHeight =
+    mainBounds.maxY -
+    mainBounds.minY +
+    COMPONENT_GAP +
+    Math.max(...secondaryData.map((item) => item.bounds.maxY - item.bounds.minY));
+  const score = (width: number, height: number): number => {
+    const ratio = width / Math.max(1, height);
+    return Math.abs(Math.log(ratio / LANDSCAPE_A4_RATIO)) + (width * height) / 1_000_000_000;
+  };
+  // Small disconnected artifacts (data references, annotations, and similar
+  // nodes) read better as a compact row below the process than as a distant
+  // second column beside it.
+  const below =
+    totalSecondaryWidth <= (mainBounds.maxX - mainBounds.minX) * 0.75 ||
+    belowWidth < sideWidth ||
+    score(belowWidth, belowHeight) <= score(sideWidth, sideHeight);
+
+  if (below) {
+    let x = mainBounds.minX;
+    const y = mainBounds.maxY + COMPONENT_GAP;
+    for (const item of secondaryData) {
+      const width = item.bounds.maxX - item.bounds.minX;
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values())
+        if (item.ids.has(node.id)) {
+          node.x += dx;
+          node.y += dy;
+          node.centerX += dx;
+          node.centerY += dy;
+        }
+      x += width + COMPONENT_GAP;
+    }
+  } else {
+    const x = mainBounds.maxX + COMPONENT_GAP;
+    let y = mainBounds.minY;
+    for (const item of secondaryData) {
+      const dx = x - item.bounds.minX;
+      const dy = y - item.bounds.minY;
+      for (const node of nodes.values())
+        if (item.ids.has(node.id)) {
+          node.x += dx;
+          node.y += dy;
+          node.centerX += dx;
+          node.centerY += dy;
+        }
+      y += item.bounds.maxY - item.bounds.minY + COMPONENT_GAP;
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Internal helpers scoped to computeProcessLayout
+// ---------------------------------------------------------------------------
+
+function detectBackEdges(
+  topNodes: any[],
+  outgoingFlows: Map<string, any[]>,
+  nodesById: Map<string, any>,
+  startNode: any,
+): Set<string> {
+  const visited = new Set<string>();
+  const onStack = new Set<string>();
+  const backEdges = new Set<string>();
+
+  function dfs(nodeId: string): void {
+    visited.add(nodeId);
+    onStack.add(nodeId);
+    for (const flow of outgoingFlows.get(nodeId) || []) {
+      const targetId = flow.targetRef?.id;
+      if (!targetId || !nodesById.has(targetId)) continue;
+      if (onStack.has(targetId)) {
+        backEdges.add(flow.id);
+      } else if (!visited.has(targetId)) {
+        dfs(targetId);
+      }
+    }
+    onStack.delete(nodeId);
+  }
+
+  if (startNode) dfs(startNode.id);
+  // Also visit any nodes that weren't reachable from the start event
+  for (const node of topNodes) {
+    if (!visited.has(node.id)) dfs(node.id);
+  }
+  return backEdges;
+}
+
+function selectSpine(
+  startNode: any,
+  outgoingFlows: Map<string, any[]>,
+  nodesById: Map<string, any>,
+  backEdges: Set<string>,
+): { spineNodeIds: string[]; spineSet: Set<string> } {
+  const spineNodeIds: string[] = [];
+  const spineSet = new Set<string>();
+
+  const flowSpineScore = (flow: any): number => {
+    const targetNode = nodesById.get(flow.targetRef?.id);
+    if (!targetNode) return -100;
+    if (targetNode.$type === "bpmn:SubProcess") return -50;
+    if (flow.name === "no" || flow.name === "reject" || flow.name === "give up") return -50;
+    if (flow.name?.toLowerCase().includes("error") || flow.name?.toLowerCase().includes("fail"))
+      return -50;
+    if (targetNode.$type.endsWith("EndEvent")) return 100;
+    const hasBackEdge = (outgoingFlows.get(targetNode.id) || []).some((f) => backEdges.has(f.id));
+    return hasBackEdge ? 10 : 50;
+  };
+
+  let curr: string | undefined = startNode?.id;
+  while (curr && !spineSet.has(curr)) {
+    spineSet.add(curr);
+    spineNodeIds.push(curr);
+    const outs = (outgoingFlows.get(curr) || []).filter((f) => !backEdges.has(f.id));
+    if (outs.length === 0) break;
+    if (outs.length === 1) {
+      curr = outs[0].targetRef?.id;
+      continue;
+    }
+    const sorted = [...outs].sort((a, b) => flowSpineScore(b) - flowSpineScore(a));
+    curr = (sorted[0] ?? outs[0]).targetRef?.id;
+  }
+
+  return { spineNodeIds, spineSet };
+}
+
+function buildTrackColMapsWithDim(
+  topNodes: any[],
+  topFlows: any[],
+  spineNodeIds: string[],
+  spineSet: Set<string>,
+  outgoingFlows: Map<string, any[]>,
+  nodesById: Map<string, any>,
+  backEdges: Set<string>,
+  colWidth: number,
+  dimensionOf: (node: any) => { width: number; height: number } = getElementDimensions,
+): { nodeTrack: Map<string, number>; nodeCol: Map<string, number> } {
+  const nodeTrack = new Map<string, number>();
+  const nodeCol = new Map<string, number>();
+
+  // Shift a node and all its forward descendants to a new column minimum.
+  function shiftNodeAndDescendants(id: string, newCol: number): void {
+    const oldCol = nodeCol.get(id) || 0;
+    if (newCol <= oldCol) return;
+    nodeCol.set(id, newCol);
+    const dim = dimensionOf(nodesById.get(id));
+    const span = Math.max(1, Math.ceil(dim.width / colWidth));
+    for (const flow of outgoingFlows.get(id) || []) {
+      if (backEdges.has(flow.id)) continue;
+      const targetId = flow.targetRef?.id;
+      if (targetId && nodeCol.has(targetId)) {
+        shiftNodeAndDescendants(targetId, newCol + span);
+      }
+    }
+  }
+
+  // Assign spine nodes to track 0
+  let col = 0;
+  for (let index = 0; index < spineNodeIds.length; index += 1) {
+    const id = spineNodeIds[index]!;
+    nodeTrack.set(id, 0);
+    nodeCol.set(id, col);
+    const node = nodesById.get(id);
+    const dim = dimensionOf(node);
+    const next =
+      index + 1 < spineNodeIds.length ? nodesById.get(spineNodeIds[index + 1]!) : undefined;
+    if (next) {
+      const nextWidth = dimensionOf(next).width;
+      col +=
+        dim.width / (2 * colWidth) + DEFAULT_FLOW_GAP / colWidth + nextWidth / (2 * colWidth);
+    }
+  }
+
+  // BFS from spine to assign off-spine branches
+  const queue = [...spineNodeIds];
+  while (queue.length > 0) {
+    const parentId = queue.shift()!;
+    const parentCol = nodeCol.get(parentId)!;
+    const parentTrack = nodeTrack.get(parentId)!;
+    const parentDim = dimensionOf(nodesById.get(parentId));
+
+    for (const flow of outgoingFlows.get(parentId) || []) {
+      if (backEdges.has(flow.id)) continue;
+      const targetId = flow.targetRef?.id;
+      if (!targetId || !nodesById.has(targetId)) continue;
+      const targetDim = dimensionOf(nodesById.get(targetId));
+      const minTargetCol =
+        parentCol +
+        (parentDim.width + targetDim.width) / (2 * colWidth) +
+        DEFAULT_FLOW_GAP / colWidth;
+
+      if (!nodeTrack.has(targetId)) {
+        let targetTrack = parentTrack;
+        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
+        const isTerminalExceptionBranch =
+          isExceptionBranch && nodesById.get(targetId)?.$type === "bpmn:EndEvent";
+        const isUpwardExceptionBranch = isExceptionBranch && !isTerminalExceptionBranch;
+        if (spineSet.has(parentId) && !spineSet.has(targetId)) {
+          const isSpannedByBackEdge = Array.from(backEdges).some((bId) => {
+            const bFlow = topFlows.find((f) => f.id === bId);
+            if (!bFlow) return false;
+            const bSrcCol = nodeCol.get(bFlow.sourceRef?.id);
+            const bTgtCol = nodeCol.get(bFlow.targetRef?.id);
+            if (bSrcCol !== undefined && bTgtCol !== undefined) {
+              return bTgtCol <= parentCol && parentCol <= bSrcCol;
+            }
+            return false;
+          });
+          targetTrack = isUpwardExceptionBranch
+            ? parentTrack - 1
+            : isSpannedByBackEdge
+              ? -1
+              : parentTrack + 1;
+        }
+
+        nodeTrack.set(targetId, targetTrack);
+        const targetCol =
+          targetTrack > parentTrack && isUpwardExceptionBranch
+            ? Math.max(0, parentCol - 1)
+            : Math.max(minTargetCol, nodeCol.get(targetId) ?? 0);
+        nodeCol.set(targetId, targetCol);
+        queue.push(targetId);
+      } else {
+        if (nodeCol.get(targetId)! < minTargetCol) {
+          shiftNodeAndDescendants(targetId, minTargetCol);
+        }
+      }
+    }
+  }
+
+  // Orphan nodes (not reachable from start event)
+  let maxCol = Math.max(0, ...Array.from(nodeCol.values()));
+  for (const node of topNodes) {
+    if (!nodeCol.has(node.id)) {
+      maxCol += 1;
+      nodeCol.set(node.id, maxCol);
+      nodeTrack.set(node.id, 0);
+    }
+  }
+
+  // Prevent same-track overlap using actual half-widths in column units
+  const tracksUsed = new Set(nodeTrack.values());
+  for (const t of tracksUsed) {
+    const nodesOnTrack = topNodes
+      .filter((n) => nodeTrack.get(n.id) === t)
+      .sort((a, b) => nodeCol.get(a.id)! - nodeCol.get(b.id)!);
+    const colGap = DEFAULT_FLOW_GAP / colWidth;
+    let lastRightEdge = -Infinity;
+    for (const n of nodesOnTrack) {
+      const dim = dimensionOf(n);
+      const halfSpan = dim.width / colWidth / 2;
+      let currentCol = nodeCol.get(n.id)!;
+      if (currentCol - halfSpan < lastRightEdge + colGap) {
+        const neededCol = lastRightEdge + colGap + halfSpan;
+        if (neededCol > currentCol) {
+          shiftNodeAndDescendants(n.id, neededCol);
+          currentCol = neededCol;
+        }
+      }
+      lastRightEdge = currentCol + halfSpan;
+    }
+  }
+
+  // Keep terminals close to their predecessor (avoid stranding an end node in a
+  // distant corridor needed by another branch)
+  for (const endNode of topNodes.filter((n) => n.$type.endsWith("EndEvent"))) {
+    const incoming = topFlows.find((flow) => flow.targetRef?.id === endNode.id);
+    const source = incoming ? nodesById.get(incoming.sourceRef?.id) : undefined;
+    if (!source) continue;
+    const track = nodeTrack.get(endNode.id);
+    if (track === undefined || track <= 0 || track !== nodeTrack.get(source.id)) continue;
+    const sourceCol = nodeCol.get(source.id);
+    if (sourceCol === undefined) continue;
+    const sourceSpan = dimensionOf(source).width / colWidth;
+    let candidate = sourceCol + sourceSpan + DEFAULT_FLOW_GAP / colWidth;
+    const endSpan = dimensionOf(endNode).width / colWidth;
+    while (
+      topNodes.some((node) => {
+        if (node.id === endNode.id || nodeTrack.get(node.id) !== track) return false;
+        const nodeColValue = nodeCol.get(node.id);
+        if (nodeColValue === undefined) return false;
+        const nodeSpan = dimensionOf(node).width / colWidth;
+        return Math.abs(nodeColValue - candidate) < (nodeSpan + endSpan) / 2 + 0.4;
+      })
+    ) {
+      candidate += 1;
+    }
+    nodeCol.set(endNode.id, candidate);
+  }
+
+  // Horizontally align terminal end events across different tracks when
+  // unobstructed (within 2 columns)
+  const endEvents = topNodes.filter((n) => n.$type.endsWith("EndEvent"));
+  if (endEvents.length > 1) {
+    const maxEndCol = Math.max(...endEvents.map((n) => nodeCol.get(n.id) ?? 0));
+    for (const endNode of endEvents) {
+      const currentCol = nodeCol.get(endNode.id) ?? 0;
+      if (currentCol < maxEndCol && maxEndCol - currentCol <= 2) {
+        const track = nodeTrack.get(endNode.id) ?? 0;
+        const hasObstacle = topNodes.some(
+          (n) =>
+            n.id !== endNode.id &&
+            nodeTrack.get(n.id) === track &&
+            (nodeCol.get(n.id) ?? 0) >= currentCol &&
+            (nodeCol.get(n.id) ?? 0) <= maxEndCol,
+        );
+        if (!hasObstacle) nodeCol.set(endNode.id, maxEndCol);
+      }
+    }
+  }
+
+  return { nodeTrack, nodeCol };
+}
+
+function computeTrackY(
+  t: number,
+  minTrack: number,
+  opts: ResolvedLayoutOptions,
+  extraClearance: number,
+): number {
+  let centerY = opts.spineY;
+  if (minTrack === -1) {
+    if (t === -1) centerY = opts.spineY;
+    else if (t === 0) centerY = opts.spineY + opts.trackGap;
+    else if (t === 1) centerY = opts.spineY + 2 * opts.trackGap;
+    else if (t > 1) centerY = opts.spineY + (t + 1) * opts.trackGap;
+  } else {
+    if (t === 1) centerY = opts.track1Y;
+    else if (t === 2) centerY = opts.track2Y;
+    else if (t > 2) centerY = opts.track2Y + (t - 2) * opts.trackGap;
+  }
+  return centerY + extraClearance;
+}
+
+/** Padding inside a subprocess/embedded container (left/right, top/bottom). */
+const SUBPROCESS_PAD_H = 40;
+const SUBPROCESS_PAD_V = 30;
+
+/**
+ * Recursively compute the layout of a subprocess's children, derive the
+ * container size from the resulting bounding box, and install all child
+ * NodeLayout entries (with isSubProcessChild=true) into the parent's
+ * layoutNodes map at their absolute canvas positions.
+ *
+ * Returns the computed { width, height } of the subprocess container so that
+ * the caller can place the outer node with the correct size.
+ */
+function layoutSubProcessChildrenRecursive(
+  node: any,
+  parentX: number,
+  parentY: number,
+  track: number,
+  layoutNodes: Map<string, NodeLayout>,
+  opts: ResolvedLayoutOptions,
+): { width: number; height: number } {
+  const childNodes = (node.flowElements || []).filter(
+    (el: any) => el.$type !== "bpmn:SequenceFlow",
+  );
+  if (childNodes.length === 0) {
+    return { width: 360, height: 200 };
+  }
+
+  // Run the full layout algorithm on the subprocess's children in local coords.
+  const subResult = computeProcessLayout(node, opts);
+
+  // Determine bounding box of all child nodes in local layout coordinates.
+  const placed = Array.from(subResult.nodes.values());
+  if (placed.length === 0) {
+    return { width: 360, height: 200 };
+  }
+  const minX = Math.min(...placed.map((n) => n.x));
+  const minY = Math.min(...placed.map((n) => n.y));
+  const maxX = Math.max(...placed.map((n) => n.x + n.width));
+  const maxY = Math.max(...placed.map((n) => n.y + n.height));
+
+  // Derive the subprocess container size from the local bounding box.
+  const contentW = maxX - minX;
+  const contentH = maxY - minY;
+  const containerW = Math.max(360, contentW + SUBPROCESS_PAD_H * 2);
+  const containerH = Math.max(200, contentH + SUBPROCESS_PAD_V * 2);
+
+  // Offset to translate from local layout origin to the correct position
+  // inside the subprocess container (parent top-left + padding).
+  const offsetX = parentX + SUBPROCESS_PAD_H - minX;
+  const offsetY = parentY + SUBPROCESS_PAD_V - minY;
+
+  // Install children into the parent layoutNodes map at absolute positions.
+  for (const childNode of subResult.nodes.values()) {
+    layoutNodes.set(childNode.id, {
+      ...childNode,
+      x: childNode.x + offsetX,
+      y: childNode.y + offsetY,
+      centerX: childNode.centerX + offsetX,
+      centerY: childNode.centerY + offsetY,
+      track,
+      isSubProcessChild: true,
+    });
+  }
+
+  return { width: containerW, height: containerH };
+}
+
+function repairDirectFlowGaps(
+  layoutNodes: Map<string, NodeLayout>,
+  topNodes: any[],
+  topFlows: any[],
+): void {
+  const incomingCount = new Map<string, number>();
+  for (const flow of topFlows) {
+    const targetId = flow.targetRef?.id;
+    if (targetId) incomingCount.set(targetId, (incomingCount.get(targetId) ?? 0) + 1);
+  }
+  for (const flow of topFlows) {
+    const source = layoutNodes.get(flow.sourceRef?.id);
+    const target = layoutNodes.get(flow.targetRef?.id);
+    if (
+      !source ||
+      !target ||
+      incomingCount.get(target.id) !== 1 ||
+      Math.abs(source.centerY - target.centerY) >= 0.5
+    )
+      continue;
+    if (target.x <= source.x + source.width + DEFAULT_FLOW_GAP) continue;
+    const hasIntermediate = topNodes.some((node: any) => {
+      const candidate = layoutNodes.get(node.id);
+      return (
+        candidate &&
+        candidate.id !== source.id &&
+        candidate.id !== target.id &&
+        Math.abs(candidate.centerY - source.centerY) < 0.5 &&
+        candidate.x >= source.x + source.width &&
+        candidate.x + candidate.width <= target.x
+      );
+    });
+    if (!hasIntermediate) {
+      const nextX = source.x + source.width + DEFAULT_FLOW_GAP;
+      const dx = nextX - target.x;
+      if (dx !== 0) {
+        const movedIds = new Set<string>();
+        const collect = (element: any): void => {
+          if (element?.id) movedIds.add(element.id);
+          for (const child of element?.flowElements || []) {
+            if (child.$type !== "bpmn:SequenceFlow") collect(child);
+          }
+        };
+        collect(target.element);
+        for (const node of layoutNodes.values()) {
+          if (!movedIds.has(node.id)) continue;
+          node.x += dx;
+          node.centerX += dx;
+        }
+      }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Public entry point
+// ---------------------------------------------------------------------------
+
+export function computeProcessLayout(
+  process: any,
+  opts: ResolvedLayoutOptions,
+): ProcessLayoutResult {
+  const allFlowElements: any[] = process.flowElements || [];
+  const topNodes = allFlowElements.filter((el) => el.$type !== "bpmn:SequenceFlow");
+  const topFlows = allFlowElements.filter((el) => el.$type === "bpmn:SequenceFlow");
+
+  const nodesById = new Map<string, any>(topNodes.map((n) => [n.id, n]));
+  const incomingFlows = new Map<string, any[]>();
+  const outgoingFlows = new Map<string, any[]>();
+  for (const node of topNodes) {
+    incomingFlows.set(node.id, []);
+    outgoingFlows.set(node.id, []);
+  }
+  for (const flow of topFlows) {
+    const src = flow.sourceRef?.id;
+    const tgt = flow.targetRef?.id;
+    if (src && nodesById.has(src)) outgoingFlows.get(src)!.push(flow);
+    if (tgt && nodesById.has(tgt)) incomingFlows.get(tgt)!.push(flow);
+  }
+
+  // 0. Pre-compute subprocess child layouts so their sizes are available for
+  //    column/track assignment and track-clearance calculation.
+  //    These will be re-applied (at absolute coords) after the outer layout.
+  const subprocessSizes = new Map<string, { width: number; height: number }>();
+  for (const node of topNodes) {
+    if (node.$type === "bpmn:SubProcess") {
+      const childNodes = (node.flowElements || []).filter(
+        (el: any) => el.$type !== "bpmn:SequenceFlow",
+      );
+      if (childNodes.length === 0) {
+        subprocessSizes.set(node.id, { width: 360, height: 200 });
+        continue;
+      }
+      const subResult = computeProcessLayout(node, opts);
+      const placed = Array.from(subResult.nodes.values());
+      if (placed.length === 0) {
+        subprocessSizes.set(node.id, { width: 360, height: 200 });
+        continue;
+      }
+      const minX = Math.min(...placed.map((n) => n.x));
+      const minY = Math.min(...placed.map((n) => n.y));
+      const maxX = Math.max(...placed.map((n) => n.x + n.width));
+      const maxY = Math.max(...placed.map((n) => n.y + n.height));
+      const containerW = Math.max(360, (maxX - minX) + SUBPROCESS_PAD_H * 2);
+      const containerH = Math.max(200, (maxY - minY) + SUBPROCESS_PAD_V * 2);
+      subprocessSizes.set(node.id, { width: containerW, height: containerH });
+    }
+  }
+
+  /** Get the effective dimensions for a node, using pre-computed subprocess sizes. */
+  const effectiveDim = (node: any) => {
+    if (node.$type === "bpmn:SubProcess" && subprocessSizes.has(node.id)) {
+      return subprocessSizes.get(node.id)!;
+    }
+    return getElementDimensions(node);
+  };
+
+  // 1. Detect back-edges (cycles / loop-backs) via DFS
+  const startEvent = topNodes.find((n) => n.$type === "bpmn:StartEvent") || topNodes[0];
+  const backEdges = detectBackEdges(topNodes, outgoingFlows, nodesById, startEvent);
+
+  // 2. Identify primary spine (happy path on track 0)
+  const { spineNodeIds, spineSet } = selectSpine(startEvent, outgoingFlows, nodesById, backEdges);
+
+  // 3. Track and column assignment — use effectiveDim so subprocess sizes drive spacing
+  const { nodeTrack, nodeCol } = buildTrackColMapsWithDim(
+    topNodes,
+    topFlows,
+    spineNodeIds,
+    spineSet,
+    outgoingFlows,
+    nodesById,
+    backEdges,
+    opts.colWidth,
+    effectiveDim,
+  );
+
+  // 4. Compute pixel coordinates
+  const layoutNodes = new Map<string, NodeLayout>();
+
+  const minTrack = Math.min(0, ...Array.from(nodeTrack.values()));
+  const spineTrack = minTrack === -1 ? -1 : 0;
+
+  // Per-track extra clearance for taller-than-default elements
+  const maxHeightOnTrack = (trackVal: number): number => {
+    let max = 80;
+    for (const n of topNodes) {
+      if (nodeTrack.get(n.id) === trackVal) max = Math.max(max, effectiveDim(n).height);
+    }
+    return max;
+  };
+  const distinctTracks = Array.from(new Set(nodeTrack.values())).sort((a, b) => a - b);
+  const extraClearanceForTrack = new Map<number, number>([[spineTrack, 0]]);
+  let cumExtra = 0;
+  let prevTrack = spineTrack;
+  for (const trackVal of distinctTracks.filter((tv) => tv > spineTrack)) {
+    cumExtra +=
+      Math.max(0, maxHeightOnTrack(prevTrack) - 80) / 2 +
+      Math.max(0, maxHeightOnTrack(trackVal) - 80) / 2;
+    extraClearanceForTrack.set(trackVal, cumExtra);
+    prevTrack = trackVal;
+  }
+
+  for (const node of topNodes) {
+    const c = nodeCol.get(node.id)!;
+    const t = nodeTrack.get(node.id)!;
+    const dim = effectiveDim(node);
+    const centerX = 75 + c * opts.colWidth;
+    const centerY = computeTrackY(t, minTrack, opts, extraClearanceForTrack.get(t) ?? 0);
+    const x = centerX - dim.width / 2;
+    const y = centerY - dim.height / 2;
+
+    layoutNodes.set(node.id, {
+      id: node.id,
+      element: node,
+      col: c,
+      track: t,
+      x,
+      y,
+      width: dim.width,
+      height: dim.height,
+      centerX,
+      centerY,
+    });
+  }
+
+  packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
+  snapNodesToGrid(layoutNodes, opts.colWidth);
+  repairDirectFlowGaps(layoutNodes, topNodes, topFlows);
+
+  // 5. Now that the outer layout is finalized, install subprocess children
+  //    at their absolute positions inside the container.
+  for (const node of topNodes) {
+    if (node.$type !== "bpmn:SubProcess") continue;
+    const parentLayout = layoutNodes.get(node.id);
+    if (!parentLayout) continue;
+    const track = nodeTrack.get(node.id) ?? 0;
+    layoutSubProcessChildrenRecursive(
+      node,
+      parentLayout.x,
+      parentLayout.y,
+      track,
+      layoutNodes,
+      opts,
+    );
+  }
+
+  // Collect all flows including child subprocess flows (recursively)
+  const allFlows: any[] = [...topFlows];
+  const collectSubFlows = (elements: any[]): void => {
+    for (const el of elements) {
+      if (el.$type === "bpmn:SubProcess") {
+        for (const child of el.flowElements || []) {
+          if (child.$type === "bpmn:SequenceFlow") allFlows.push(child);
+          else if (child.$type === "bpmn:SubProcess") collectSubFlows([child]);
+        }
+      }
+    }
+  };
+  collectSubFlows(topNodes);
+
+  return { nodes: layoutNodes, allFlows };
+}
