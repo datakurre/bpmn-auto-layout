@@ -85,6 +85,12 @@
       "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; candidates that collide with lanes, elements, or previously placed labels are rejected before fallback."
     },
     {
+      "id": "labels.node-gap-by-element-class",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:1025-1032", "packages/bpmn-auto-layout/src/auto-layout.ts:1100-1108"],
+      "rule": "The current label solver uses an 8 px primary/alternate vertical gap for named events and a 0 px gap for named gateways; collision-free candidate selection can choose a different side or offset. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
+    },
+    {
       "id": "labels.edge-placement",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:1309-1427", "packages/bpmn-auto-layout/src/auto-layout.ts:1532-1547"],
@@ -133,6 +139,20 @@
       "id": "metric.labels.named_label_coverage",
       "producer": "tools/bpmn_feedback.py report",
       "definition": "Compares named events, gateways, lanes, sequence/message flows, and data references against BPMN DI labels, reporting covered and missing label targets."
+    },
+    {
+      "id": "metric.labels.node_label_gap",
+      "producer": "tools/bpmn_feedback.py report",
+      "definition": "Reports count, minimum, maximum, and average vertical gap between named event/gateway shapes and their BPMNLabel bounds, grouped by element class. Use this to compare gateway labels with the 8 px event-label baseline."
+    }
+  ],
+  "feedback_observations": [
+    {
+      "id": "feedback.order-fulfilment-advanced.label-spacing",
+      "status": "candidate heuristic, not yet promoted to implementation rule",
+      "source": "order-fulfilment-advanced.png",
+      "observation": "The overall three-row grid, happy-path spine, branch spacing, event-subprocess alignment, and label-to-node distances are good. The exclusive gateway label 'Order valid?' could use a slightly larger below-node gap; the above-node labels 'Check in parallel' and 'Checks complete' could use a small consistent gap comparable to event labels.",
+      "next_step": "Use metric.labels.node_label_gap and visual reports on multiple gateway orientations before changing the shared gap parameter."
     }
   ],
   "feedback_ingestion": {

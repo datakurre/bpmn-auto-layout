@@ -595,6 +595,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
     shapes: list[dict[str, object]] = []
     labels: list[dict[str, float]] = []
     label_targets: set[str] = set()
+    node_label_gaps: dict[str, list[float]] = {"event": [], "gateway": []}
     edges: list[dict[str, object]] = []
     for plane in root.iter(q("bpmndi", "BPMNPlane")):
         plane_id = plane.get("id", "")
@@ -608,6 +609,27 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 label["_plane"] = plane_id  # type: ignore[assignment]
                 labels.append(label)
                 label_targets.add(target_id)
+                element_type = element_types.get(target_id, "")
+                if element_type.endswith("Event"):
+                    node_label_gaps["event"].append(
+                        round(
+                            min(
+                                abs(label["y"] - (bounds["y"] + bounds["height"])),
+                                abs(bounds["y"] - (label["y"] + label["height"])),
+                            ),
+                            2,
+                        )
+                    )
+                elif element_type.endswith("Gateway"):
+                    node_label_gaps["gateway"].append(
+                        round(
+                            min(
+                                abs(label["y"] - (bounds["y"] + bounds["height"])),
+                                abs(bounds["y"] - (label["y"] + label["height"])),
+                            ),
+                            2,
+                        )
+                    )
             shapes.append({"id": shape.get("id", ""), "plane": plane_id, "bpmnElement": target_id, "type": element_types.get(target_id, ""), "bounds": bounds})
         for edge in plane.findall(q("bpmndi", "BPMNEdge")):
             points = [(float(point.get("x", "0")), float(point.get("y", "0"))) for point in edge.findall(q("di", "waypoint"))]
@@ -704,6 +726,14 @@ def collect_metrics(path: Path) -> dict[str, object]:
     diagrams = len(list(root.iter(q("bpmndi", "BPMNDiagram"))))
     covered = sorted(named_external_targets.intersection(label_targets))
     missing = sorted(named_external_targets.difference(label_targets))
+    node_label_gap_stats = {}
+    for kind, values in node_label_gaps.items():
+        node_label_gap_stats[kind] = {
+            "count": len(values),
+            "min": min(values) if values else None,
+            "max": max(values) if values else None,
+            "avg": round(sum(values) / len(values), 2) if values else None,
+        }
     return {
         "file": str(path),
         "sha256": sha256_file(path),
@@ -730,6 +760,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "non_orthogonal_segments": non_orthogonal_segments,
             "grid_center_x_deviation_avg": round(sum(grid_deviations) / len(grid_deviations), 2) if grid_deviations else 0,
             "grid_center_x_deviation_max": round(max(grid_deviations), 2) if grid_deviations else 0,
+            "node_label_gap": node_label_gap_stats,
             "named_label_coverage": {"covered": len(covered), "missing": len(missing), "missing_ids": missing},
         },
     }
@@ -816,6 +847,10 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("total bends", ("layout", "total_bends")),
         ("total Manhattan length", ("layout", "total_manhattan_length")),
         ("grid center-x avg deviation", ("layout", "grid_center_x_deviation_avg")),
+        ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
+        ("gateway label gap average", ("layout", "node_label_gap", "gateway", "avg")),
+        ("event label gap minimum", ("layout", "node_label_gap", "event", "min")),
+        ("gateway label gap minimum", ("layout", "node_label_gap", "gateway", "min")),
         ("missing named labels", ("layout", "named_label_coverage", "missing")),
         ("sequence flows", ("semantic", "sequence_flows")),
         ("message flows", ("semantic", "message_flows")),
