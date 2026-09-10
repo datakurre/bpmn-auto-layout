@@ -970,6 +970,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
     element_counts: dict[str, int] = {}
     named_external_targets: set[str] = set()
     flow_endpoints: dict[str, tuple[str | None, str | None]] = {}
+    boundary_hosts: dict[str, str] = {}
     for element in root.iter():
         if not element.tag.startswith("{" + NS["bpmn"] + "}"):
             continue
@@ -980,6 +981,10 @@ def collect_metrics(path: Path) -> dict[str, object]:
             named_external_targets.add(element_id)
         if name in {"sequenceFlow", "messageFlow", "association"}:
             flow_endpoints[element.get("id", "")] = (element.get("sourceRef"), element.get("targetRef"))
+        if name == "boundaryEvent" and element_id:
+            host = element.get("attachedToRef")
+            if host:
+                boundary_hosts[element_id] = host
 
     shapes: list[dict[str, object]] = []
     labels: list[dict[str, float]] = []
@@ -1056,13 +1061,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
     shape_overlap_area = 0.0
     for i, first in enumerate(shapes):
         first_bounds = first["bounds"]  # type: ignore[index]
+        first_id = str(first["bpmnElement"])
         for second in shapes[i + 1 :]:
             if first["plane"] != second["plane"]:
                 continue
+            second_id = str(second["bpmnElement"])
             second_bounds = second["bounds"]  # type: ignore[index]
             if first["type"] in CONTAINER_TYPES and contains(first_bounds, second_bounds):
                 continue
             if second["type"] in CONTAINER_TYPES and contains(second_bounds, first_bounds):
+                continue
+            # A boundary event is deliberately placed straddling its host
+            # activity's border; that overlap is required BPMN notation, not
+            # a layout defect.
+            if boundary_hosts.get(first_id) == second_id or boundary_hosts.get(second_id) == first_id:
                 continue
             area = box_overlap(first_bounds, second_bounds)
             if area > 0:
