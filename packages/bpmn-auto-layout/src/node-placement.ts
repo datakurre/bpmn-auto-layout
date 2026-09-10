@@ -7,6 +7,7 @@
 
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
+import { leafLaneOrderIndex } from "./lane-layout";
 import {
   DEFAULT_FLOW_GAP,
   COMPONENT_GAP,
@@ -784,15 +785,7 @@ export function computeProcessLayout(
     backEdges,
     opts.colWidth,
     effectiveDim,
-    new Map(
-      (process.laneSets || []).flatMap((laneSet: any, laneSetIndex: number) =>
-        (laneSet.lanes || []).flatMap((lane: any, laneIndex: number) =>
-          (lane.flowNodeRef || [])
-            .filter((ref: any) => nodesById.has(ref.id))
-            .map((ref: any) => [ref.id, laneSetIndex + laneIndex] as [string, number]),
-        ),
-      ),
-    ),
+    leafLaneOrderIndex(process.laneSets || []),
   );
 
   // 4. Compute pixel coordinates

@@ -117,6 +117,33 @@ export function computeLaneBands(
   return out;
 }
 
+/**
+ * Maps every flow node id to the sequential document-order index of the
+ * (leaf) lane it belongs to: lane 0 is the first lane declared, lane 1 the
+ * next, and so on, continuing across multiple laneSets and recursing into
+ * childLaneSet so nested lanes each get their own index too. Used as a
+ * track-assignment hint so nodes in different lanes are not conflated.
+ */
+export function leafLaneOrderIndex(laneSets: any[]): Map<string, number> {
+  const result = new Map<string, number>();
+  let index = 0;
+  const visit = (lane: any): void => {
+    const children = lane.childLaneSet?.lanes;
+    if (children && children.length > 0) {
+      for (const child of children) visit(child);
+      return;
+    }
+    for (const ref of lane.flowNodeRef || []) {
+      result.set(ref.id, index);
+    }
+    index += 1;
+  };
+  for (const laneSet of laneSets || []) {
+    for (const lane of laneSet.lanes || []) visit(lane);
+  }
+  return result;
+}
+
 /** The bottom-most Y reached by any band, or ySpan's bottom if there are none. */
 export function laneBandsBottom(bands: LaneBand[], fallback: number): number {
   return bands.length === 0 ? fallback : Math.max(...bands.map((band) => band.y + band.height));
