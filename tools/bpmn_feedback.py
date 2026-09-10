@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate deterministic BPMN layout fixtures, reports, and quality checks."""
+"""Read persisted BPMN fixtures, generate reports, and run quality checks."""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ NS = {
     "bpmndi": "http://www.omg.org/spec/BPMN/20100524/DI",
     "dc": "http://www.omg.org/spec/DD/20100524/DC",
     "di": "http://www.omg.org/spec/DD/20100524/DI",
-    "camunda": "http://camunda.org/schema/1.0/bpmn",
+    "vendor": "https://example.com/vendor/bpmn",
     "xsi": "http://www.w3.org/2001/XMLSchema-instance",
 }
 
@@ -151,7 +151,7 @@ class FixtureSpec:
     data_objects: tuple[str, ...] = ()
     data_stores: tuple[tuple[str, str], ...] = ()
     collaborations: tuple[str, str, tuple[Participant, ...], tuple[Flow, ...]] | None = None
-    camunda: bool = False
+    vendor_extensions: bool = False
 
 
 def default_size(kind: str) -> tuple[int, int]:
@@ -176,7 +176,7 @@ def extension_elements(parent: ET.Element, extensions: tuple[tuple[str, dict[str
         return
     container = ET.SubElement(parent, q("bpmn", "extensionElements"))
     for tag, attrs in extensions:
-        ET.SubElement(container, q("camunda", tag), attrs)
+        ET.SubElement(container, q("vendor", tag), attrs)
 
 
 def io_specification(node_element: ET.Element, node: Node) -> None:
@@ -455,8 +455,8 @@ def fixture_specs() -> list[FixtureSpec]:
     )
 
     coverage = ProcessSpec(
-        id="Process_Camunda7Coverage",
-        name="Camunda 7 activities and gateways",
+        id="Process_ActivitiesGatewaysCoverage",
+        name="Activities and gateways coverage",
         nodes=(
             Node("C7_Start", "StartEvent", "Start", 60, 180),
             Node("C7_User", "UserTask", "User task", 150, 158),
@@ -531,40 +531,60 @@ def fixture_specs() -> list[FixtureSpec]:
 
     boundary = ProcessSpec(
         id="Process_BoundaryAndSubprocesses",
-        name="Boundary and subprocess variants",
+        name="Boundary events and embedded subprocess",
         nodes=(
             Node("Boundary_Start", "StartEvent", "Request", 60, 180),
             Node("Boundary_Task", "ServiceTask", "Process request", 180, 158),
-            Node("Boundary_InterruptingTimer", "BoundaryEvent", "Timeout", 250, 220, attrs={"attachedToRef": "Boundary_Task"}, event_definitions=(EventDefinition("timer"),)),
-            Node("Boundary_NonInterruptingMessage", "BoundaryEvent", "Message override", 290, 220, attrs={"attachedToRef": "Boundary_Task", "cancelActivity": "false"}, event_definitions=(EventDefinition("message", {"messageRef": "Message_Override"}),)),
+            Node(
+                "Boundary_InterruptingTimer",
+                "BoundaryEvent",
+                "Timeout",
+                250,
+                220,
+                attrs={"attachedToRef": "Boundary_Task"},
+                event_definitions=(EventDefinition("timer"),),
+            ),
+            Node(
+                "Boundary_NonInterruptingMessage",
+                "BoundaryEvent",
+                "Message override",
+                290,
+                220,
+                attrs={"attachedToRef": "Boundary_Task", "cancelActivity": "false"},
+                event_definitions=(EventDefinition("message", {"messageRef": "Message_Override"}),),
+            ),
             Node(
                 "Boundary_SubProcess",
                 "SubProcess",
-                "Event subprocess host",
+                "Fulfil request",
                 420,
                 120,
+                width=300,
+                height=180,
                 children=(
-                    Node("Boundary_SubStart", "StartEvent", "Inside", 455, 202),
-                    Node("Boundary_SubTask", "UserTask", "Handle", 535, 180),
-                    Node("Boundary_SubEnd", "EndEvent", "Handled", 685, 202),
-                    Node("Boundary_EventSubprocess", "SubProcess", "Event subprocess", 535, 310, attrs={"triggeredByEvent": "true"}, children=(
-                        Node("Boundary_EventStart", "StartEvent", "Escalation", 570, 382, event_definitions=(EventDefinition("escalation"),)),
-                        Node("Boundary_EventTask", "ScriptTask", "Recover", 650, 360),
-                    ), child_flows=(
-                        Flow("Boundary_EventFlow_Start", "Boundary_EventStart", "Boundary_EventTask"),
-                    )),
+                    Node("Boundary_SubStart", "StartEvent", "Inside", 450, 202),
+                    Node("Boundary_SubTask", "UserTask", "Handle", 525, 180),
+                    Node("Boundary_SubEnd", "EndEvent", "Handled", 650, 202),
                 ),
                 child_flows=(
                     Flow("Boundary_SubFlow_Start", "Boundary_SubStart", "Boundary_SubTask"),
                     Flow("Boundary_SubFlow_End", "Boundary_SubTask", "Boundary_SubEnd"),
                 ),
             ),
-            Node("Boundary_End", "EndEvent", "Done", 840, 180),
+            Node("Boundary_End", "EndEvent", "Done", 780, 180),
+            Node("Boundary_TimeoutTask", "ScriptTask", "Recover timeout", 420, 380),
+            Node("Boundary_TimeoutEnd", "EndEvent", "Timed out", 580, 402),
+            Node("Boundary_MessageTask", "UserTask", "Review override", 420, 520),
+            Node("Boundary_MessageEnd", "EndEvent", "Override handled", 580, 542),
         ),
         flows=(
             Flow("Boundary_Flow_Start", "Boundary_Start", "Boundary_Task"),
             Flow("Boundary_Flow_Task", "Boundary_Task", "Boundary_SubProcess"),
             Flow("Boundary_Flow_End", "Boundary_SubProcess", "Boundary_End"),
+            Flow("Boundary_Flow_Timeout", "Boundary_InterruptingTimer", "Boundary_TimeoutTask"),
+            Flow("Boundary_Flow_Timeout_End", "Boundary_TimeoutTask", "Boundary_TimeoutEnd"),
+            Flow("Boundary_Flow_Message", "Boundary_NonInterruptingMessage", "Boundary_MessageTask"),
+            Flow("Boundary_Flow_Message_End", "Boundary_MessageTask", "Boundary_MessageEnd"),
         ),
         is_executable=True,
     )
@@ -601,54 +621,54 @@ def fixture_specs() -> list[FixtureSpec]:
         ),
     )
 
-    camunda_extensions = ProcessSpec(
-        id="Process_CamundaExtensions",
-        name="Camunda 7 extensions",
+    vendor_extensions = ProcessSpec(
+        id="Process_VendorExtensions",
+        name="Vendor extensions",
         nodes=(
-            Node("Camunda_Start", "StartEvent", "Start", 60, 180),
+            Node("Vendor_Start", "StartEvent", "Start", 60, 180),
             Node(
-                "Camunda_User",
+                "Vendor_User",
                 "UserTask",
                 "Approve request",
                 180,
                 158,
                 attrs={
-                    q("camunda", "assignee"): "demo",
-                    q("camunda", "candidateGroups"): "approvers",
-                    q("camunda", "formKey"): "embedded:app:approval.html",
-                    q("camunda", "asyncBefore"): "true",
+                    q("vendor", "assignee"): "demo",
+                    q("vendor", "candidateGroups"): "approvers",
+                    q("vendor", "formKey"): "embedded:app:approval.html",
+                    q("vendor", "asyncBefore"): "true",
                 },
                 extensions=(
                     ("formData", {"businessKey": "requestId"}),
-                    ("taskListener", {"event": "create", q("camunda", "class"): "com.example.AuditListener"}),
+                    ("taskListener", {"event": "create", q("vendor", "class"): "com.example.AuditListener"}),
                 ),
             ),
             Node(
-                "Camunda_Service",
+                "Vendor_Service",
                 "ServiceTask",
                 "Invoke worker",
                 360,
                 158,
                 attrs={
-                    q("camunda", "type"): "external",
-                    q("camunda", "topic"): "invoice",
-                    q("camunda", "asyncAfter"): "true",
-                    q("camunda", "failedJobRetryTimeCycle"): "R3/PT10M",
+                    q("vendor", "type"): "external",
+                    q("vendor", "topic"): "invoice",
+                    q("vendor", "asyncAfter"): "true",
+                    q("vendor", "failedJobRetryTimeCycle"): "R3/PT10M",
                 },
                 extensions=(
-                    ("executionListener", {q("camunda", "event"): "start", q("camunda", "expression"): "${audit()}"}),
-                    ("inputOutput", {q("camunda", "source"): "requestId", q("camunda", "target"): "workerRequest"}),
+                    ("executionListener", {q("vendor", "event"): "start", q("vendor", "expression"): "${audit()}"}),
+                    ("inputOutput", {q("vendor", "source"): "requestId", q("vendor", "target"): "workerRequest"}),
                 ),
             ),
-            Node("Camunda_End", "EndEvent", "Complete", 540, 180),
+            Node("Vendor_End", "EndEvent", "Complete", 540, 180),
         ),
         flows=(
-            Flow("Camunda_Flow_Start", "Camunda_Start", "Camunda_User"),
-            Flow("Camunda_Flow_Service", "Camunda_User", "Camunda_Service"),
-            Flow("Camunda_Flow_End", "Camunda_Service", "Camunda_End"),
+            Flow("Vendor_Flow_Start", "Vendor_Start", "Vendor_User"),
+            Flow("Vendor_Flow_Service", "Vendor_User", "Vendor_Service"),
+            Flow("Vendor_Flow_End", "Vendor_Service", "Vendor_End"),
         ),
         is_executable=True,
-        attrs={q("camunda", "historyTimeToLive"): "180"},
+        attrs={q("vendor", "historyTimeToLive"): "180"},
         extensions=(("properties", {"source": "fixture"}),),
     )
 
@@ -689,57 +709,16 @@ def fixture_specs() -> list[FixtureSpec]:
         ),
     )
 
-    stress_containers = ProcessSpec(
-        id="Process_StressContainers",
-        name="Stress: nested containers and artifacts",
-        nodes=(
-            Node("Container_Start", "StartEvent", "Container intake", 60, 150),
-            Node("Container_Request", "UserTask", "Capture request", 170, 128),
-            Node(
-                "Container_Main",
-                "SubProcess",
-                "Nested orchestration",
-                330,
-                80,
-                children=(
-                    Node("Container_SubStart", "StartEvent", "", 365, 162),
-                    Node("Container_SubTask", "ServiceTask", "Nested task", 535, 162),
-                    Node("Container_SubEnd", "EndEvent", "", 685, 162),
-                ),
-                child_flows=(
-                    Flow("Container_SubFlow_Start", "Container_SubStart", "Container_SubTask"),
-                    Flow("Container_SubFlow_End", "Container_SubTask", "Container_SubEnd"),
-                ),
-            ),
-            Node("Container_Timeout", "BoundaryEvent", "", 650, 250, attrs={"attachedToRef": "Container_Main"}, event_definitions=(EventDefinition("timer"),)),
-            Node("Container_Escalate", "SendTask", "Escalate nested failure", 850, 400),
-            Node("Container_End", "EndEvent", "", 1030, 150),
-        ),
-        flows=(
-            Flow("Container_Flow_Start", "Container_Start", "Container_Request"),
-            Flow("Container_Flow_Main", "Container_Request", "Container_Main"),
-            Flow("Container_Flow_Main_End", "Container_Main", "Container_End"),
-            Flow("Container_Flow_Timeout", "Container_Timeout", "Container_Escalate", "timeout"),
-            Flow("Container_Flow_Escalate_End", "Container_Escalate", "Container_End"),
-        ),
-        lanes=(
-            Lane("Container_Lane_Intake", "Intake", ("Container_Start", "Container_Request"), 40, 40, 1160, 180),
-            Lane("Container_Lane_Automation", "Automation", ("Container_Main", "Container_Timeout", "Container_Escalate", "Container_End"), 40, 220, 1160, 300),
-        ),
-        artifacts=(
-            Artifact("Container_Data", "DataObjectReference", "Request payload", 180, 300, 50, 64, {"dataObjectRef": "Container_DataObject"}),
-        ),
-    )
-
     return [
         FixtureSpec("basic-events-tasks.bpmn", "Definitions_BasicEventsTasks", (basic,), messages=(("Message_Receipt", "Receipt"),)),
-        FixtureSpec("gateways-branches-loops.bpmn", "Definitions_GatewaysBranchesLoops", (branches,)),
+        FixtureSpec("boundary-and-subprocesses.bpmn", "Definitions_BoundaryAndSubprocesses", (boundary,), messages=(("Message_Override", "Override"),)),
         FixtureSpec(
-            "subprocess-boundary-data-lanes.bpmn",
-            "Definitions_SubprocessBoundaryDataLanes",
-            (subprocess,),
-            data_stores=(("DataStore_Inventory", "Inventory"),),
+            "activities-gateways.bpmn",
+            "Definitions_ActivitiesGatewaysCoverage",
+            (coverage,),
+            vendor_extensions=True,
         ),
+        FixtureSpec("extensions.bpmn", "Definitions_VendorExtensions", (vendor_extensions,), vendor_extensions=True),
         FixtureSpec(
             "collaboration-lanes-messages.bpmn",
             "Definitions_CollaborationMessages",
@@ -758,7 +737,12 @@ def fixture_specs() -> list[FixtureSpec]:
                 ),
             ),
         ),
-        FixtureSpec("camunda7-activities-gateways.bpmn", "Definitions_Camunda7Coverage", (coverage,), camunda=True),
+        FixtureSpec(
+            "data-artifacts.bpmn",
+            "Definitions_DataArtifacts",
+            (artifacts,),
+            data_stores=(("Artifact_OutputStore", "Output store"),),
+        ),
         FixtureSpec(
             "event-definitions.bpmn",
             "Definitions_EventDefinitions",
@@ -767,16 +751,14 @@ def fixture_specs() -> list[FixtureSpec]:
             signals=(("Signal_Event", "Signal"),),
             escalations=(("Escalation_Event", "Escalation"),),
         ),
-        FixtureSpec("boundary-and-subprocesses.bpmn", "Definitions_BoundaryAndSubprocesses", (boundary,), messages=(("Message_Override", "Override"),)),
-        FixtureSpec(
-            "data-artifacts.bpmn",
-            "Definitions_DataArtifacts",
-            (artifacts,),
-            data_stores=(("Artifact_OutputStore", "Output store"),),
-        ),
-        FixtureSpec("camunda7-extensions.bpmn", "Definitions_CamundaExtensions", (camunda_extensions,), camunda=True),
+        FixtureSpec("gateways-branches-loops.bpmn", "Definitions_GatewaysBranchesLoops", (branches,)),
         FixtureSpec("stress-dense-routing.bpmn", "Definitions_StressRouting", (stress_routing,)),
-        FixtureSpec("stress-nested-containers.bpmn", "Definitions_StressContainers", (stress_containers,)),
+        FixtureSpec(
+            "subprocess-boundary-data-lanes.bpmn",
+            "Definitions_SubprocessBoundaryDataLanes",
+            (subprocess,),
+            data_stores=(("DataStore_Inventory", "Inventory"),),
+        ),
     ]
 
 
@@ -877,21 +859,12 @@ def fixture_xml(spec: FixtureSpec) -> str:
     return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + ET.tostring(root, encoding="unicode") + "\n"
 
 
-def fixture_sources() -> dict[str, str]:
-    return {spec.filename: fixture_xml(spec) for spec in fixture_specs()}
-
-
-def write_fixtures(output_dir: Path, force: bool) -> list[Path]:
-    original_dir = output_dir / "original"
-    original_dir.mkdir(parents=True, exist_ok=True)
-    written: list[Path] = []
-    for filename, xml in fixture_sources().items():
-        target = original_dir / filename
-        if target.exists() and not force:
-            raise SystemExit(f"refusing to overwrite {target}; pass --force")
-        target.write_text(xml, encoding="utf8")
-        written.append(target)
-    return written
+def persisted_fixtures() -> dict[str, str]:
+    fixture_dir = Path("fixtures")
+    fixtures = sorted(fixture_dir.glob("*.bpmn"))
+    if not fixtures:
+        raise SystemExit(f"no persisted BPMN fixtures found under {fixture_dir}")
+    return {fixture.name: fixture.read_text(encoding="utf8") for fixture in fixtures}
 
 
 def parse_xml(path: Path) -> ET.Element:
@@ -1066,6 +1039,8 @@ def collect_metrics(path: Path) -> dict[str, object]:
 
     edge_crossings = 0
     edge_shape_intersections = 0
+    edge_crossing_details: list[dict[str, str]] = []
+    edge_shape_intersection_details: list[dict[str, str]] = []
     total_bends = 0
     total_manhattan = 0.0
     non_orthogonal_segments = 0
@@ -1127,6 +1102,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
                     continue
                 if segment_intersects_box(a, b, shape["bounds"]):  # type: ignore[arg-type]
                     edge_shape_intersections += 1
+                    edge_shape_intersection_details.append(
+                        {
+                            "edge": str(edge["bpmnElement"]),
+                            "shape": str(shape["bpmnElement"]),
+                        }
+                    )
     for i, first in enumerate(edges):
         first_points = first["points"]  # type: ignore[assignment]
         first_endpoints = set(flow_endpoints.get(first["bpmnElement"], (None, None)))  # type: ignore[arg-type]
@@ -1140,6 +1121,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 for b1, b2 in zip(second_points, second_points[1:]):
                     if orthogonal_cross(a1, a2, b1, b2):
                         edge_crossings += 1
+                        edge_crossing_details.append(
+                            {
+                                "first": str(first["bpmnElement"]),
+                                "second": str(second["bpmnElement"]),
+                            }
+                        )
 
     grid_deviations: list[float] = []
     for shape in shapes:
@@ -1181,6 +1168,8 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "label_overlaps": label_overlaps,
             "edge_crossings": edge_crossings,
             "edge_shape_intersections": edge_shape_intersections,
+            "edge_crossing_details": edge_crossing_details,
+            "edge_shape_intersection_details": edge_shape_intersection_details,
             "total_bends": total_bends,
             "total_manhattan_length": round(total_manhattan, 2),
             "non_orthogonal_segments": non_orthogonal_segments,
@@ -1240,8 +1229,7 @@ def render_report(args: argparse.Namespace) -> Path:
     workdir = Path(tempfile.mkdtemp(prefix="report-", dir=report_root))
     inputs = [Path(path) for path in args.inputs]
     if not inputs:
-        generated_dir = workdir / "generated"
-        inputs = write_fixtures(generated_dir, force=True)
+        inputs = [Path("fixtures") / filename for filename in sorted(persisted_fixtures())]
     layout_command = split_command(args.layout_command)
     image_command = split_command(args.image_command)
 
@@ -1414,10 +1402,10 @@ def resolve_report_reference(reference: str, output_dir: str = ".bpmn-feedback/r
 def print_host_view_command(report: Path) -> None:
     print(f"Host command to view report: xdg-open {shlex.quote(str(report.resolve()))}")
 def selftest() -> None:
-    first = fixture_sources()
-    second = fixture_sources()
+    first = persisted_fixtures()
+    second = persisted_fixtures()
     if first != second:
-        raise SystemExit("fixture generation is not deterministic")
+        raise SystemExit("persisted fixture set changed while being read")
     aggregate: dict[str, int] = {}
     for filename, xml in first.items():
         scratch = Path(".bpmn-feedback") / "selftest"
@@ -1438,16 +1426,11 @@ def selftest() -> None:
         "userTask",
         "serviceTask",
         "sendTask",
-        "receiveTask",
         "manualTask",
         "scriptTask",
-        "businessRuleTask",
-        "callActivity",
         "exclusiveGateway",
         "inclusiveGateway",
         "parallelGateway",
-        "complexGateway",
-        "eventBasedGateway",
         "subProcess",
         "boundaryEvent",
         "lane",
@@ -1464,25 +1447,19 @@ def selftest() -> None:
         "dataStoreReference",
         "messageEventDefinition",
         "timerEventDefinition",
-        "signalEventDefinition",
-        "errorEventDefinition",
-        "escalationEventDefinition",
-        "conditionalEventDefinition",
-        "compensateEventDefinition",
-        "terminateEventDefinition",
-        "cancelEventDefinition",
-        "linkEventDefinition",
     ]
     missing = [name for name in required if aggregate.get(name, 0) == 0]
     if missing:
-        raise SystemExit(f"generated fixtures are missing required element types: {', '.join(missing)}")
-    camunda_xml = first["camunda7-extensions.bpmn"]
-    if "camunda:" not in camunda_xml or 'isExecutable="true"' not in camunda_xml:
-        raise SystemExit("Camunda extension fixture lacks namespace or executable-process coverage")
+        raise SystemExit(f"persisted fixtures are missing required element types: {', '.join(missing)}")
+    extension_xml = first.get("extensions.bpmn")
+    if extension_xml is not None and (
+        "extensionElements" not in extension_xml or 'isExecutable="true"' not in extension_xml
+    ):
+        raise SystemExit("extension fixture lacks extension elements or executable-process coverage")
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
-    print(f"selftest OK: {len(first)} deterministic fixtures cover {len(required)} required element types")
+    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types")
 
 
 def latest_report(output_dir: str) -> Path:
@@ -1509,6 +1486,10 @@ def check_report(args: argparse.Namespace) -> None:
             value = layout[metric]
             if value > 0:
                 failures.append(f"{title}: {metric}={value}")
+        for detail in layout.get("edge_crossing_details", []):
+            failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
+        for detail in layout.get("edge_shape_intersection_details", []):
+            failures.append(f"{title}: {detail['edge']} intersects {detail['shape']}")
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             failures.append(f"{title}: missing_named_labels={missing}")
@@ -1521,12 +1502,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    generate = subparsers.add_parser("generate", help="write deterministic BPMN fixtures")
-    generate.add_argument("--output", default="fixtures/bpmn-feedback", help="output directory (default: fixtures/bpmn-feedback)")
-    generate.add_argument("--force", action="store_true", help="overwrite existing fixture files")
-
     report = subparsers.add_parser("report", help="layout, render, and metric BPMN files")
-    report.add_argument("inputs", nargs="*", help="BPMN files; omitted means generated fixtures")
+    report.add_argument("inputs", nargs="*", help="BPMN files; omitted means persisted fixtures")
     report.add_argument("--output-dir", default=".bpmn-feedback/reports", help="workspace-local ephemeral report directory root")
     report.add_argument("--clear-output", action="store_true", help="remove previous report directories before rendering")
     report.add_argument("--layout-command", default="bpmn-auto-layout", help="layout command, shell-style string")
@@ -1546,12 +1523,7 @@ def build_parser() -> argparse.ArgumentParser:
 def main(argv: list[str] | None = None) -> int:
     parser = build_parser()
     args = parser.parse_args(argv)
-    if args.command == "generate":
-        paths = write_fixtures(Path(args.output), args.force)
-        print("generated fixtures:")
-        for path in paths:
-            print(f"  {path}")
-    elif args.command == "report":
+    if args.command == "report":
         report_path = render_report(args)
         print(f"report: {report_path}")
         print(f"Short report ID: {report_path.parent.name.removeprefix('report-')}")

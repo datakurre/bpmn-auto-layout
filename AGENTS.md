@@ -24,23 +24,21 @@ correct.
 ### 1. Develop the layout algorithm
 
 1. Reproduce the issue with the smallest BPMN input possible.
-2. Run the deterministic fixture self-test and generate the fixture set:
+2. Run the deterministic fixture self-test against the persisted fixture set:
 
    ```sh
    nix develop --command python3 tools/bpmn_feedback.py selftest
-   nix develop --command python3 tools/bpmn_feedback.py generate \
-     --output fixtures/bpmn-feedback --force
    ```
 
 3. Change the TypeScript implementation in
    `packages/bpmn-auto-layout/src/`. Keep placement and routing deterministic:
    the same BPMN input and options must produce the same BPMN DI.
-4. Build and inspect a report containing both generated fixtures and the
+4. Build and inspect a report containing the persisted fixtures and the
    motivating BPMN:
 
    ```sh
    nix develop --command python3 tools/bpmn_feedback.py report \
-     fixtures/bpmn-feedback/original/*.bpmn path/to/problem.bpmn
+     fixtures/*.bpmn path/to/problem.bpmn
    ```
 
 5. Compare the report images, `metrics.json`, and the serialized
@@ -78,7 +76,7 @@ The current tools are dependency-light and ephemeral by design:
 
 ```sh
 nix develop --command python3 tools/bpmn_feedback.py report \
-  fixtures/bpmn-feedback/original/*.bpmn
+  fixtures/*.bpmn
 ```
 
 Run `make feedback-ui` on the host to open the browser review service. The

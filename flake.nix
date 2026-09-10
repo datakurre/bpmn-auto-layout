@@ -41,7 +41,11 @@
           };
           feedback-ui = pkgs.writeShellApplication {
             name = "bpmn-feedback-ui";
-            runtimeInputs = [ python ];
+            runtimeInputs = [
+              python
+              layout-cli
+              bpmn-to-image.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-to-image
+            ];
             text = ''
               exec ${python}/bin/python3 ${./tools/bpmn_feedback_server.py} "$@"
             '';
@@ -58,12 +62,7 @@
               cp -r dist package.json node_modules $out/lib/node_modules/bpmn-auto-layout/
             '';
           };
-        in
-        {
-          bpmn-auto-layout = layout;
-          bpmn-feedback = feedback;
-          bpmn-feedback-ui = feedback-ui;
-          default = pkgs.writeShellApplication {
+          layout-cli = pkgs.writeShellApplication {
             name = "bpmn-auto-layout";
             runtimeInputs = [ pkgs.nodejs ];
             text = ''
@@ -84,6 +83,12 @@
             '';
             meta.mainProgram = "bpmn-auto-layout";
           };
+        in
+        {
+          bpmn-auto-layout = layout;
+          bpmn-feedback = feedback;
+          bpmn-feedback-ui = feedback-ui;
+          default = layout-cli;
         }
       );
 

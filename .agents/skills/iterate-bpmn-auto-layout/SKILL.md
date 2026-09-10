@@ -58,7 +58,7 @@ Three components interact:
   "updated_at": "ISO-8601 UTC",
   "aspect": "node spacing",
   "sample_seed": 48271,
-  "sample": ["fixtures/bpmn-feedback/original/flow.bpmn", "fixtures/bpmn-feedback/original/gateway.bpmn"],
+  "sample": ["fixtures/flow.bpmn", "fixtures/gateway.bpmn"],
   "candidates": [
     {"label": "A", "report": "...", "images": ["...flow.svg", "...gateway.svg"],
      "description": "...", "quality_gate_passed": true},
@@ -123,7 +123,7 @@ small sample would hide the suspected failure.
 The first report of a comparison clears reports from the previous iteration:
 
 ```sh
-bpmn-feedback report --clear-output fixtures/bpmn-feedback/original/*.bpmn
+bpmn-feedback report --clear-output fixtures/*.bpmn
 ```
 
 Render the other three candidates without `--clear-output` so all four remain
@@ -147,11 +147,8 @@ render from that worktree, and apply the selected worktree's change to the
 main checkout after review. Remove the four worktrees only after the accepted
 implementation and reports have been recorded.
 
-If fixtures are missing, generate them first:
-
-```sh
-make feedback-generate
-```
+Fixtures are persisted directly under `fixtures/`; add or edit those files
+before running the report.
 
 ## One iteration, four renderings
 

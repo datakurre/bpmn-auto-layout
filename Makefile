@@ -1,4 +1,4 @@
-.PHONY: shell feedback-ui feedback-selftest feedback-generate feedback-report feedback-check
+.PHONY: shell feedback-ui feedback-selftest feedback-report feedback-check
 
 shell:
 	nix develop
@@ -13,11 +13,8 @@ feedback-ui:
 feedback-selftest:
 	bpmn-feedback selftest
 
-feedback-generate:
-	bpmn-feedback generate --output fixtures/bpmn-feedback --force
-
-feedback-report: feedback-generate
-	bpmn-feedback report fixtures/bpmn-feedback/original/*.bpmn
+feedback-report:
+	bpmn-feedback report fixtures/*.bpmn
 
 feedback-check: feedback-report
 	bpmn-feedback check

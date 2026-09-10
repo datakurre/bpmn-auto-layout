@@ -133,6 +133,52 @@ export function leavesOutward(
   return ok(pts[0]!, pts[1]!, srcNode) && ok(pts[pts.length - 1]!, pts[pts.length - 2]!, tgtNode);
 }
 
+export function validateConnectionPoints(
+  points: Array<{ x: number; y: number }>,
+  srcNode: NodeLayout | undefined,
+  tgtNode: NodeLayout | undefined,
+): boolean {
+  if (!srcNode || !tgtNode || points.length < 2) return false;
+  if (!leavesOutward(points, srcNode, tgtNode)) return false;
+
+  const start = points[0]!;
+  const end = points[points.length - 1]!;
+  const sourceOnBoundary =
+    Math.abs(start.x - srcNode.x) < 0.5 ||
+    Math.abs(start.x - (srcNode.x + srcNode.width)) < 0.5 ||
+    Math.abs(start.y - srcNode.y) < 0.5 ||
+    Math.abs(start.y - (srcNode.y + srcNode.height)) < 0.5;
+  const targetOnBoundary =
+    Math.abs(end.x - tgtNode.x) < 0.5 ||
+    Math.abs(end.x - (tgtNode.x + tgtNode.width)) < 0.5 ||
+    Math.abs(end.y - tgtNode.y) < 0.5 ||
+    Math.abs(end.y - (tgtNode.y + tgtNode.height)) < 0.5;
+  if (!sourceOnBoundary || !targetOnBoundary) return false;
+  if (srcNode.track !== tgtNode.track) return true;
+
+  const sourceIsLeft = srcNode.centerX < tgtNode.x;
+  const sourceIsRight = srcNode.centerX > tgtNode.x + tgtNode.width;
+  const sourceIsAbove = srcNode.centerY < tgtNode.y;
+  const sourceIsBelow = srcNode.centerY > tgtNode.y + tgtNode.height;
+  const horizontalDominant =
+    Math.abs(tgtNode.centerX - srcNode.centerX) >= 1.5 * Math.abs(tgtNode.centerY - srcNode.centerY);
+  const verticalDominant =
+    Math.abs(tgtNode.centerY - srcNode.centerY) >= 1.5 * Math.abs(tgtNode.centerX - srcNode.centerX);
+  if (!horizontalDominant && !verticalDominant) return true;
+  const separated =
+    sourceIsLeft || sourceIsRight || sourceIsAbove || sourceIsBelow;
+  if (!separated) return true;
+  if (Math.abs(start.x - srcNode.x) < 0.5 && !sourceIsRight) return false;
+  if (Math.abs(start.x - (srcNode.x + srcNode.width)) < 0.5 && !sourceIsLeft) return false;
+  if (Math.abs(start.y - srcNode.y) < 0.5 && !sourceIsBelow) return false;
+  if (Math.abs(start.y - (srcNode.y + srcNode.height)) < 0.5 && !sourceIsAbove) return false;
+  if (Math.abs(end.x - tgtNode.x) < 0.5) return sourceIsLeft;
+  if (Math.abs(end.x - (tgtNode.x + tgtNode.width)) < 0.5) return sourceIsRight;
+  if (Math.abs(end.y - tgtNode.y) < 0.5) return sourceIsAbove;
+  if (Math.abs(end.y - (tgtNode.y + tgtNode.height)) < 0.5) return sourceIsBelow;
+  return false;
+}
+
 export function normalizeCardinalDeparture(
   pts: Array<{ x: number; y: number }>,
   node: NodeLayout | undefined,
@@ -407,7 +453,7 @@ export function repairSegmentCollisions(
 
   const srcNode = layout.nodes.get(flow?.sourceRef?.id);
   const tgtNode = layout.nodes.get(flow?.targetRef?.id);
-  if (bestHits === 0 && leavesOutward(best, srcNode, tgtNode)) return best;
+  if (bestHits === 0 && validateConnectionPoints(best, srcNode, tgtNode)) return best;
 
   const targetPoints = tgtNode
     ? [
@@ -418,20 +464,36 @@ export function repairSegmentCollisions(
         { x: tgtNode.x + tgtNode.width, y: tgtNode.centerY },
       ]
     : [best[best.length - 1]!];
+  const sourcePoints = srcNode
+      ? [
+          { x: srcNode.x, y: srcNode.centerY },
+          { x: srcNode.x + srcNode.width, y: srcNode.centerY },
+          { x: srcNode.centerX, y: srcNode.y },
+          { x: srcNode.centerX, y: srcNode.y + srcNode.height },
+        ]
+      : [best[0]!];
 
   const visibilityRoutes: Array<{ points: Array<{ x: number; y: number }>; hits: number }> = [];
-  for (const targetPoint of targetPoints) {
-    const routeInput = [...best.slice(0, -1), targetPoint];
-    const candidate = findRectilinearRoute(routeInput, obstacles, srcNode, tgtNode);
-    if (!candidate || hits(candidate) > 0 || !leavesOutward(candidate, srcNode, tgtNode)) continue;
-    visibilityRoutes.push({ points: candidate, hits: hits(candidate) });
+  for (const sourcePoint of sourcePoints) {
+      for (const targetPoint of targetPoints) {
+        const routeInput = [sourcePoint, targetPoint];
+        const candidate = findRectilinearRoute(routeInput, obstacles, srcNode, tgtNode);
+        if (
+          !candidate ||
+          hits(candidate) > 0 ||
+          !validateConnectionPoints(candidate, srcNode, tgtNode)
+        ) {
+          continue;
+        }
+        visibilityRoutes.push({ points: candidate, hits: hits(candidate) });
+      }
   }
   const visibilityRoute = choosePreferredRoute(
     visibilityRoutes.filter((r) => r.hits === 0).map((r) => r.points),
     routingPolicy,
   );
   if (visibilityRoute) return visibilityRoute;
-  if (bestHits === 0) return best;
+  if (bestHits === 0 && validateConnectionPoints(best, srcNode, tgtNode)) return best;
 
   const staysOnNode = (idx: number, moved: { x: number; y: number }): boolean => {
     const node = idx === 0 ? srcNode : idx === best.length - 1 ? tgtNode : undefined;

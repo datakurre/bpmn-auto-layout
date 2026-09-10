@@ -7,6 +7,7 @@
 
 export interface AutoLayoutOptions {
   colWidth?: number;
+  gridSize?: number;
   spineY?: number;
   track1Y?: number;
   track2Y?: number;
@@ -19,6 +20,7 @@ export interface AutoLayoutOptions {
 
 export interface ResolvedLayoutOptions {
   colWidth: number;
+  gridSize: number;
   spineY: number;
   track1Y: number;
   track2Y: number;
@@ -31,6 +33,7 @@ export interface ResolvedLayoutOptions {
 
 export const DEFAULT_OPTIONS: ResolvedLayoutOptions = {
   colWidth: 120,
+  gridSize: 10,
   spineY: 70,
   track1Y: 180,
   track2Y: 430,

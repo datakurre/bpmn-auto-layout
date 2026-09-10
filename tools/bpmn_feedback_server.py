@@ -37,7 +37,7 @@ ROOT = Path.cwd()
 PROTOCOL_ROOT = ROOT / ".bpmn-feedback" / "agent"
 STATE_PATH = PROTOCOL_ROOT / "state.json"
 REPORT_ROOT = ROOT / ".bpmn-feedback" / "reports"
-FIXTURE_ROOT = ROOT / "fixtures" / "bpmn-feedback"
+FIXTURE_ROOT = ROOT / "fixtures"
 REPORT_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
 
@@ -139,8 +139,8 @@ def load_metrics(report_id: str) -> dict[str, object] | None:
 
 
 def update_fixtures() -> list[dict[str, str]]:
-    """Lay out every current feedback fixture and render it for the UI."""
-    fixtures = sorted(FIXTURE_ROOT.rglob("*.bpmn"))
+    """Copy, lay out, and render every source fixture in ephemeral storage."""
+    fixtures = sorted(FIXTURE_ROOT.glob("*.bpmn"))
     if not fixtures:
         raise HTTPException(
             status_code=404,
@@ -151,16 +151,22 @@ def update_fixtures() -> list[dict[str, str]]:
     run_dir.mkdir(parents=True)
     results: list[dict[str, str]] = []
     for index, fixture in enumerate(fixtures, start=1):
+        fixture_dir = run_dir / f"{index:03d}-{fixture.stem}"
+        fixture_dir.mkdir()
+        original = fixture_dir / "original.bpmn"
+        transformed = fixture_dir / "transformed.bpmn"
+        original.write_bytes(fixture.read_bytes())
+        transformed.write_bytes(fixture.read_bytes())
         try:
             subprocess.run(
-                ["bpmn-auto-layout", str(fixture)],
+                ["bpmn-auto-layout", str(transformed)],
                 check=True,
                 capture_output=True,
                 text=True,
             )
-            image = run_dir / f"{index:03d}-{fixture.stem}.svg"
+            image = fixture_dir / "transformed.svg"
             subprocess.run(
-                ["bpmn-to-image", str(fixture), str(image)],
+                ["bpmn-to-image", str(transformed), str(image)],
                 check=True,
                 capture_output=True,
                 text=True,
@@ -177,7 +183,7 @@ def update_fixtures() -> list[dict[str, str]]:
                 detail=f"{error.args[0][0]} failed for {fixture.name}: {output}",
             ) from error
 
-        relative = fixture.relative_to(ROOT).as_posix()
+        relative = transformed.relative_to(ROOT).as_posix()
         image_url = report_url(image)
         if image_url is None:
             raise HTTPException(
@@ -739,7 +745,7 @@ thead th{background:var(--surface);font-weight:600}
 
 FIXTURES_HTML = r"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Updated BPMN fixtures</title>
+<title>Rendered BPMN fixtures</title>
 <style>
 :root{color-scheme:light dark;font:16px/1.5 system-ui,-apple-system,sans-serif;--border:#d0d7de;--muted:#656d76}
 body{max-width:1200px;margin:0 auto;padding:1.5rem}
@@ -750,8 +756,8 @@ h1{font-size:1.5rem}
 .fixture img{display:block;max-width:100%;max-height:80vh;background:#fff;border:1px solid var(--border);overflow:auto}
 </style></head><body>
 <p><a href="/">← Dashboard</a></p>
-<h1>Updated BPMN fixtures</h1>
-<p>Each fixture was updated with the current <code>bpmn-auto-layout</code> command and is shown in fixture order.</p>
+<h1>Rendered BPMN fixtures</h1>
+<p>Each source fixture was copied to ephemeral storage, laid out with the current <code>bpmn-auto-layout</code> command, and rendered in fixture order.</p>
 {{FIXTURES}}
 </body></html>"""
 

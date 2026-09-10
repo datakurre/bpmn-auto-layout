@@ -421,6 +421,10 @@ export function solveLabelPlacement(
 ): LabelBounds {
   const name = node.element.name || "";
   const isGateway = node.element.$type.endsWith("Gateway");
+  const boundaryHost = node.element.attachedToRef?.id
+    ? nodes.get(node.element.attachedToRef.id)
+    : undefined;
+  const isBoundary = node.element.$type === "bpmn:BoundaryEvent" && Boolean(boundaryHost);
 
   let hasTopFlow = false;
   let hasBottomFlow = false;
@@ -481,6 +485,21 @@ export function solveLabelPlacement(
       : Math.round(node.y - 14 - gatewayGap);
 
     if (!isGateway) {
+      if (isBoundary && boundaryHost) {
+        const outwardTop = node.centerY < boundaryHost.centerY;
+        const outwardY = outwardTop
+          ? Math.round(node.y - H - 6)
+          : Math.round(node.y + node.height + 6);
+        for (const dx of [0, -20, 20, -40, 40]) {
+          candidates.push({
+            x: Math.round(node.centerX - tightW / 2 + dx),
+            y: outwardY,
+            width: tightW,
+            height: H,
+            lines,
+          });
+        }
+      }
       candidates.push({
         x: Math.round(node.centerX - tightW / 2),
         y: primaryY,

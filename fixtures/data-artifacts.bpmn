@@ -1,0 +1,128 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_DataArtifacts" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:dataStore id="Artifact_OutputStore" name="Output store" />
+  <bpmn:process id="Process_DataArtifacts" name="Data and BPMN artifacts" isExecutable="false">
+    <bpmn:startEvent id="Artifact_Start" name="Start">
+      <bpmn:outgoing>Artifact_Flow_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Artifact_Task" name="Transform data">
+      <bpmn:incoming>Artifact_Flow_Start</bpmn:incoming>
+      <bpmn:outgoing>Artifact_Association_Out</bpmn:outgoing>
+      <bpmn:outgoing>Artifact_Flow_End</bpmn:outgoing>
+      <bpmn:ioSpecification id="Artifact_Task_ioSpecification">
+        <bpmn:dataInput id="Artifact_Task_Input" name="Input" />
+        <bpmn:dataOutput id="Artifact_Task_Output" name="Output" />
+        <bpmn:inputSet id="Artifact_Task_inputSet">
+          <bpmn:dataInputRefs>Artifact_Task_Input</bpmn:dataInputRefs>
+        </bpmn:inputSet>
+        <bpmn:outputSet id="Artifact_Task_outputSet">
+          <bpmn:dataOutputRefs>Artifact_Task_Output</bpmn:dataOutputRefs>
+        </bpmn:outputSet>
+      </bpmn:ioSpecification>
+      <bpmn:property id="Property_1qiuben" name="__targetRef_placeholder" />
+      <bpmn:dataInputAssociation>
+        <bpmn:targetRef>Artifact_Task_Input</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataInputAssociation id="DataInputAssociation_08eaezs">
+        <bpmn:sourceRef>DataObjectReference_0bbfw0t</bpmn:sourceRef>
+        <bpmn:targetRef>Property_1qiuben</bpmn:targetRef>
+      </bpmn:dataInputAssociation>
+      <bpmn:dataOutputAssociation>
+        <bpmn:sourceRef>Artifact_Task_Output</bpmn:sourceRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="Artifact_End" name="Done">
+      <bpmn:incoming>Flow_0o12y5w</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Artifact_Flow_Start" sourceRef="Artifact_Start" targetRef="Artifact_Task" />
+    <bpmn:sequenceFlow id="Artifact_Flow_End" sourceRef="Artifact_Task" targetRef="Activity_1pa5y6s" />
+    <bpmn:dataObjectReference id="DataObjectReference_0bbfw0t" name="Input document" dataObjectRef="DataObject_1c6ux12" />
+    <bpmn:dataObject id="DataObject_1c6ux12" />
+    <bpmn:dataStoreReference id="DataStoreReference_1kz7amc" name="Output store" />
+    <bpmn:serviceTask id="Activity_1pa5y6s" name="Persist data">
+      <bpmn:incoming>Artifact_Flow_End</bpmn:incoming>
+      <bpmn:outgoing>Flow_0o12y5w</bpmn:outgoing>
+      <bpmn:ioSpecification>
+        <bpmn:dataInput name="Input" />
+        <bpmn:dataOutput name="Output" />
+        <bpmn:inputSet />
+        <bpmn:outputSet />
+      </bpmn:ioSpecification>
+      <bpmn:dataOutputAssociation id="DataOutputAssociation_0qgkyb1">
+        <bpmn:targetRef>DataStoreReference_1kz7amc</bpmn:targetRef>
+      </bpmn:dataOutputAssociation>
+    </bpmn:serviceTask>
+    <bpmn:sequenceFlow id="Flow_0o12y5w" sourceRef="Activity_1pa5y6s" targetRef="Artifact_End" />
+    <bpmn:group id="Artifact_Group" />
+    <bpmn:textAnnotation id="TextAnnotation_0cph2or">
+      <bpmn:text>Impoetant note</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Association_0q905cs" associationDirection="None" sourceRef="Artifact_Flow_End" targetRef="TextAnnotation_0cph2or" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_DataArtifacts">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_DataArtifacts" bpmnElement="Process_DataArtifacts">
+      <bpmndi:BPMNShape id="Artifact_Start_di" bpmnElement="Artifact_Start">
+        <dc:Bounds x="60" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="66" y="222" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Artifact_End_di" bpmnElement="Artifact_End">
+        <dc:Bounds x="680" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="685" y="222" width="27" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataObjectReference_0bbfw0t_di" bpmnElement="DataObjectReference_0bbfw0t">
+        <dc:Bounds x="252" y="325" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="232" y="382" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Artifact_Task_di" bpmnElement="Artifact_Task">
+        <dc:Bounds x="222" y="158" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="BPMNShape_0f0cf81" bpmnElement="Activity_1pa5y6s">
+        <dc:Bounds x="453" y="158" width="100" height="80" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="DataStoreReference_1kz7amc_di" bpmnElement="DataStoreReference_1kz7amc">
+        <dc:Bounds x="478" y="325" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="473" y="382" width="61" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Association_0q905cs_di" bpmnElement="Association_0q905cs">
+        <di:waypoint x="380" y="198" />
+        <di:waypoint x="380" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="DataOutputAssociation_0qgkyb1_di" bpmnElement="DataOutputAssociation_0qgkyb1">
+        <di:waypoint x="502" y="238" />
+        <di:waypoint x="501" y="325" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Artifact_Group_di" bpmnElement="Artifact_Group">
+        <dc:Bounds x="40" y="275" width="710" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="DataInputAssociation_08eaezs_di" bpmnElement="DataInputAssociation_08eaezs">
+        <di:waypoint x="270" y="325" />
+        <di:waypoint x="271" y="238" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Artifact_Flow_Start_di" bpmnElement="Artifact_Flow_Start">
+        <di:waypoint x="96" y="198" />
+        <di:waypoint x="222" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Artifact_Flow_End_di" bpmnElement="Artifact_Flow_End">
+        <di:waypoint x="322" y="198" />
+        <di:waypoint x="453" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_0o12y5w_di" bpmnElement="Flow_0o12y5w">
+        <di:waypoint x="553" y="198" />
+        <di:waypoint x="680" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="TextAnnotation_0cph2or_di" bpmnElement="TextAnnotation_0cph2or">
+        <dc:Bounds x="330" y="70" width="99.99510188087774" height="29.988734326018808" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

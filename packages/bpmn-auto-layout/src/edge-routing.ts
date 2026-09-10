@@ -135,6 +135,65 @@ export function computeWaypoints(
     ];
   }
 
+  // Boundary events must leave their host on the attached side instead of
+  // routing through the host's body as ordinary flow nodes would.
+  if (src.element?.$type === "bpmn:BoundaryEvent") {
+    const host = layout.nodes.get(src.element.attachedToRef?.id);
+    if (host) {
+      const bottom = src.centerY >= host.centerY;
+      const side = bottom ? "below" : "above";
+      const lane = channelY(layout, flow, side, src.centerX, tgt.centerX);
+      const targetBelow = tgt.centerY >= host.centerY;
+      return [
+        { x: src.centerX, y: bottom ? src.y + src.height : src.y },
+        { x: src.centerX, y: lane },
+        { x: tgt.centerX, y: lane },
+        { x: tgt.centerX, y: targetBelow ? tgt.y + tgt.height : tgt.y },
+      ];
+    }
+  }
+
+  if (Math.abs(src.centerY - tgt.centerY) < 0.5 && tgt.x > src.x + src.width) {
+    const blockers = Array.from(layout.nodes.values()).filter(
+      (node) =>
+        node.id !== src.id &&
+        node.id !== tgt.id &&
+        !node.isSubProcessChild &&
+        node.y < src.centerY &&
+        node.y + node.height > src.centerY,
+    );
+    const direct = [
+      { x: src.x + src.width, y: src.centerY },
+      { x: tgt.x, y: tgt.centerY },
+    ];
+    if (segmentHitCount(direct[0]!, direct[1]!, blockers) === 0) return direct;
+  }
+
+  // Keep a downward exception route outside expanded subprocess children.
+  if (
+    src.track < tgt.track &&
+    tgt.element?.$type === "bpmn:EndEvent" &&
+    !src.element?.$type.endsWith("Gateway")
+  ) {
+    const blockers = Array.from(layout.nodes.values()).filter(
+      (node) =>
+        node.id !== src.id &&
+        node.id !== tgt.id &&
+        node.y < tgt.centerY &&
+        node.y + node.height > src.centerY,
+    );
+    const channelX =
+      Math.max(src.x + src.width, ...blockers.map((node) => node.x + node.width)) +
+      CHANNEL_CLEARANCE;
+    const targetX = channelX > tgt.x + tgt.width ? tgt.x + tgt.width : tgt.x;
+    return [
+      { x: src.x + src.width, y: src.centerY },
+      { x: channelX, y: src.centerY },
+      { x: channelX, y: tgt.centerY },
+      { x: targetX, y: tgt.centerY },
+    ];
+  }
+
   // Case 1.5: Upside route between gateways to prevent lane collisions
   if (shouldUseUpsideRoute(src, tgt, layout, flow?.id)) {
     const upper = channelY(layout, flow, "above", src.centerX, tgt.centerX);
@@ -171,10 +230,11 @@ export function computeWaypoints(
         n.y + n.height > src.centerY,
     );
 
-    const srcExitY =
-      src.element.$type === "bpmn:SubProcess" ? opts.track1Y : src.centerY;
-    const tgtEntryY =
-      tgt.element.$type === "bpmn:SubProcess" ? opts.track1Y : tgt.centerY;
+    // Expanded subprocesses connect through their outer boundary center just
+    // like ordinary flow nodes. Their children are routed separately inside
+    // the container; the title/header area must not alter the external path.
+    const srcExitY = src.centerY;
+    const tgtEntryY = tgt.centerY;
 
     if (!hasObstacle) {
       return [
@@ -208,10 +268,10 @@ export function computeWaypoints(
       tgt.centerX,
     );
     return [
-      { x: src.centerX, y: channelSide === "above" ? src.y : src.y + src.height },
-      { x: src.centerX, y: lane },
-      { x: tgt.centerX, y: lane },
-      { x: tgt.centerX, y: channelSide === "above" ? tgt.y : tgt.y + tgt.height },
+      { x: src.x + src.width, y: src.centerY },
+      { x: src.x + src.width, y: lane },
+      { x: tgt.x, y: lane },
+      { x: tgt.x, y: tgt.centerY },
     ];
   }
 

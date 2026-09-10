@@ -11,7 +11,7 @@ import { resolveRoutingPolicy } from "./layout-policy";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
 import { planChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
-import { repairSegmentCollisions } from "./collision-repair";
+import { repairSegmentCollisions, validateConnectionPoints } from "./collision-repair";
 import {
   fanOutAttachPoints,
   ensureOrthogonalWaypoints,
@@ -20,6 +20,32 @@ import {
   type LabelBounds,
 } from "./label-placement";
 
+function snapRouteWaypoints(
+  points: Array<{ x: number; y: number }>,
+  gridSize: number,
+): Array<{ x: number; y: number }> {
+  const snapped = points.map((point, index) => {
+    // Keep attachment points on the shape boundary.  diagram-js snaps the
+    // bend location, while the connection endpoint is determined by shape
+    // geometry and may therefore be between grid lines.
+    if (index === 0 || index === points.length - 1) return point;
+    return {
+      x: Math.round(point.x / gridSize) * gridSize,
+      y: Math.round(point.y / gridSize) * gridSize,
+    };
+  });
+  if (
+    snapped.every(
+      (point, index) =>
+        index === 0 ||
+        point.x === snapped[index - 1]!.x ||
+        point.y === snapped[index - 1]!.y,
+    )
+  ) {
+    return snapped;
+  }
+  return points;
+}
 
 /**
  * Returns the set of process IDs that are referenced by any participant in
@@ -93,8 +119,8 @@ export function createCollaborationDi(
     const participantH = maxY - minY + PAD_TOP + PAD_BOTTOM;
 
     // Translation from process-local to collaboration-plane coords
-    const dx = participantX + PAD_LEFT - minX;
-    const dy = participantY + PAD_TOP - minY;
+    const dx = Math.round((participantX + PAD_LEFT - minX) / opts.gridSize) * opts.gridSize;
+    const dy = Math.round((participantY + PAD_TOP - minY) / opts.gridSize) * opts.gridSize;
     participantOffsets.set(process.id, { dx, dy });
 
     const participantBounds = {
@@ -193,12 +219,15 @@ export function createCollaborationDi(
     const tgtCx = target.x + target.width / 2;
     const tgtCy = target.y + target.height / 2;
     const midY = (srcCy + tgtCy) / 2;
-    const points = [
-      { x: srcCx, y: srcCy },
-      { x: srcCx, y: midY },
-      { x: tgtCx, y: midY },
-      { x: tgtCx, y: tgtCy },
-    ];
+    const points = snapRouteWaypoints(
+      [
+        { x: srcCx, y: srcCy },
+        { x: srcCx, y: midY },
+        { x: tgtCx, y: midY },
+        { x: tgtCx, y: tgtCy },
+      ],
+      opts.gridSize,
+    );
     const edgeAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
@@ -298,6 +327,17 @@ function buildProcessShapesAndEdges(
   }
 
   fanOutAttachPoints(edgeWaypoints, shiftedLayout);
+  for (const flow of shiftedLayout.allFlows) {
+    const points = edgeWaypoints.get(flow.id);
+    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
+    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
+    if (points && src && tgt && !validateConnectionPoints(points, src, tgt)) {
+      edgeWaypoints.set(
+        flow.id,
+        repairSegmentCollisions(points, shiftedLayout, flow, edgeWaypoints, routingPolicy),
+      );
+    }
+  }
 
   // Post-repair: re-route lower-track merge flows and re-apply collision repair
   for (const flow of shiftedLayout.allFlows) {
@@ -348,17 +388,136 @@ function buildProcessShapesAndEdges(
       });
     if (hasUpperBranch && src && tgt) {
       const upper = channelY(shiftedLayout, flow, "above", src.centerX, tgt.centerX);
-      edgeWaypoints.set(flow.id, [
+      const restored = [
         { x: src.centerX, y: src.y },
         { x: src.centerX, y: upper },
         { x: tgt.centerX, y: upper },
         { x: tgt.centerX, y: tgt.y },
-      ]);
+      ];
+      if (validateConnectionPoints(restored, src, tgt)) {
+        edgeWaypoints.set(flow.id, restored);
+      }
     }
   }
 
   for (const [flowId, points] of edgeWaypoints) {
-    edgeWaypoints.set(flowId, ensureOrthogonalWaypoints(points));
+    const flow = shiftedLayout.allFlows.find((candidate) => candidate.id === flowId);
+    const source = flow ? shiftedLayout.nodes.get(flow.sourceRef?.id) : undefined;
+    const target = flow ? shiftedLayout.nodes.get(flow.targetRef?.id) : undefined;
+    const orthogonal = ensureOrthogonalWaypoints(points);
+    if (!validateConnectionPoints(orthogonal, source, target)) {
+      const fallback =
+        source && target && source.centerX < target.x
+          ? [
+              { x: source.x + source.width, y: source.centerY },
+              { x: target.x - 30, y: source.centerY },
+              { x: target.x - 30, y: target.centerY },
+              { x: target.x, y: target.centerY },
+            ]
+          : source && target && source.centerX > target.x + target.width
+            ? [
+                { x: source.x, y: source.centerY },
+                { x: target.x + target.width + 30, y: source.centerY },
+                { x: target.x + target.width + 30, y: target.centerY },
+                { x: target.x + target.width, y: target.centerY },
+              ]
+            : source && target && source.centerY < target.y
+              ? [
+                  { x: source.centerX, y: source.y + source.height },
+                  { x: source.centerX, y: target.y - 30 },
+                  { x: target.centerX, y: target.y - 30 },
+                  { x: target.centerX, y: target.y },
+                ]
+              : source && target
+                ? [
+                    { x: source.centerX, y: source.y },
+                    { x: source.centerX, y: target.y + target.height + 30 },
+                    { x: target.centerX, y: target.y + target.height + 30 },
+                    { x: target.centerX, y: target.y + target.height },
+                  ]
+                : undefined;
+      if (fallback && validateConnectionPoints(fallback, source, target)) {
+        const repairedFallback = repairSegmentCollisions(
+          fallback,
+          shiftedLayout,
+          flow,
+          edgeWaypoints,
+          routingPolicy,
+        );
+        if (validateConnectionPoints(repairedFallback, source, target)) {
+          edgeWaypoints.set(flowId, repairedFallback);
+          continue;
+        }
+        edgeWaypoints.set(flowId, fallback);
+        continue;
+      }
+      throw new Error(
+        `invalid connection points for sequence flow ${flowId}`,
+      );
+    }
+    edgeWaypoints.set(
+      flowId,
+      snapRouteWaypoints(orthogonal, opts.gridSize),
+    );
+  }
+
+  // The final collision-repair pass can replace a valid gateway channel with
+  // a side attachment that crosses the intermediate node band. Reassert the
+  // deterministic channel route after all generic repairs are complete.
+  for (const flow of shiftedLayout.allFlows) {
+    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
+    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
+    if (
+      src &&
+      tgt &&
+      !src.isSubProcessChild &&
+      tgt.element?.$type === "bpmn:EndEvent" &&
+      src.element?.$type !== "bpmn:BoundaryEvent" &&
+      !src.element?.$type.endsWith("Gateway")
+    ) {
+      const blockers = Array.from(shiftedLayout.nodes.values()).filter(
+        (node) =>
+          node.id !== src.id &&
+          node.id !== tgt.id &&
+          node.y < tgt.centerY &&
+          node.y + node.height > src.centerY,
+      );
+      const targetIsLeft = tgt.centerX < src.centerX;
+      const channelX = targetIsLeft
+        ? Math.min(tgt.x, ...blockers.map((node) => node.x)) - 28
+        : Math.max(src.x + src.width, ...blockers.map((node) => node.x + node.width)) + 8;
+      const targetX = targetIsLeft ? tgt.x + tgt.width : tgt.x;
+      const channelY = (src.centerY + tgt.centerY) / 2;
+      edgeWaypoints.set(flow.id, [
+        { x: src.x + src.width, y: src.centerY },
+        { x: src.x + src.width, y: channelY },
+        { x: channelX, y: channelY },
+        { x: channelX, y: tgt.centerY },
+        { x: targetX, y: tgt.centerY },
+      ]);
+      continue;
+    }
+    if (
+      !src ||
+      !tgt ||
+      src.track !== tgt.track ||
+      !src.element?.$type.endsWith("Gateway") ||
+      tgt.x <= src.x + src.width
+    )
+      continue;
+    const branches = shiftedLayout.allFlows
+      .filter((candidate) => candidate.id !== flow.id && candidate.sourceRef?.id === src.id)
+      .map((candidate) => shiftedLayout.nodes.get(candidate.targetRef?.id))
+      .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
+    if (branches.length === 0) continue;
+    const side = "below" as const;
+    const channel = channelY(shiftedLayout, flow, side, src.centerX, tgt.centerX);
+    edgeWaypoints.set(flow.id, [
+      { x: src.x + src.width, y: src.centerY },
+      { x: src.x + src.width, y: channel },
+      { x: tgt.x, y: channel },
+      { x: tgt.x, y: tgt.centerY },
+    ]);
   }
 
   // 1.5 Pre-compute edge labels (before node labels, to reserve space)

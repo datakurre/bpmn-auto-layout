@@ -14,8 +14,15 @@ import {
   getElementDimensions,
 } from "./element-dimensions";
 
-/** Snap node center-X values to the column grid when the drift is < 2 px. */
-export function snapNodesToGrid(nodes: Map<string, NodeLayout>, colWidth: number): void {
+/**
+ * Snap node centers to the semantic column grid when close enough, then apply
+ * diagram-js-compatible 10 px quantization to both axes.
+ */
+export function snapNodesToGrid(
+  nodes: Map<string, NodeLayout>,
+  colWidth: number,
+  gridSize = 10,
+): void {
   for (const node of nodes.values()) {
     const snappedCenterX = 75 + Math.round((node.centerX - 75) / colWidth) * colWidth;
     const dx = snappedCenterX - node.centerX;
@@ -24,6 +31,14 @@ export function snapNodesToGrid(nodes: Map<string, NodeLayout>, colWidth: number
     if (Math.abs(dx) >= 2) continue;
     node.x += dx;
     node.centerX += dx;
+  }
+  for (const node of nodes.values()) {
+    const centerX = Math.round(node.centerX / gridSize) * gridSize;
+    const centerY = Math.round(node.centerY / gridSize) * gridSize;
+    node.centerX = centerX;
+    node.centerY = centerY;
+    node.x = centerX - node.width / 2;
+    node.y = centerY - node.height / 2;
   }
 }
 
@@ -251,6 +266,7 @@ function buildTrackColMapsWithDim(
   backEdges: Set<string>,
   colWidth: number,
   dimensionOf: (node: any) => { width: number; height: number } = getElementDimensions,
+  preferredTracks: Map<string, number> = new Map(),
 ): { nodeTrack: Map<string, number>; nodeCol: Map<string, number> } {
   const nodeTrack = new Map<string, number>();
   const nodeCol = new Map<string, number>();
@@ -275,7 +291,7 @@ function buildTrackColMapsWithDim(
   let col = 0;
   for (let index = 0; index < spineNodeIds.length; index += 1) {
     const id = spineNodeIds[index]!;
-    nodeTrack.set(id, 0);
+    nodeTrack.set(id, preferredTracks.get(id) ?? 0);
     nodeCol.set(id, col);
     const node = nodesById.get(id);
     const dim = dimensionOf(node);
@@ -290,6 +306,21 @@ function buildTrackColMapsWithDim(
 
   // BFS from spine to assign off-spine branches
   const queue = [...spineNodeIds];
+  for (const boundary of topNodes.filter((node) => node.$type === "bpmn:BoundaryEvent")) {
+    const host = boundary.attachedToRef?.id ? nodesById.get(boundary.attachedToRef.id) : undefined;
+    const hostTrack = host ? nodeTrack.get(host.id) : undefined;
+    const hostCol = host ? nodeCol.get(host.id) : undefined;
+    if (hostTrack === undefined || hostCol === undefined) continue;
+    nodeTrack.set(boundary.id, hostTrack);
+    nodeCol.set(boundary.id, hostCol);
+    for (const flow of outgoingFlows.get(boundary.id) || []) {
+      const targetId = flow.targetRef?.id;
+      if (!targetId || nodeTrack.has(targetId)) continue;
+      nodeTrack.set(targetId, hostTrack - 1);
+      nodeCol.set(targetId, hostCol + 1);
+      queue.push(targetId);
+    }
+  }
   while (queue.length > 0) {
     const parentId = queue.shift()!;
     const parentCol = nodeCol.get(parentId)!;
@@ -307,7 +338,7 @@ function buildTrackColMapsWithDim(
         DEFAULT_FLOW_GAP / colWidth;
 
       if (!nodeTrack.has(targetId)) {
-        let targetTrack = parentTrack;
+        let targetTrack = preferredTracks.get(targetId) ?? parentTrack;
         const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
         const isTerminalExceptionBranch =
           isExceptionBranch && nodesById.get(targetId)?.$type === "bpmn:EndEvent";
@@ -498,8 +529,10 @@ function layoutSubProcessChildrenRecursive(
 
   // Offset to translate from local layout origin to the correct position
   // inside the subprocess container (parent top-left + padding).
-  const offsetX = parentX + SUBPROCESS_PAD_H - minX;
-  const offsetY = parentY + SUBPROCESS_PAD_V - minY;
+  const offsetX =
+    Math.round((parentX + SUBPROCESS_PAD_H - minX) / opts.gridSize) * opts.gridSize;
+  const offsetY =
+    Math.round((parentY + SUBPROCESS_PAD_V - minY) / opts.gridSize) * opts.gridSize;
 
   // Install children into the parent layoutNodes map at absolute positions.
   for (const childNode of subResult.nodes.values()) {
@@ -527,6 +560,7 @@ function repairDirectFlowGaps(
     const targetId = flow.targetRef?.id;
     if (targetId) incomingCount.set(targetId, (incomingCount.get(targetId) ?? 0) + 1);
   }
+
   for (const flow of topFlows) {
     const source = layoutNodes.get(flow.sourceRef?.id);
     const target = layoutNodes.get(flow.targetRef?.id);
@@ -567,7 +601,85 @@ function repairDirectFlowGaps(
           node.centerX += dx;
         }
       }
+
     }
+  }
+}
+
+function attachBoundaryEvents(
+  layoutNodes: Map<string, NodeLayout>,
+  topNodes: any[],
+  topFlows: any[],
+): void {
+  const boundaryEvents = topNodes.filter((node) => node.$type === "bpmn:BoundaryEvent");
+  const byHost = new Map<string, any[]>();
+  for (const boundary of boundaryEvents) {
+    const hostId = boundary.attachedToRef?.id;
+    if (!hostId) continue;
+    (byHost.get(hostId) ?? byHost.set(hostId, []).get(hostId)!).push(boundary);
+  }
+
+  for (const boundaries of byHost.values()) {
+    boundaries.sort((left, right) => left.id.localeCompare(right.id));
+    boundaries.forEach((boundary, index) => {
+      const host = layoutNodes.get(boundary.attachedToRef?.id);
+      const node = layoutNodes.get(boundary.id);
+      if (!host || !node) return;
+
+      const outgoing = topFlows.find((flow) => flow.sourceRef?.id === boundary.id);
+      const target = outgoing ? layoutNodes.get(outgoing.targetRef?.id) : undefined;
+      const targetBelow = target ? target.centerY >= host.centerY : false;
+      const bottom = targetBelow !== (index % 2 === 1);
+      const centerX = host.centerX;
+      const centerY = bottom ? host.y + host.height : host.y;
+
+      node.track = host.track;
+      node.col = host.col;
+      node.centerX = centerX;
+      node.centerY = centerY;
+      node.x = centerX - node.width / 2;
+      node.y = centerY - node.height / 2;
+    });
+  }
+}
+
+function placeBoundaryBranchesAbove(
+  layoutNodes: Map<string, NodeLayout>,
+  topNodes: any[],
+  topFlows: any[],
+  trackGap: number,
+): void {
+  const outgoingFlows = new Map<string, any[]>();
+  const incomingFlows = new Map<string, any[]>();
+  for (const flow of topFlows) {
+    const sourceId = flow.sourceRef?.id;
+    const targetId = flow.targetRef?.id;
+    if (sourceId && targetId) {
+      (outgoingFlows.get(sourceId) ?? outgoingFlows.set(sourceId, []).get(sourceId)!).push(flow);
+      (incomingFlows.get(targetId) ?? incomingFlows.set(targetId, []).get(targetId)!).push(flow);
+    }
+  }
+
+  for (const boundary of topNodes.filter((node) => node.$type === "bpmn:BoundaryEvent")) {
+    const host = layoutNodes.get(boundary.attachedToRef?.id);
+    const outgoing = outgoingFlows.get(boundary.id)?.[0];
+    const target = outgoing ? layoutNodes.get(outgoing.targetRef?.id) : undefined;
+    if (!host || !target || !outgoing) continue;
+    const targetIncoming = incomingFlows.get(target.id) || [];
+    if (targetIncoming.some((flow) => flow.sourceRef?.id !== boundary.id)) continue;
+    const primaryFlow = topFlows.find((flow) => flow.sourceRef?.id === host.id);
+    const primaryTarget = primaryFlow ? layoutNodes.get(primaryFlow.targetRef?.id) : undefined;
+
+    const deltaY = host.centerY - trackGap - target.centerY;
+    const deltaX =
+      primaryTarget && target.centerX < primaryTarget.centerX
+        ? primaryTarget.centerX - target.centerX
+        : 0;
+    target.x += deltaX;
+    target.centerX += deltaX;
+    target.y += deltaY;
+    target.centerY += deltaY;
+    target.track = host.track - 1;
   }
 }
 
@@ -652,6 +764,15 @@ export function computeProcessLayout(
     backEdges,
     opts.colWidth,
     effectiveDim,
+    new Map(
+      (process.laneSets || []).flatMap((laneSet: any, laneSetIndex: number) =>
+        (laneSet.lanes || []).flatMap((lane: any, laneIndex: number) =>
+          (lane.flowNodeRef || [])
+            .filter((ref: any) => nodesById.has(ref.id))
+            .map((ref: any) => [ref.id, laneSetIndex + laneIndex] as [string, number]),
+        ),
+      ),
+    ),
   );
 
   // 4. Compute pixel coordinates
@@ -704,8 +825,10 @@ export function computeProcessLayout(
   }
 
   packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
-  snapNodesToGrid(layoutNodes, opts.colWidth);
   repairDirectFlowGaps(layoutNodes, topNodes, topFlows);
+  snapNodesToGrid(layoutNodes, opts.colWidth, opts.gridSize);
+  placeBoundaryBranchesAbove(layoutNodes, topNodes, topFlows, opts.trackGap);
+  attachBoundaryEvents(layoutNodes, topNodes, topFlows);
 
   // 5. Now that the outer layout is finalized, install subprocess children
   //    at their absolute positions inside the container.
