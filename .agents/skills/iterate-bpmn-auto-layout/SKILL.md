@@ -191,10 +191,14 @@ Only the active four candidates need to be retained.
 report also accept `latest`, a short ID, or a unique ID prefix. The quality
 gate checks crossings, edge/shape intersections, non-orthogonal segments,
 shape overlaps, label overlaps, label/shape and label/edge intersections,
-and missing named labels. Container containment (a lane, participant, or
-subprocess around its children) and a boundary event overlapping its host
-are not counted as shape overlaps in the first place, since both are
-legitimate BPMN notation.
+missing named labels, excess route turns beyond each edge's geometric
+minimum, and node/label containment (every flow node and label must stay
+inside its owning lane, participant, and subprocess). `container_padding`
+measures border-to-nearest-child distance per container type but is
+informational only, not gated. A boundary event overlapping its host is
+not counted as a shape overlap, since that is legitimate BPMN notation;
+container containment is checked directionally (parent contains child)
+rather than treated as an overlap at all.
 
 Direct commands:
 

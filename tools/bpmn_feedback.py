@@ -1008,6 +1008,40 @@ def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
     return parents
 
 
+def lane_owners(root: ET.Element) -> dict[str, str]:
+    """Map every flow node id listed in a lane's flowNodeRef to that lane's
+    id (the innermost lane wins when lanes are nested)."""
+    owners: dict[str, str] = {}
+    for lane in root.iter(q("bpmn", "lane")):
+        lane_id = lane.get("id", "")
+        for ref in lane.findall(q("bpmn", "flowNodeRef")):
+            node_id = (ref.text or "").strip()
+            if node_id:
+                owners[node_id] = lane_id
+    return owners
+
+
+def participant_owners(root: ET.Element) -> dict[str, str]:
+    """Map every element id declared inside a participant's referenced
+    process to that participant's id."""
+    owners: dict[str, str] = {}
+    processes_by_id = {process.get("id"): process for process in root.findall(q("bpmn", "process"))}
+    for participant in root.iter(q("bpmn", "participant")):
+        participant_id = participant.get("id", "")
+        process = processes_by_id.get(participant.get("processRef", ""))
+        if process is None:
+            continue
+        for element in process.iter():
+            if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+                continue
+            if local_name(element.tag) in {"process", "laneSet", "lane"}:
+                continue
+            element_id = element.get("id")
+            if element_id:
+                owners[element_id] = participant_id
+    return owners
+
+
 def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple[float, float], b2: tuple[float, float]) -> bool:
     a_horizontal = abs(a1[1] - a2[1]) < 0.5
     b_horizontal = abs(b1[1] - b2[1]) < 0.5
@@ -1022,6 +1056,8 @@ def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple
 def collect_metrics(path: Path) -> dict[str, object]:
     root = parse_xml(path)
     element_parents = subprocess_parents(root)
+    element_lane = lane_owners(root)
+    element_participant = participant_owners(root)
     element_types = {element.get("id"): local_name(element.tag) for element in root.iter() if element.get("id") and element.tag.startswith("{" + NS["bpmn"] + "}")}
     element_counts: dict[str, int] = {}
     named_external_targets: set[str] = set()
@@ -1136,6 +1172,80 @@ def collect_metrics(path: Path) -> dict[str, object]:
             if area > 0:
                 shape_overlaps += 1
                 shape_overlap_area += area
+
+    shapes_by_plane_id = {(shape["plane"], shape["bpmnElement"]): shape for shape in shapes}
+
+    def owning_containers(node_id: str) -> list[tuple[str, str]]:
+        # A subprocess child is laid out in its container's own internal
+        # coordinate space, not the outer lane/participant's: check it only
+        # against its immediate subprocess, even if a lane's flowNodeRef
+        # also (redundantly, per BPMN's permissive schema) lists it.
+        subprocess_id = element_parents.get(node_id)
+        if subprocess_id:
+            return [("subProcess", subprocess_id)]
+        result: list[tuple[str, str]] = []
+        lane_id = element_lane.get(node_id)
+        if lane_id:
+            result.append(("lane", lane_id))
+        participant_id = element_participant.get(node_id)
+        if participant_id:
+            result.append(("participant", participant_id))
+        return result
+
+    def border_distance(outer: dict[str, float], inner: dict[str, float]) -> float:
+        return min(
+            inner["x"] - outer["x"],
+            (outer["x"] + outer["width"]) - (inner["x"] + inner["width"]),
+            inner["y"] - outer["y"],
+            (outer["y"] + outer["height"]) - (inner["y"] + inner["height"]),
+        )
+
+    node_containment_violations = 0
+    node_containment_violation_details: list[dict[str, str]] = []
+    padding_by_type: dict[str, list[float]] = {}
+    for shape in shapes:
+        if shape["type"] in CONTAINER_TYPES:
+            continue
+        node_id = str(shape["bpmnElement"])
+        node_bounds = shape["bounds"]  # type: ignore[index]
+        for kind, owner_id in owning_containers(node_id):
+            owner_shape = shapes_by_plane_id.get((shape["plane"], owner_id))
+            if not owner_shape:
+                continue
+            owner_bounds = owner_shape["bounds"]  # type: ignore[index]
+            if not contains(owner_bounds, node_bounds):  # type: ignore[arg-type]
+                node_containment_violations += 1
+                node_containment_violation_details.append(
+                    {"node": node_id, "container": owner_id, "container_type": kind}
+                )
+            else:
+                padding_by_type.setdefault(kind, []).append(border_distance(owner_bounds, node_bounds))  # type: ignore[arg-type]
+
+    label_containment_violations = 0
+    label_containment_violation_details: list[dict[str, str]] = []
+    for label in labels:
+        label_target = str(label.get("_target", ""))
+        if not label_target:
+            continue
+        for kind, owner_id in owning_containers(label_target):
+            owner_shape = shapes_by_plane_id.get((label.get("_plane"), owner_id))
+            if not owner_shape:
+                continue
+            if not contains(owner_shape["bounds"], label):  # type: ignore[arg-type]
+                label_containment_violations += 1
+                label_containment_violation_details.append(
+                    {"label": label_target, "container": owner_id, "container_type": kind}
+                )
+
+    container_padding = {
+        kind: {
+            "count": len(values),
+            "min": round(min(values), 2) if values else None,
+            "max": round(max(values), 2) if values else None,
+            "avg": round(sum(values) / len(values), 2) if values else None,
+        }
+        for kind, values in padding_by_type.items()
+    }
 
     label_overlaps = 0
     for i, first in enumerate(labels):
@@ -1346,6 +1456,11 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "canvas": canvas,
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
+            "node_containment_violations": node_containment_violations,
+            "node_containment_violation_details": node_containment_violation_details,
+            "label_containment_violations": label_containment_violations,
+            "label_containment_violation_details": label_containment_violation_details,
+            "container_padding": container_padding,
             "label_overlaps": label_overlaps,
             "label_shape_intersections": label_shape_intersections,
             "label_edge_intersections": label_edge_intersections,
@@ -1490,6 +1605,8 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("label overlaps", ("layout", "label_overlaps")),
         ("edge crossings", ("layout", "edge_crossings")),
         ("edge/shape intersections", ("layout", "edge_shape_intersections")),
+        ("node containment violations", ("layout", "node_containment_violations")),
+        ("label containment violations", ("layout", "label_containment_violations")),
         ("total bends", ("layout", "total_bends")),
         ("excess turns", ("layout", "excess_turns")),
         ("detour ratio average", ("layout", "detour_ratio", "avg")),
@@ -1711,12 +1828,22 @@ def check_report(args: argparse.Namespace) -> None:
             "label_shape_intersections",
             "label_edge_intersections",
             "excess_turns",
+            "node_containment_violations",
+            "label_containment_violations",
         ):
             value = layout[metric]
             if value > 0:
                 failures.append(f"{title}: {metric}={value}")
         for detail in layout.get("excess_turn_details", []):
             failures.append(f"{title}: {detail['edge']} has {detail['excess_turns']} excess turn(s)")
+        for detail in layout.get("node_containment_violation_details", []):
+            failures.append(
+                f"{title}: {detail['node']} escapes its {detail['container_type']} {detail['container']}"
+            )
+        for detail in layout.get("label_containment_violation_details", []):
+            failures.append(
+                f"{title}: label {detail['label']} escapes its {detail['container_type']} {detail['container']}"
+            )
         for detail in layout.get("edge_crossing_details", []):
             failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
