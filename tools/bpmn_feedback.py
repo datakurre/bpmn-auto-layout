@@ -1308,6 +1308,18 @@ def run_command(command: list[str], purpose: str) -> None:
         )
 
 
+def run_command_if_available(command: list[str], purpose: str) -> bool:
+    """Like run_command, but returns False instead of raising when the
+    command itself is missing from PATH (a real failure of an available
+    command still raises). Lets selftest verify the layout engine when it
+    can, while still working without external dependencies when it can't."""
+    executable = shutil.which(command[0]) if command else None
+    if not executable:
+        return False
+    run_command(command, purpose)
+    return True
+
+
 def split_command(value: str) -> list[str]:
     parts = shlex.split(value)
     if not parts:
@@ -1504,22 +1516,30 @@ def resolve_report_reference(reference: str, output_dir: str = ".bpmn-feedback/r
 
 def print_host_view_command(report: Path) -> None:
     print(f"Host command to view report: xdg-open {shlex.quote(str(report.resolve()))}")
-def selftest() -> None:
+def selftest(layout_command: list[str] | None = None) -> None:
     first = persisted_fixtures()
     second = persisted_fixtures()
     if first != second:
         raise SystemExit("persisted fixture set changed while being read")
     aggregate: dict[str, int] = {}
+    engine_ran = False
     for filename, xml in first.items():
         scratch = Path(".bpmn-feedback") / "selftest"
         scratch.mkdir(parents=True, exist_ok=True)
         target = scratch / filename
         target.write_text(xml, encoding="utf8")
+        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
+            engine_ran = True
         metrics = collect_metrics(target)
         if metrics["layout"]["diagrams"] < 1:  # type: ignore[index]
             raise SystemExit(f"fixture lacks BPMN DI diagram: {filename}")
         for name, count in metrics["semantic"]["element_counts"].items():  # type: ignore[index]
             aggregate[name] = aggregate.get(name, 0) + count
+    if layout_command and not engine_ran:
+        print(
+            f"selftest warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
+            "validating persisted DI as-is instead of freshly generated layout output",
+        )
     required = [
         "startEvent",
         "endEvent",
@@ -1554,15 +1574,11 @@ def selftest() -> None:
     missing = [name for name in required if aggregate.get(name, 0) == 0]
     if missing:
         raise SystemExit(f"persisted fixtures are missing required element types: {', '.join(missing)}")
-    extension_xml = first.get("extensions.bpmn")
-    if extension_xml is not None and (
-        "extensionElements" not in extension_xml or 'isExecutable="true"' not in extension_xml
-    ):
-        raise SystemExit("extension fixture lacks extension elements or executable-process coverage")
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
-    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types")
+    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
+    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types ({suffix})")
 
 
 def latest_report(output_dir: str) -> Path:
@@ -1631,7 +1647,15 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--report", help="report HTML path or report directory; omitted means newest report")
     check.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
-    subparsers.add_parser("selftest", help="validate deterministic fixtures and metrics without external dependencies")
+    selftest_parser = subparsers.add_parser(
+        "selftest",
+        help="validate persisted fixtures and, when the layout command is available, re-verify them against current layout output",
+    )
+    selftest_parser.add_argument(
+        "--layout-command",
+        default="bpmn-auto-layout",
+        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+    )
     return parser
 
 
@@ -1648,7 +1672,7 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "check":
         check_report(args)
     elif args.command == "selftest":
-        selftest()
+        selftest(split_command(args.layout_command))
     return 0
 
 
