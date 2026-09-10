@@ -1731,6 +1731,93 @@ def resolve_report_reference(reference: str, output_dir: str = ".bpmn-feedback/r
 
 def print_host_view_command(report: Path) -> None:
     print(f"Host command to view report: xdg-open {shlex.quote(str(report.resolve()))}")
+def collect_geometry(path: Path) -> tuple[dict[str, dict[str, float]], dict[str, list[tuple[float, float]]]]:
+    """Bounds and edge waypoints keyed by bpmnElement id, across every plane
+    in the file. Used to compare two laid-out versions of (structurally)
+    the same diagram element-by-element."""
+    root = parse_xml(path)
+    shape_bounds: dict[str, dict[str, float]] = {}
+    edge_points: dict[str, list[tuple[float, float]]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            bounds = bounds_from(shape)
+            target = shape.get("bpmnElement")
+            if bounds and target:
+                shape_bounds[target] = bounds
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            target = edge.get("bpmnElement")
+            if not target:
+                continue
+            edge_points[target] = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+    return shape_bounds, edge_points
+
+
+def stability_report(base: Path, variant: Path) -> dict[str, object]:
+    """Compare two already-laid-out BPMN files element-by-element and report
+    how much of the geometry shared between them (same bpmnElement ids)
+    moved -- the "does adding one unrelated element move everything else"
+    check from `AGENTS.md` §6 determinism and stability."""
+    base_shapes, base_edges = collect_geometry(base)
+    variant_shapes, variant_edges = collect_geometry(variant)
+
+    common_shapes = set(base_shapes) & set(variant_shapes)
+    moved_details: list[dict[str, object]] = []
+    for element_id in common_shapes:
+        a, b = base_shapes[element_id], variant_shapes[element_id]
+        dx, dy = b["x"] - a["x"], b["y"] - a["y"]
+        delta = (dx**2 + dy**2) ** 0.5
+        if delta > 0.5:
+            moved_details.append({"element": element_id, "delta": round(delta, 2), "dx": round(dx, 2), "dy": round(dy, 2)})
+    moved_details.sort(key=lambda detail: -detail["delta"])  # type: ignore[arg-type,return-value]
+    deltas = [detail["delta"] for detail in moved_details]
+
+    common_edges = set(base_edges) & set(variant_edges)
+    changed_details = [
+        {
+            "element": element_id,
+            "base_waypoints": len(base_edges[element_id]),
+            "variant_waypoints": len(variant_edges[element_id]),
+        }
+        for element_id in common_edges
+        if base_edges[element_id] != variant_edges[element_id]
+    ]
+
+    return {
+        "schema": "bpmn-layout-stability/v1",
+        "base": str(base),
+        "variant": str(variant),
+        "shapes": {
+            "common": len(common_shapes),
+            "moved": len(moved_details),
+            "moved_ratio": round(len(moved_details) / len(common_shapes), 4) if common_shapes else 0,
+            "max_delta": round(max(deltas), 2) if deltas else 0,
+            "avg_delta": round(sum(deltas) / len(deltas), 2) if deltas else 0,
+            "moved_details": moved_details,
+        },
+        "edges": {
+            "common": len(common_edges),
+            "changed": len(changed_details),
+            "changed_ratio": round(len(changed_details) / len(common_edges), 4) if common_edges else 0,
+            "changed_details": changed_details,
+        },
+    }
+
+
+def stability(base_input: Path, variant_input: Path, layout_command: list[str]) -> dict[str, object]:
+    scratch = Path(".bpmn-feedback") / "stability"
+    scratch.mkdir(parents=True, exist_ok=True)
+    base_target = scratch / f"base-{base_input.name}"
+    variant_target = scratch / f"variant-{variant_input.name}"
+    shutil.copyfile(base_input, base_target)
+    shutil.copyfile(variant_input, variant_target)
+    run_command(layout_command + [str(base_target)], f"layout {base_input}")
+    run_command(layout_command + [str(variant_target)], f"layout {variant_input}")
+    return stability_report(base_target, variant_target)
+
+
 def selftest(layout_command: list[str] | None = None) -> None:
     first = persisted_fixtures()
     second = persisted_fixtures()
@@ -1891,6 +1978,14 @@ def build_parser() -> argparse.ArgumentParser:
         default="bpmn-auto-layout",
         help="layout command, shell-style string; skipped with a warning if not found on PATH",
     )
+
+    stability_parser = subparsers.add_parser(
+        "stability",
+        help="lay out BASE and VARIANT and report how much geometry shared between them moved",
+    )
+    stability_parser.add_argument("base", help="baseline BPMN file")
+    stability_parser.add_argument("variant", help="variant BPMN file (e.g. base plus one unrelated element)")
+    stability_parser.add_argument("--layout-command", default="bpmn-auto-layout", help="layout command, shell-style string")
     return parser
 
 
@@ -1908,6 +2003,15 @@ def main(argv: list[str] | None = None) -> int:
         check_report(args)
     elif args.command == "selftest":
         selftest(split_command(args.layout_command))
+    elif args.command == "stability":
+        result = stability(Path(args.base), Path(args.variant), split_command(args.layout_command))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        shapes = result["shapes"]  # type: ignore[index]
+        edges = result["edges"]  # type: ignore[index]
+        print(
+            f"stability: {shapes['moved']}/{shapes['common']} shapes moved, "  # type: ignore[index]
+            f"{edges['changed']}/{edges['common']} edges changed waypoints",  # type: ignore[index]
+        )
     return 0
 
 
