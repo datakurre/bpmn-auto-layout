@@ -1621,6 +1621,9 @@ def check_report(args: argparse.Namespace) -> None:
             "non_orthogonal_segments",
             "label_overlaps",
             "invalid_label_bounds",
+            "shape_overlaps",
+            "label_shape_intersections",
+            "label_edge_intersections",
         ):
             value = layout[metric]
             if value > 0:
@@ -1633,6 +1636,10 @@ def check_report(args: argparse.Namespace) -> None:
             failures.append(f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):
             failures.append(f"{title}: {detail['edge']} has invalid {detail['end']} attachment")
+        for detail in layout.get("label_shape_intersection_details", []):
+            failures.append(f"{title}: label {detail['label']} intersects {detail['shape']}")
+        for detail in layout.get("label_edge_intersection_details", []):
+            failures.append(f"{title}: label {detail['label']} intersects edge {detail['edge']}")
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             failures.append(f"{title}: missing_named_labels={missing}")

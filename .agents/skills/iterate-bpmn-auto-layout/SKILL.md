@@ -190,8 +190,11 @@ Only the active four candidates need to be retained.
 `bpmn-feedback latest` prints the newest report path. Commands accepting a
 report also accept `latest`, a short ID, or a unique ID prefix. The quality
 gate checks crossings, edge/shape intersections, non-orthogonal segments,
-label overlaps, and missing named labels; shape overlaps remain informational
-because containers and boundaries can legitimately overlap.
+shape overlaps, label overlaps, label/shape and label/edge intersections,
+and missing named labels. Container containment (a lane, participant, or
+subprocess around its children) and a boundary event overlapping its host
+are not counted as shape overlaps in the first place, since both are
+legitimate BPMN notation.
 
 Direct commands:
 
