@@ -74,8 +74,10 @@ export function pathObstacles(
       const a = points[i]!;
       const b = points[i + 1]!;
       const length = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
-      if (length <= ROUTE_DEPARTURE_GAP) continue;
-      const trim = Math.min(ROUTE_DEPARTURE_GAP / 2, length / 3);
+      // Preserve a central obstacle even for short direct flows. Removing a
+      // 40 px departure zone from a 50 px edge left no protected segment, so
+      // a later route could cross the only visible part of that connection.
+      const trim = Math.min(ROUTE_DEPARTURE_GAP / 4, length / 4);
       const horizontal = Math.abs(a.y - b.y) < 0.5;
       const x = horizontal ? Math.min(a.x, b.x) + trim : a.x - SEGMENT_CLEARANCE / 2;
       const y = horizontal ? a.y - SEGMENT_CLEARANCE / 2 : Math.min(a.y, b.y) + trim;
@@ -437,9 +439,14 @@ export function repairSegmentCollisions(
   const internalSubProcessFlow =
     layout.nodes.get(flow?.sourceRef?.id)?.isSubProcessChild &&
     layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
-  const obstacles = Array.from(layout.nodes.values()).filter(
-    (n) => !endpoints.has(n.id) && (internalSubProcessFlow || n.element?.$type !== "bpmn:SubProcess"),
-  );
+  const obstacles = Array.from(layout.nodes.values()).filter((n) => {
+    if (endpoints.has(n.id)) return false;
+    if (internalSubProcessFlow) return n.element?.$type !== "bpmn:SubProcess";
+
+    // External routes must go around an expanded subprocess as one opaque
+    // boundary. Its children are not independently routable in this space.
+    return !n.isSubProcessChild;
+  });
   obstacles.push(...pathObstacles(blockedPaths, flow?.id));
 
   const hits = (pts: Array<{ x: number; y: number }>): number => {

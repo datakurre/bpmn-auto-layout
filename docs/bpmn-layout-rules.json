@@ -119,14 +119,14 @@
     {
       "id": "routing.repair-and-fanout",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:427-540", "packages/bpmn-auto-layout/src/di-creation.ts:327-430"],
-      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby node and existing-path rectangles as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected."
+      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:430-550", "packages/bpmn-auto-layout/src/di-creation.ts:327-462", "packages/bpmn-auto-layout/src/di-creation.ts:464-491"],
+      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes and protected central portions of every existing path as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
     },
     {
       "id": "feedback.geometry-diagnostics",
       "label": "quality-gate",
-      "source_lines": ["tools/bpmn_feedback.py:1040-1125", "tools/bpmn_feedback.py:1480-1492"],
-      "rule": "The feedback report records the exact edge pairs and edge/shape pairs responsible for crossing and intersection counts. The quality gate fails on any such defect while preserving the details in metrics.json and the command output so routing regressions can be traced to named BPMN elements."
+      "source_lines": ["tools/bpmn_feedback.py:923-952", "tools/bpmn_feedback.py:1078-1184", "tools/bpmn_feedback.py:1545-1580"],
+      "rule": "The feedback report records the exact edge pairs, edge/shape pairs, edge/subprocess-container pairs, and invalid endpoint attachments responsible for geometry defects. It also records invalid label bounds. The quality gate fails on any such defect while preserving details in metrics.json and command output so routing regressions can be traced to named BPMN elements."
     },
     {
       "id": "labels.node-placement",
@@ -178,7 +178,7 @@
     {
       "id": "metric.routing.quality",
       "producer": "tools/bpmn_feedback.py report",
-      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, total bends, Manhattan length, and non-orthogonal segments."
+      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, external-route intersections with expanded subprocess containers, invalid source/target boundary attachments, total bends, Manhattan length, and non-orthogonal segments."
     },
     {
       "id": "metric.routing.lattice",
@@ -199,6 +199,11 @@
       "id": "metric.labels.named_label_coverage",
       "producer": "tools/bpmn_feedback.py report",
       "definition": "Compares named events, gateways, lanes, sequence/message flows, and data references against BPMN DI labels, reporting covered and missing label targets."
+    },
+    {
+      "id": "metric.labels.geometry-diagnostics",
+      "producer": "tools/bpmn_feedback.py report",
+      "definition": "Records invalid label bounds plus label intersections with non-own shapes and non-own routes. Container bounds that contain a label are treated as valid containment rather than a collision. These diagnostics guide label-solver work and remain informational until the persisted fixture baseline is collision-free."
     },
     {
       "id": "metric.labels.node_label_gap",

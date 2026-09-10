@@ -218,14 +218,29 @@ export function createCollaborationDi(
     const srcCy = source.y + source.height / 2;
     const tgtCx = target.x + target.width / 2;
     const tgtCy = target.y + target.height / 2;
-    const midY = (srcCy + tgtCy) / 2;
+    const vertical = Math.abs(tgtCy - srcCy) >= Math.abs(tgtCx - srcCx);
+    const sourcePoint = vertical
+      ? { x: srcCx, y: tgtCy >= srcCy ? source.y + source.height : source.y }
+      : { x: tgtCx >= srcCx ? source.x + source.width : source.x, y: srcCy };
+    const targetPoint = vertical
+      ? { x: tgtCx, y: tgtCy >= srcCy ? target.y : target.y + target.height }
+      : { x: tgtCx >= srcCx ? target.x : target.x + target.width, y: tgtCy };
+    const midY = (sourcePoint.y + targetPoint.y) / 2;
+    const midX = (sourcePoint.x + targetPoint.x) / 2;
     const points = snapRouteWaypoints(
-      [
-        { x: srcCx, y: srcCy },
-        { x: srcCx, y: midY },
-        { x: tgtCx, y: midY },
-        { x: tgtCx, y: tgtCy },
-      ],
+      vertical
+        ? [
+            sourcePoint,
+            { x: sourcePoint.x, y: midY },
+            { x: targetPoint.x, y: midY },
+            targetPoint,
+          ]
+        : [
+            sourcePoint,
+            { x: midX, y: sourcePoint.y },
+            { x: midX, y: targetPoint.y },
+            targetPoint,
+          ],
       opts.gridSize,
     );
     const edgeAttrs: any = {
@@ -236,8 +251,8 @@ export function createCollaborationDi(
     if (flow.name) {
       edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
         bounds: moddle.create("dc:Bounds", {
-          x: (srcCx + tgtCx) / 2 - 45,
-          y: midY - 20,
+          x: (sourcePoint.x + targetPoint.x) / 2 - 45,
+          y: vertical ? midY - 20 : (sourcePoint.y + targetPoint.y) / 2 - 10,
           width: 90,
           height: 20,
         }),
@@ -461,42 +476,12 @@ function buildProcessShapesAndEdges(
     );
   }
 
-  // The final collision-repair pass can replace a valid gateway channel with
-  // a side attachment that crosses the intermediate node band. Reassert the
-  // deterministic channel route after all generic repairs are complete.
+  // Reassert only gateway channel routes. Non-gateway routes have already
+  // passed collision repair and validation above; replacing them here would
+  // bypass both checks and can route through boundary events or subprocesses.
   for (const flow of shiftedLayout.allFlows) {
     const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
     const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-    if (
-      src &&
-      tgt &&
-      !src.isSubProcessChild &&
-      tgt.element?.$type === "bpmn:EndEvent" &&
-      src.element?.$type !== "bpmn:BoundaryEvent" &&
-      !src.element?.$type.endsWith("Gateway")
-    ) {
-      const blockers = Array.from(shiftedLayout.nodes.values()).filter(
-        (node) =>
-          node.id !== src.id &&
-          node.id !== tgt.id &&
-          node.y < tgt.centerY &&
-          node.y + node.height > src.centerY,
-      );
-      const targetIsLeft = tgt.centerX < src.centerX;
-      const channelX = targetIsLeft
-        ? Math.min(tgt.x, ...blockers.map((node) => node.x)) - 28
-        : Math.max(src.x + src.width, ...blockers.map((node) => node.x + node.width)) + 8;
-      const targetX = targetIsLeft ? tgt.x + tgt.width : tgt.x;
-      const channelY = (src.centerY + tgt.centerY) / 2;
-      edgeWaypoints.set(flow.id, [
-        { x: src.x + src.width, y: src.centerY },
-        { x: src.x + src.width, y: channelY },
-        { x: channelX, y: channelY },
-        { x: channelX, y: tgt.centerY },
-        { x: targetX, y: tgt.centerY },
-      ]);
-      continue;
-    }
     if (
       !src ||
       !tgt ||

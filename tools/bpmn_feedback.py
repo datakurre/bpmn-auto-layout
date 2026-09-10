@@ -920,6 +920,38 @@ def segment_intersects_box(a: tuple[float, float], b: tuple[float, float], box: 
     return False
 
 
+def point_on_boundary(point: tuple[float, float], box: dict[str, float]) -> bool:
+    x, y = point
+    x0, y0 = box["x"], box["y"]
+    x1, y1 = x0 + box["width"], y0 + box["height"]
+    return (
+        (x0 <= x <= x1 and (abs(y - y0) < 0.5 or abs(y - y1) < 0.5))
+        or (y0 <= y <= y1 and (abs(x - x0) < 0.5 or abs(x - x1) < 0.5))
+    )
+
+
+def valid_bounds(bounds: dict[str, float] | None) -> bool:
+    return bool(bounds and bounds["width"] > 0 and bounds["height"] > 0)
+
+
+def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
+    """Map BPMN elements to their immediate expanded-subprocess ancestor."""
+    parents: dict[str, str | None] = {}
+
+    def visit(parent: ET.Element, container_id: str | None) -> None:
+        for child in parent:
+            if not child.tag.startswith("{" + NS["bpmn"] + "}"):
+                continue
+            child_id = child.get("id")
+            if child_id:
+                parents.setdefault(child_id, container_id)
+            visit(child, child_id if local_name(child.tag) == "subProcess" else container_id)
+
+    for process in root.findall(q("bpmn", "process")):
+        visit(process, None)
+    return parents
+
+
 def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple[float, float], b2: tuple[float, float]) -> bool:
     a_horizontal = abs(a1[1] - a2[1]) < 0.5
     b_horizontal = abs(b1[1] - b2[1]) < 0.5
@@ -933,6 +965,7 @@ def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple
 
 def collect_metrics(path: Path) -> dict[str, object]:
     root = parse_xml(path)
+    element_parents = subprocess_parents(root)
     element_types = {element.get("id"): local_name(element.tag) for element in root.iter() if element.get("id") and element.tag.startswith("{" + NS["bpmn"] + "}")}
     element_counts: dict[str, int] = {}
     named_external_targets: set[str] = set()
@@ -952,6 +985,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
     labels: list[dict[str, float]] = []
     label_targets: set[str] = set()
     node_label_gaps: dict[str, list[float]] = {"event": [], "gateway": []}
+    invalid_label_bounds = 0
     edges: list[dict[str, object]] = []
     for plane in root.iter(q("bpmndi", "BPMNPlane")):
         plane_id = plane.get("id", "")
@@ -962,7 +996,10 @@ def collect_metrics(path: Path) -> dict[str, object]:
             target_id = shape.get("bpmnElement", "")
             label = label_bounds_from(shape)
             if label:
+                if not valid_bounds(label):
+                    invalid_label_bounds += 1
                 label["_plane"] = plane_id  # type: ignore[assignment]
+                label["_target"] = target_id  # type: ignore[assignment]
                 labels.append(label)
                 label_targets.add(target_id)
                 element_type = element_types.get(target_id, "")
@@ -992,7 +1029,10 @@ def collect_metrics(path: Path) -> dict[str, object]:
             label = label_bounds_from(edge)
             target_id = edge.get("bpmnElement", "")
             if label:
+                if not valid_bounds(label):
+                    invalid_label_bounds += 1
                 label["_plane"] = plane_id  # type: ignore[assignment]
+                label["_target"] = target_id  # type: ignore[assignment]
                 labels.append(label)
                 label_targets.add(target_id)
             edges.append({"id": edge.get("id", ""), "plane": plane_id, "bpmnElement": target_id, "points": points})
@@ -1037,10 +1077,39 @@ def collect_metrics(path: Path) -> dict[str, object]:
             if box_overlap(first, second) > 0:
                 label_overlaps += 1
 
+    label_shape_intersections = 0
+    label_edge_intersections = 0
+    label_shape_intersection_details: list[dict[str, str]] = []
+    label_edge_intersection_details: list[dict[str, str]] = []
+    for label in labels:
+        label_target = str(label.get("_target", ""))
+        for shape in shapes:
+            if shape["plane"] != label.get("_plane") or shape["bpmnElement"] == label_target:
+                continue
+            if shape["type"] in CONTAINER_TYPES and contains(shape["bounds"], label):  # type: ignore[arg-type]
+                continue
+            if box_overlap(label, shape["bounds"]) > 0:  # type: ignore[arg-type]
+                label_shape_intersections += 1
+                label_shape_intersection_details.append(
+                    {"label": label_target, "shape": str(shape["bpmnElement"])}
+                )
+        for edge in edges:
+            if edge["plane"] != label.get("_plane") or edge["bpmnElement"] == label_target:
+                continue
+            if any(segment_intersects_box(a, b, label) for a, b in zip(edge["points"], edge["points"][1:])):  # type: ignore[arg-type]
+                label_edge_intersections += 1
+                label_edge_intersection_details.append(
+                    {"label": label_target, "edge": str(edge["bpmnElement"])}
+                )
+
     edge_crossings = 0
     edge_shape_intersections = 0
+    edge_container_intersections = 0
+    invalid_edge_attachments = 0
     edge_crossing_details: list[dict[str, str]] = []
     edge_shape_intersection_details: list[dict[str, str]] = []
+    edge_container_intersection_details: list[dict[str, str]] = []
+    invalid_edge_attachment_details: list[dict[str, str]] = []
     total_bends = 0
     total_manhattan = 0.0
     non_orthogonal_segments = 0
@@ -1052,6 +1121,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
         for shape in shapes
         if shape["type"] not in CONTAINER_TYPES
     }
+    subprocess_shapes = [shape for shape in shapes if shape["type"] == "subProcess"]
     for edge in edges:
         source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
         source = shapes_by_plane_target.get((edge["plane"], source_id))
@@ -1084,7 +1154,18 @@ def collect_metrics(path: Path) -> dict[str, object]:
     for edge in edges:
         points = edge["points"]  # type: ignore[assignment]
         total_bends += max(0, len(points) - 2)
-        endpoints = set(flow_endpoints.get(edge["bpmnElement"], (None, None)))  # type: ignore[arg-type]
+        source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
+        source = shapes_by_plane_target.get((edge["plane"], source_id))
+        target = shapes_by_plane_target.get((edge["plane"], target_id))
+        source_bounds = source["bounds"] if source else None  # type: ignore[index]
+        target_bounds = target["bounds"] if target else None  # type: ignore[index]
+        endpoints = {source_id, target_id}
+        if source and points and not point_on_boundary(points[0], source_bounds):
+            invalid_edge_attachments += 1
+            invalid_edge_attachment_details.append({"edge": str(edge["bpmnElement"]), "end": "source"})
+        if target and points and not point_on_boundary(points[-1], target_bounds):
+            invalid_edge_attachments += 1
+            invalid_edge_attachment_details.append({"edge": str(edge["bpmnElement"]), "end": "target"})
         for a, b in zip(points, points[1:]):
             segment_length = abs(a[0] - b[0]) + abs(a[1] - b[1])
             total_manhattan += segment_length
@@ -1107,6 +1188,19 @@ def collect_metrics(path: Path) -> dict[str, object]:
                             "edge": str(edge["bpmnElement"]),
                             "shape": str(shape["bpmnElement"]),
                         }
+                    )
+            for container in subprocess_shapes:
+                if container["plane"] != edge["plane"]:
+                    continue
+                container_id = str(container["bpmnElement"])
+                if container_id in endpoints:
+                    continue
+                if any(element_parents.get(endpoint) == container_id for endpoint in endpoints if endpoint):
+                    continue
+                if segment_intersects_box(a, b, container["bounds"]):  # type: ignore[arg-type]
+                    edge_container_intersections += 1
+                    edge_container_intersection_details.append(
+                        {"edge": str(edge["bpmnElement"]), "container": container_id}
                     )
     for i, first in enumerate(edges):
         first_points = first["points"]  # type: ignore[assignment]
@@ -1166,10 +1260,19 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
             "label_overlaps": label_overlaps,
+            "label_shape_intersections": label_shape_intersections,
+            "label_edge_intersections": label_edge_intersections,
+            "invalid_label_bounds": invalid_label_bounds,
             "edge_crossings": edge_crossings,
             "edge_shape_intersections": edge_shape_intersections,
+            "edge_container_intersections": edge_container_intersections,
+            "invalid_edge_attachments": invalid_edge_attachments,
             "edge_crossing_details": edge_crossing_details,
             "edge_shape_intersection_details": edge_shape_intersection_details,
+            "edge_container_intersection_details": edge_container_intersection_details,
+            "invalid_edge_attachment_details": invalid_edge_attachment_details,
+            "label_shape_intersection_details": label_shape_intersection_details,
+            "label_edge_intersection_details": label_edge_intersection_details,
             "total_bends": total_bends,
             "total_manhattan_length": round(total_manhattan, 2),
             "non_orthogonal_segments": non_orthogonal_segments,
@@ -1482,7 +1585,15 @@ def check_report(args: argparse.Namespace) -> None:
     for entry in document.get("entries", []):
         title = entry.get("title", entry.get("source", "diagram"))
         layout = entry["transformed_metrics"]["layout"]
-        for metric in ("edge_crossings", "edge_shape_intersections", "non_orthogonal_segments", "label_overlaps"):
+        for metric in (
+            "edge_crossings",
+            "edge_shape_intersections",
+            "edge_container_intersections",
+            "invalid_edge_attachments",
+            "non_orthogonal_segments",
+            "label_overlaps",
+            "invalid_label_bounds",
+        ):
             value = layout[metric]
             if value > 0:
                 failures.append(f"{title}: {metric}={value}")
@@ -1490,6 +1601,10 @@ def check_report(args: argparse.Namespace) -> None:
             failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
             failures.append(f"{title}: {detail['edge']} intersects {detail['shape']}")
+        for detail in layout.get("edge_container_intersection_details", []):
+            failures.append(f"{title}: {detail['edge']} intersects container {detail['container']}")
+        for detail in layout.get("invalid_edge_attachment_details", []):
+            failures.append(f"{title}: {detail['edge']} has invalid {detail['end']} attachment")
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             failures.append(f"{title}: missing_named_labels={missing}")
