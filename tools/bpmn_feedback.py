@@ -934,6 +934,62 @@ def valid_bounds(bounds: dict[str, float] | None) -> bool:
     return bool(bounds and bounds["width"] > 0 and bounds["height"] > 0)
 
 
+_SIDE_OUTWARD_NORMAL: dict[str, tuple[int, int]] = {
+    "top": (0, -1),
+    "bottom": (0, 1),
+    "left": (-1, 0),
+    "right": (1, 0),
+}
+
+
+def attach_side(point: tuple[float, float], box: dict[str, float]) -> str | None:
+    """Which side of `box` a boundary `point` sits on, or None if it isn't
+    on the boundary (e.g. the shape has zero size)."""
+    x, y = point
+    x0, y0 = box["x"], box["y"]
+    x1, y1 = x0 + box["width"], y0 + box["height"]
+    if abs(y - y0) < 0.5:
+        return "top"
+    if abs(y - y1) < 0.5:
+        return "bottom"
+    if abs(x - x0) < 0.5:
+        return "left"
+    if abs(x - x1) < 0.5:
+        return "right"
+    return None
+
+
+def min_bend_count(
+    source_point: tuple[float, float],
+    source_side: str,
+    target_point: tuple[float, float],
+    target_side: str,
+) -> int:
+    """Fewest orthogonal bends an unobstructed route could use between two
+    attach points, given only which side of each shape they leave/enter
+    from: 0 for a straight shot, 1 for an L, 2 for a Z/U detour."""
+    departure = _SIDE_OUTWARD_NORMAL[source_side]
+    arrival = _SIDE_OUTWARD_NORMAL[target_side]
+    # The route must be travelling opposite the target's outward normal to
+    # enter through that side.
+    required_final_direction = (-arrival[0], -arrival[1])
+    if departure == required_final_direction:
+        # Same travel direction throughout: a single straight segment only
+        # works if the ports already line up on the cross-axis; otherwise a
+        # Z/U-shaped detour (bend away, cross over, bend back) is needed.
+        if departure[0] != 0:
+            aligned = abs(source_point[1] - target_point[1]) < 0.5
+        else:
+            aligned = abs(source_point[0] - target_point[0]) < 0.5
+        return 0 if aligned else 2
+    if departure == (-required_final_direction[0], -required_final_direction[1]):
+        # Directly opposite travel directions: the route must double back,
+        # which always costs at least two bends.
+        return 2
+    # Perpendicular departure/arrival directions: a single corner suffices.
+    return 1
+
+
 def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
     """Map BPMN elements to their immediate expanded-subprocess ancestor."""
     parents: dict[str, str | None] = {}
@@ -1128,6 +1184,9 @@ def collect_metrics(path: Path) -> dict[str, object]:
     non_lattice_segments = 0
     max_lattice_remainder = 0.0
     horizontal_flow_gaps: list[float] = []
+    excess_turns_total = 0
+    excess_turn_details: list[dict[str, object]] = []
+    detour_ratios: list[float] = []
     shapes_by_plane_target = {
         (shape["plane"], shape["bpmnElement"]): shape
         for shape in shapes
@@ -1178,9 +1237,11 @@ def collect_metrics(path: Path) -> dict[str, object]:
         if target and points and not point_on_boundary(points[-1], target_bounds):
             invalid_edge_attachments += 1
             invalid_edge_attachment_details.append({"edge": str(edge["bpmnElement"]), "end": "target"})
+        edge_manhattan = 0.0
         for a, b in zip(points, points[1:]):
             segment_length = abs(a[0] - b[0]) + abs(a[1] - b[1])
             total_manhattan += segment_length
+            edge_manhattan += segment_length
             if abs(a[0] - b[0]) >= 0.5 and abs(a[1] - b[1]) >= 0.5:
                 non_orthogonal_segments += 1
             remainder = segment_length % ROUTE_UNIT
@@ -1214,6 +1275,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
                     edge_container_intersection_details.append(
                         {"edge": str(edge["bpmnElement"]), "container": container_id}
                     )
+        if points and len(points) >= 2 and source_bounds and target_bounds:
+            source_side = attach_side(points[0], source_bounds)
+            target_side = attach_side(points[-1], target_bounds)
+            if source_side and target_side:
+                actual_bends = max(0, len(points) - 2)
+                baseline_bends = min_bend_count(points[0], source_side, points[-1], target_side)
+                excess = max(0, actual_bends - baseline_bends)
+                if excess > 0:
+                    excess_turns_total += excess
+                    excess_turn_details.append({"edge": str(edge["bpmnElement"]), "excess_turns": excess})
+            port_distance = abs(points[0][0] - points[-1][0]) + abs(points[0][1] - points[-1][1])
+            if port_distance > 0.5:
+                detour_ratios.append(edge_manhattan / port_distance)
+    excess_turn_details.sort(key=lambda detail: -int(detail["excess_turns"]))  # type: ignore[arg-type]
     for i, first in enumerate(edges):
         first_points = first["points"]  # type: ignore[assignment]
         first_endpoints = set(flow_endpoints.get(first["bpmnElement"], (None, None)))  # type: ignore[arg-type]
@@ -1288,6 +1363,14 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "total_bends": total_bends,
             "total_manhattan_length": round(total_manhattan, 2),
             "non_orthogonal_segments": non_orthogonal_segments,
+            "excess_turns": excess_turns_total,
+            "excess_turn_details": excess_turn_details,
+            "detour_ratio": {
+                "count": len(detour_ratios),
+                "min": round(min(detour_ratios), 2) if detour_ratios else None,
+                "max": round(max(detour_ratios), 2) if detour_ratios else None,
+                "avg": round(sum(detour_ratios) / len(detour_ratios), 2) if detour_ratios else None,
+            },
             "route_lattice": {
                 "unit": ROUTE_UNIT,
                 "non_multiple_segments": non_lattice_segments,
@@ -1408,6 +1491,9 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("edge crossings", ("layout", "edge_crossings")),
         ("edge/shape intersections", ("layout", "edge_shape_intersections")),
         ("total bends", ("layout", "total_bends")),
+        ("excess turns", ("layout", "excess_turns")),
+        ("detour ratio average", ("layout", "detour_ratio", "avg")),
+        ("detour ratio maximum", ("layout", "detour_ratio", "max")),
         ("total Manhattan length", ("layout", "total_manhattan_length")),
         ("non-50px route segments", ("layout", "route_lattice", "non_multiple_segments")),
         ("maximum route lattice remainder", ("layout", "route_lattice", "max_remainder")),
@@ -1624,10 +1710,13 @@ def check_report(args: argparse.Namespace) -> None:
             "shape_overlaps",
             "label_shape_intersections",
             "label_edge_intersections",
+            "excess_turns",
         ):
             value = layout[metric]
             if value > 0:
                 failures.append(f"{title}: {metric}={value}")
+        for detail in layout.get("excess_turn_details", []):
+            failures.append(f"{title}: {detail['edge']} has {detail['excess_turns']} excess turn(s)")
         for detail in layout.get("edge_crossing_details", []):
             failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
