@@ -1,0 +1,221 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_StressRouting" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:process id="Process_StressRouting" name="Stress: dense routing and loops" isExecutable="false">
+    <bpmn:startEvent id="Stress_Start" name="Very long request intake label">
+      <bpmn:outgoing>Stress_Flow_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Stress_Prepare" name="Prepare and validate a request with a long descriptive label">
+      <bpmn:incoming>Stress_Flow_Start</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Decide</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Stress_Decide" name="Validation&#10;passed?">
+      <bpmn:incoming>Stress_Flow_Decide</bpmn:incoming>
+      <bpmn:incoming>Stress_Flow_Review_Decide</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Reject</bpmn:outgoing>
+      <bpmn:outgoing>Stress_Flow_Review</bpmn:outgoing>
+      <bpmn:outgoing>Stress_Flow_Repair</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:serviceTask id="Stress_Reject" name="Reject and notify requester">
+      <bpmn:incoming>Stress_Flow_Reject</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Reject_End</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:userTask id="Stress_Review" name="Manual review with additional checks">
+      <bpmn:incoming>Stress_Flow_Review</bpmn:incoming>
+      <bpmn:incoming>Stress_Flow_Repair_Review</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Review_Decide</bpmn:outgoing>
+      <bpmn:outgoing>Stress_Flow_Review_Parallel</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:scriptTask id="Stress_Repair" name="Repair invalid data and retry">
+      <bpmn:incoming>Stress_Flow_Repair</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Repair_Review</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:parallelGateway id="Stress_Parallel" name="Run all&#10;follow-up&#10;work">
+      <bpmn:incoming>Stress_Flow_Review_Parallel</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Parallel_Notify</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1a5ymvf</bpmn:outgoing>
+      <bpmn:outgoing>Flow_1wgbsmo</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sendTask id="Stress_Notify" name="Send a long notification message">
+      <bpmn:incoming>Stress_Flow_Parallel_Notify</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Notify_Merge</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:serviceTask id="Stress_Audit" name="Write audit record">
+      <bpmn:incoming>Flow_1wgbsmo</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Audit_Merge</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:manualTask id="Stress_Archive" name="Archive the completed request">
+      <bpmn:incoming>Flow_1a5ymvf</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Archive_Merge</bpmn:outgoing>
+    </bpmn:manualTask>
+    <bpmn:inclusiveGateway id="Stress_Merge" name="All applicable&#10;work complete?">
+      <bpmn:incoming>Stress_Flow_Notify_Merge</bpmn:incoming>
+      <bpmn:incoming>Stress_Flow_Audit_Merge</bpmn:incoming>
+      <bpmn:incoming>Stress_Flow_Archive_Merge</bpmn:incoming>
+      <bpmn:outgoing>Stress_Flow_Merge_End</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:endEvent id="Stress_End" name="Successfully completed with a long final label">
+      <bpmn:incoming>Stress_Flow_Reject_End</bpmn:incoming>
+      <bpmn:incoming>Stress_Flow_Merge_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Stress_Flow_Start" sourceRef="Stress_Start" targetRef="Stress_Prepare" />
+    <bpmn:sequenceFlow id="Stress_Flow_Decide" sourceRef="Stress_Prepare" targetRef="Stress_Decide" />
+    <bpmn:sequenceFlow id="Stress_Flow_Reject" name="reject" sourceRef="Stress_Decide" targetRef="Stress_Reject" />
+    <bpmn:sequenceFlow id="Stress_Flow_Review" name="review" sourceRef="Stress_Decide" targetRef="Stress_Review" />
+    <bpmn:sequenceFlow id="Stress_Flow_Repair" name="repair" sourceRef="Stress_Decide" targetRef="Stress_Repair" />
+    <bpmn:sequenceFlow id="Stress_Flow_Review_Decide" name="needs another pass" sourceRef="Stress_Review" targetRef="Stress_Decide" />
+    <bpmn:sequenceFlow id="Stress_Flow_Repair_Review" name="retry review" sourceRef="Stress_Repair" targetRef="Stress_Review" />
+    <bpmn:sequenceFlow id="Stress_Flow_Reject_End" sourceRef="Stress_Reject" targetRef="Stress_End" />
+    <bpmn:sequenceFlow id="Stress_Flow_Review_Parallel" sourceRef="Stress_Review" targetRef="Stress_Parallel" />
+    <bpmn:sequenceFlow id="Stress_Flow_Parallel_Notify" sourceRef="Stress_Parallel" targetRef="Stress_Notify" />
+    <bpmn:sequenceFlow id="Stress_Flow_Notify_Merge" sourceRef="Stress_Notify" targetRef="Stress_Merge" />
+    <bpmn:sequenceFlow id="Stress_Flow_Audit_Merge" sourceRef="Stress_Audit" targetRef="Stress_Merge" />
+    <bpmn:sequenceFlow id="Stress_Flow_Archive_Merge" sourceRef="Stress_Archive" targetRef="Stress_Merge" />
+    <bpmn:sequenceFlow id="Stress_Flow_Merge_End" sourceRef="Stress_Merge" targetRef="Stress_End" />
+    <bpmn:sequenceFlow id="Flow_1a5ymvf" sourceRef="Stress_Parallel" targetRef="Stress_Archive" />
+    <bpmn:sequenceFlow id="Flow_1wgbsmo" sourceRef="Stress_Parallel" targetRef="Stress_Audit" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_StressRouting">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_StressRouting" bpmnElement="Process_StressRouting">
+      <bpmndi:BPMNShape id="Stress_Start_di" bpmnElement="Stress_Start">
+        <dc:Bounds x="57" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="30" y="236" width="90" height="42" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Prepare_di" bpmnElement="Stress_Prepare">
+        <dc:Bounds x="143" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Decide_di" bpmnElement="Stress_Decide" isMarkerVisible="true">
+        <dc:Bounds x="293" y="185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="324" y="158" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Review_di" bpmnElement="Stress_Review">
+        <dc:Bounds x="543" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Repair_di" bpmnElement="Stress_Repair">
+        <dc:Bounds x="393" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Parallel_di" bpmnElement="Stress_Parallel" isMarkerVisible="true">
+        <dc:Bounds x="693" y="185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="657" y="152" width="45" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Notify_di" bpmnElement="Stress_Notify">
+        <dc:Bounds x="803" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Archive_di" bpmnElement="Stress_Archive">
+        <dc:Bounds x="803" y="310" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Audit_di" bpmnElement="Stress_Audit">
+        <dc:Bounds x="803" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Merge_di" bpmnElement="Stress_Merge" isMarkerVisible="true">
+        <dc:Bounds x="968" y="185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="911" y="166" width="78" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_End_di" bpmnElement="Stress_End">
+        <dc:Bounds x="1095" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1072" y="236" width="83" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Stress_Reject_di" bpmnElement="Stress_Reject">
+        <dc:Bounds x="400" y="-50" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Stress_Flow_Start_di" bpmnElement="Stress_Flow_Start">
+        <di:waypoint x="93" y="210" />
+        <di:waypoint x="143" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Decide_di" bpmnElement="Stress_Flow_Decide">
+        <di:waypoint x="243" y="210" />
+        <di:waypoint x="293" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Reject_di" bpmnElement="Stress_Flow_Reject">
+        <di:waypoint x="318" y="185" />
+        <di:waypoint x="318" y="-10" />
+        <di:waypoint x="400" y="-10" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="346" y="-26" width="27" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Review_di" bpmnElement="Stress_Flow_Review">
+        <di:waypoint x="318" y="185" />
+        <di:waypoint x="318" y="100" />
+        <di:waypoint x="593" y="100" />
+        <di:waypoint x="593" y="170" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="440" y="104" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Repair_di" bpmnElement="Stress_Flow_Repair">
+        <di:waypoint x="343" y="210" />
+        <di:waypoint x="393" y="210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="343.50000000000006" y="194" width="49" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Review_Decide_di" bpmnElement="Stress_Flow_Review_Decide">
+        <di:waypoint x="593" y="250" />
+        <di:waypoint x="593" y="350" />
+        <di:waypoint x="318" y="350" />
+        <di:waypoint x="318" y="235" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="414" y="316" width="71" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Repair_Review_di" bpmnElement="Stress_Flow_Repair_Review">
+        <di:waypoint x="493" y="210" />
+        <di:waypoint x="543" y="210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="474.0000000000001" y="194" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Reject_End_di" bpmnElement="Stress_Flow_Reject_End">
+        <di:waypoint x="500" y="-10" />
+        <di:waypoint x="1113" y="-10" />
+        <di:waypoint x="1113" y="192" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Review_Parallel_di" bpmnElement="Stress_Flow_Review_Parallel">
+        <di:waypoint x="643" y="210" />
+        <di:waypoint x="693" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Parallel_Notify_di" bpmnElement="Stress_Flow_Parallel_Notify">
+        <di:waypoint x="743" y="210" />
+        <di:waypoint x="803" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Notify_Merge_di" bpmnElement="Stress_Flow_Notify_Merge">
+        <di:waypoint x="903" y="210" />
+        <di:waypoint x="968" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Audit_Merge_di" bpmnElement="Stress_Flow_Audit_Merge">
+        <di:waypoint x="903" y="70" />
+        <di:waypoint x="993" y="70" />
+        <di:waypoint x="993" y="185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Archive_Merge_di" bpmnElement="Stress_Flow_Archive_Merge">
+        <di:waypoint x="903" y="350" />
+        <di:waypoint x="993" y="350" />
+        <di:waypoint x="993" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Stress_Flow_Merge_End_di" bpmnElement="Stress_Flow_Merge_End">
+        <di:waypoint x="1018" y="210" />
+        <di:waypoint x="1095" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1a5ymvf_di" bpmnElement="Flow_1a5ymvf">
+        <di:waypoint x="718" y="235" />
+        <di:waypoint x="718" y="350" />
+        <di:waypoint x="803" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1wgbsmo_di" bpmnElement="Flow_1wgbsmo">
+        <di:waypoint x="718" y="185" />
+        <di:waypoint x="718" y="70" />
+        <di:waypoint x="803" y="70" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_BoundaryAndSubprocesses" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:message id="Message_Override" name="Override" />
+  <bpmn:process id="Process_BoundaryAndSubprocesses" name="Boundary events and embedded subprocess" isExecutable="true">
+    <bpmn:startEvent id="Boundary_Start" name="Request">
+      <bpmn:outgoing>Boundary_Flow_Start</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Boundary_Task" name="Process request">
+      <bpmn:incoming>Boundary_Flow_Start</bpmn:incoming>
+      <bpmn:outgoing>Boundary_Flow_Task</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:boundaryEvent id="Boundary_InterruptingTimer" name="Timeout" attachedToRef="Boundary_Task">
+      <bpmn:outgoing>Boundary_Flow_Timeout</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Boundary_InterruptingTimer_timerEventDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_NonInterruptingMessage" name="Message&#10;override" cancelActivity="false" attachedToRef="Boundary_Task">
+      <bpmn:outgoing>Boundary_Flow_Message</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Boundary_NonInterruptingMessage_messageEventDefinition" messageRef="Message_Override" />
+    </bpmn:boundaryEvent>
+    <bpmn:subProcess id="Boundary_SubProcess" name="Fulfil request">
+      <bpmn:incoming>Boundary_Flow_Task</bpmn:incoming>
+      <bpmn:outgoing>Boundary_Flow_End</bpmn:outgoing>
+      <bpmn:startEvent id="Boundary_SubStart" name="Inside">
+        <bpmn:outgoing>Boundary_SubFlow_Start</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:userTask id="Boundary_SubTask" name="Handle">
+        <bpmn:incoming>Boundary_SubFlow_Start</bpmn:incoming>
+        <bpmn:outgoing>Boundary_SubFlow_End</bpmn:outgoing>
+      </bpmn:userTask>
+      <bpmn:endEvent id="Boundary_SubEnd" name="Handled">
+        <bpmn:incoming>Boundary_SubFlow_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Boundary_SubFlow_Start" sourceRef="Boundary_SubStart" targetRef="Boundary_SubTask" />
+      <bpmn:sequenceFlow id="Boundary_SubFlow_End" sourceRef="Boundary_SubTask" targetRef="Boundary_SubEnd" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="Boundary_End" name="Done">
+      <bpmn:incoming>Boundary_Flow_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:scriptTask id="Boundary_TimeoutTask" name="Recover timeout">
+      <bpmn:incoming>Boundary_Flow_Timeout</bpmn:incoming>
+      <bpmn:outgoing>Boundary_Flow_Timeout_End</bpmn:outgoing>
+    </bpmn:scriptTask>
+    <bpmn:endEvent id="Boundary_TimeoutEnd" name="Timed out">
+      <bpmn:incoming>Boundary_Flow_Timeout_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:userTask id="Boundary_MessageTask" name="Review override">
+      <bpmn:incoming>Boundary_Flow_Message</bpmn:incoming>
+      <bpmn:outgoing>Boundary_Flow_Message_End</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="Boundary_MessageEnd" name="Override handled">
+      <bpmn:incoming>Boundary_Flow_Message_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Boundary_Flow_Start" sourceRef="Boundary_Start" targetRef="Boundary_Task" />
+    <bpmn:sequenceFlow id="Boundary_Flow_Task" sourceRef="Boundary_Task" targetRef="Boundary_SubProcess" />
+    <bpmn:sequenceFlow id="Boundary_Flow_End" sourceRef="Boundary_SubProcess" targetRef="Boundary_End" />
+    <bpmn:sequenceFlow id="Boundary_Flow_Timeout" sourceRef="Boundary_InterruptingTimer" targetRef="Boundary_TimeoutTask" />
+    <bpmn:sequenceFlow id="Boundary_Flow_Timeout_End" sourceRef="Boundary_TimeoutTask" targetRef="Boundary_TimeoutEnd" />
+    <bpmn:sequenceFlow id="Boundary_Flow_Message" sourceRef="Boundary_NonInterruptingMessage" targetRef="Boundary_MessageTask" />
+    <bpmn:sequenceFlow id="Boundary_Flow_Message_End" sourceRef="Boundary_MessageTask" targetRef="Boundary_MessageEnd" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_BoundaryAndSubprocesses">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_BoundaryAndSubprocesses" bpmnElement="Process_BoundaryAndSubprocesses">
+      <bpmndi:BPMNShape id="Boundary_Start_di" bpmnElement="Boundary_Start">
+        <dc:Bounds x="60" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="33" y="222" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Task_di" bpmnElement="Boundary_Task">
+        <dc:Bounds x="182" y="158" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_End_di" bpmnElement="Boundary_End">
+        <dc:Bounds x="780" y="180" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="753" y="222" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_TimeoutEnd_di" bpmnElement="Boundary_TimeoutEnd">
+        <dc:Bounds x="780" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="774" y="394" width="49" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_MessageEnd_di" bpmnElement="Boundary_MessageEnd">
+        <dc:Bounds x="780" y="12" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="756" y="54" width="85" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_MessageTask_di" bpmnElement="Boundary_MessageTask">
+        <dc:Bounds x="483" y="-10" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_TimeoutTask_di" bpmnElement="Boundary_TimeoutTask">
+        <dc:Bounds x="483" y="330" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_SubProcess_di" bpmnElement="Boundary_SubProcess" isExpanded="true">
+        <dc:Bounds x="373" y="108" width="320" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_SubStart_di" bpmnElement="Boundary_SubStart">
+        <dc:Bounds x="403" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="406" y="224" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_SubTask_di" bpmnElement="Boundary_SubTask">
+        <dc:Bounds x="478" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_SubEnd_di" bpmnElement="Boundary_SubEnd">
+        <dc:Bounds x="615" y="182" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="613" y="224" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Boundary_SubFlow_Start_di" bpmnElement="Boundary_SubFlow_Start">
+        <di:waypoint x="439" y="200" />
+        <di:waypoint x="478" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_SubFlow_End_di" bpmnElement="Boundary_SubFlow_End">
+        <di:waypoint x="578" y="200" />
+        <di:waypoint x="615" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Boundary_NonInterruptingMessage_di" bpmnElement="Boundary_NonInterruptingMessage">
+        <dc:Bounds x="214" y="140" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="169" y="106" width="45" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_InterruptingTimer_di" bpmnElement="Boundary_InterruptingTimer">
+        <dc:Bounds x="214" y="220" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="172" y="262" width="40" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Start_di" bpmnElement="Boundary_Flow_Start">
+        <di:waypoint x="96" y="198" />
+        <di:waypoint x="182" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Task_di" bpmnElement="Boundary_Flow_Task">
+        <di:waypoint x="282" y="198" />
+        <di:waypoint x="373" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_End_di" bpmnElement="Boundary_Flow_End">
+        <di:waypoint x="693" y="198" />
+        <di:waypoint x="780" y="198" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Timeout_di" bpmnElement="Boundary_Flow_Timeout">
+        <di:waypoint x="232" y="256" />
+        <di:waypoint x="232" y="370" />
+        <di:waypoint x="483" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Timeout_End_di" bpmnElement="Boundary_Flow_Timeout_End">
+        <di:waypoint x="583" y="370" />
+        <di:waypoint x="780" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Message_di" bpmnElement="Boundary_Flow_Message">
+        <di:waypoint x="232" y="140" />
+        <di:waypoint x="232" y="30" />
+        <di:waypoint x="483" y="30" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Boundary_Flow_Message_End_di" bpmnElement="Boundary_Flow_Message_End">
+        <di:waypoint x="583" y="30" />
+        <di:waypoint x="780" y="30" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

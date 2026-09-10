@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_CollaborationMessages" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:message id="Message_Order" name="Order" />
+  <bpmn:message id="Message_Confirmation" name="Confirmation" />
+  <bpmn:collaboration id="Collaboration_OrderFulfilment" name="Order fulfilment collaboration">
+    <bpmn:participant id="Participant_Customer" name="Customer" processRef="Process_Customer" />
+    <bpmn:participant id="Participant_Supplier" name="Supplier" processRef="Process_Supplier" />
+    <bpmn:messageFlow id="MessageFlow_Order" name="order" sourceRef="Task_SendOrder" targetRef="Start_OrderMessage" />
+    <bpmn:messageFlow id="MessageFlow_Confirmation" name="confirmation" sourceRef="Task_SendConfirmation" targetRef="Catch_Confirmation" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Customer" name="Customer" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_Customer_Start_Send" sourceRef="Start_Customer" targetRef="Task_SendOrder" />
+    <bpmn:sequenceFlow id="Flow_Customer_Send_Catch" sourceRef="Task_SendOrder" targetRef="Catch_Confirmation" />
+    <bpmn:sequenceFlow id="Flow_Customer_Catch_End" sourceRef="Catch_Confirmation" targetRef="End_Customer" />
+    <bpmn:startEvent id="Start_Customer" name="Need goods">
+      <bpmn:outgoing>Flow_Customer_Start_Send</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:sendTask id="Task_SendOrder" name="Send order">
+      <bpmn:incoming>Flow_Customer_Start_Send</bpmn:incoming>
+      <bpmn:outgoing>Flow_Customer_Send_Catch</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_Customer" name="Confirmed">
+      <bpmn:incoming>Flow_Customer_Catch_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Confirmation" name="Receive confirmation">
+      <bpmn:incoming>Flow_Customer_Send_Catch</bpmn:incoming>
+      <bpmn:outgoing>Flow_Customer_Catch_End</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Catch_Confirmation_messageEventDefinition" messageRef="Message_Confirmation" />
+    </bpmn:intermediateCatchEvent>
+  </bpmn:process>
+  <bpmn:process id="Process_Supplier" name="Supplier" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_Supplier_Start_Reserve" sourceRef="Start_OrderMessage" targetRef="Task_ReserveStock" />
+    <bpmn:sequenceFlow id="Flow_Supplier_Reserve_Send" sourceRef="Task_ReserveStock" targetRef="Task_SendConfirmation" />
+    <bpmn:sequenceFlow id="Flow_Supplier_Send_End" sourceRef="Task_SendConfirmation" targetRef="End_Supplier" />
+    <bpmn:startEvent id="Start_OrderMessage" name="Order message">
+      <bpmn:outgoing>Flow_Supplier_Start_Reserve</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Start_OrderMessage_messageEventDefinition" messageRef="Message_Order" />
+    </bpmn:startEvent>
+    <bpmn:serviceTask id="Task_ReserveStock" name="Reserve stock">
+      <bpmn:incoming>Flow_Supplier_Start_Reserve</bpmn:incoming>
+      <bpmn:outgoing>Flow_Supplier_Reserve_Send</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:endEvent id="End_Supplier" name="Sent">
+      <bpmn:incoming>Flow_Supplier_Send_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sendTask id="Task_SendConfirmation" name="Send confirmation">
+      <bpmn:incoming>Flow_Supplier_Reserve_Send</bpmn:incoming>
+      <bpmn:outgoing>Flow_Supplier_Send_End</bpmn:outgoing>
+    </bpmn:sendTask>
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Collaboration_OrderFulfilment">
+    <bpmndi:BPMNPlane id="BPMNPlane_Collaboration_OrderFulfilment" bpmnElement="Collaboration_OrderFulfilment">
+      <bpmndi:BPMNShape id="Participant_Customer_di" bpmnElement="Participant_Customer" isHorizontal="true">
+        <dc:Bounds x="-10" y="50" width="562" height="140" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Customer_di" bpmnElement="Start_Customer">
+        <dc:Bounds x="50" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="38" y="146" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendOrder_di" bpmnElement="Task_SendOrder">
+        <dc:Bounds x="153" y="80" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Customer_di" bpmnElement="End_Customer">
+        <dc:Bounds x="484" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="477" y="146" width="51" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Confirmation_di" bpmnElement="Catch_Confirmation">
+        <dc:Bounds x="349" y="102" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="337" y="65" width="60" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Customer_Start_Send_di" bpmnElement="Flow_Customer_Start_Send">
+        <di:waypoint x="86" y="120" />
+        <di:waypoint x="153" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Customer_Send_Catch_di" bpmnElement="Flow_Customer_Send_Catch">
+        <di:waypoint x="253" y="120" />
+        <di:waypoint x="349" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Customer_Catch_End_di" bpmnElement="Flow_Customer_Catch_End">
+        <di:waypoint x="385" y="120" />
+        <di:waypoint x="484" y="120" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Participant_Supplier_di" bpmnElement="Participant_Supplier" isHorizontal="true">
+        <dc:Bounds x="-10" y="250" width="562" height="140" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_OrderMessage_di" bpmnElement="Start_OrderMessage">
+        <dc:Bounds x="50" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="30" y="346" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveStock_di" bpmnElement="Task_ReserveStock">
+        <dc:Bounds x="153" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Supplier_di" bpmnElement="End_Supplier">
+        <dc:Bounds x="484" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="491" y="346" width="23" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendConfirmation_di" bpmnElement="Task_SendConfirmation">
+        <dc:Bounds x="317" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Supplier_Start_Reserve_di" bpmnElement="Flow_Supplier_Start_Reserve">
+        <di:waypoint x="86" y="320" />
+        <di:waypoint x="153" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Supplier_Reserve_Send_di" bpmnElement="Flow_Supplier_Reserve_Send">
+        <di:waypoint x="253" y="320" />
+        <di:waypoint x="317" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Supplier_Send_End_di" bpmnElement="Flow_Supplier_Send_End">
+        <di:waypoint x="417" y="320" />
+        <di:waypoint x="484" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_Order_di" bpmnElement="MessageFlow_Order">
+        <di:waypoint x="203" y="160" />
+        <di:waypoint x="203" y="220" />
+        <di:waypoint x="68" y="220" />
+        <di:waypoint x="68" y="302" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="114" y="203" width="27" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MessageFlow_Confirmation_di" bpmnElement="MessageFlow_Confirmation">
+        <di:waypoint x="367" y="280" />
+        <di:waypoint x="367" y="138" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="293" y="217" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

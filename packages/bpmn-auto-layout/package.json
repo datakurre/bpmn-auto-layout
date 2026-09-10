@@ -11,17 +11,27 @@
       "import": "./dist/index.js"
     }
   },
-  "files": ["dist", "README.md", "package.json"],
+  "files": [
+    "dist",
+    "README.md",
+    "package.json"
+  ],
   "scripts": {
     "build": "npm run build:js && npm run build:types",
     "build:js": "esbuild src/index.ts --bundle --format=esm --platform=node --external:bpmn-moddle --outfile=dist/index.js --loader:.json=json",
-    "build:types": "tsc -p tsconfig.json"
+    "build:types": "tsc -p tsconfig.json",
+    "format": "prettier --write \"src/**/*.ts\" \"*.{js,json}\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"*.{js,json}\"",
+    "lint": "eslint \"src/**/*.ts\""
   },
   "dependencies": {
     "bpmn-moddle": "^10.2.0"
   },
   "devDependencies": {
     "esbuild": "^0.28.2",
-    "typescript": "^5.9.3"
+    "eslint": "^9.39.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.70.0"
   }
 }

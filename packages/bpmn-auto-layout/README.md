@@ -16,3 +16,6 @@ Camunda 8- or Zeebe-specific moddle packages are not required.
 
 The package is private and is not published. To reuse it in another project,
 copy this directory and install its dependencies before running `npm run build`.
+
+Run `npm run lint` to check the TypeScript sources and `npm run format:check` to
+verify Prettier formatting. Use `npm run format` to apply formatting.

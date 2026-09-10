@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_BasicEventsTasks" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:message id="Message_Receipt" name="Receipt" />
+  <bpmn:process id="Process_BasicEventsTasks" name="Basic events and tasks" isExecutable="false">
+    <bpmn:startEvent id="Start_Order" name="Order received">
+      <bpmn:outgoing>Flow_Order_To_Validate</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Validate" name="Validate order">
+      <bpmn:incoming>Flow_Order_To_Validate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Validate_To_Charge</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:serviceTask id="Task_Charge" name="Charge payment">
+      <bpmn:incoming>Flow_Validate_To_Charge</bpmn:incoming>
+      <bpmn:outgoing>Flow_Charge_To_Receipt</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:intermediateThrowEvent id="Throw_Receipt" name="Send receipt">
+      <bpmn:incoming>Flow_Charge_To_Receipt</bpmn:incoming>
+      <bpmn:outgoing>Flow_Receipt_To_End</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Throw_Receipt_messageEventDefinition" messageRef="Message_Receipt" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:endEvent id="End_Fulfilled" name="Fulfilled">
+      <bpmn:incoming>Flow_Receipt_To_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Order_To_Validate" sourceRef="Start_Order" targetRef="Task_Validate" />
+    <bpmn:sequenceFlow id="Flow_Validate_To_Charge" name="valid" sourceRef="Task_Validate" targetRef="Task_Charge" />
+    <bpmn:sequenceFlow id="Flow_Charge_To_Receipt" name="paid" sourceRef="Task_Charge" targetRef="Throw_Receipt" />
+    <bpmn:sequenceFlow id="Flow_Receipt_To_End" sourceRef="Throw_Receipt" targetRef="End_Fulfilled" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_BasicEventsTasks">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_BasicEventsTasks" bpmnElement="Process_BasicEventsTasks">
+      <bpmndi:BPMNShape id="Start_Order_di" bpmnElement="Start_Order">
+        <dc:Bounds x="60" y="110" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="42" y="152" width="73" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Fulfilled_di" bpmnElement="End_Fulfilled">
+        <dc:Bounds x="610" y="110" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="609" y="152" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate">
+        <dc:Bounds x="163" y="88" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Charge_di" bpmnElement="Task_Charge">
+        <dc:Bounds x="335" y="88" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_Receipt_di" bpmnElement="Throw_Receipt">
+        <dc:Bounds x="507" y="110" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="494" y="152" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Order_To_Validate_di" bpmnElement="Flow_Order_To_Validate">
+        <di:waypoint x="96" y="128" />
+        <di:waypoint x="163" y="128" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Validate_To_Charge_di" bpmnElement="Flow_Validate_To_Charge">
+        <di:waypoint x="263" y="128" />
+        <di:waypoint x="335" y="128" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="288" y="110" width="23" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Charge_To_Receipt_di" bpmnElement="Flow_Charge_To_Receipt">
+        <di:waypoint x="435" y="128" />
+        <di:waypoint x="507" y="128" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="466" y="110" width="21" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Receipt_To_End_di" bpmnElement="Flow_Receipt_To_End">
+        <di:waypoint x="543" y="128" />
+        <di:waypoint x="610" y="128" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

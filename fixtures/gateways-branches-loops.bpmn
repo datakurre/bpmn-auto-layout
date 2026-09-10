@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_GatewaysBranchesLoops" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:process id="Process_GatewaysBranchesLoops" name="Gateways, branches, and loops" isExecutable="false">
+    <bpmn:startEvent id="Start_Draft" name="Draft ready">
+      <bpmn:outgoing>Flow_Start_Draft</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_Draft" name="Prepare draft">
+      <bpmn:incoming>Flow_Start_Draft</bpmn:incoming>
+      <bpmn:outgoing>Flow_Draft_Gateway</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:exclusiveGateway id="Gateway_ReviewNeeded" name="Need&#10;review?">
+      <bpmn:incoming>Flow_Draft_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_NoReview_Publish</bpmn:outgoing>
+      <bpmn:outgoing>Flow_ReviewNeeded</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Cancelled</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:userTask id="Task_Review" name="Review draft">
+      <bpmn:incoming>Flow_ReviewNeeded</bpmn:incoming>
+      <bpmn:incoming>Flow_Revise_Back_To_Review</bpmn:incoming>
+      <bpmn:outgoing>Flow_Review_Accepted</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_Accepted" name="Accepted?">
+      <bpmn:incoming>Flow_Review_Accepted</bpmn:incoming>
+      <bpmn:outgoing>Flow_Accepted_Publish</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Changes_Revise</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Revise" name="Revise draft">
+      <bpmn:incoming>Flow_Changes_Revise</bpmn:incoming>
+      <bpmn:outgoing>Flow_Revise_Back_To_Review</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Cancelled" name="Cancelled">
+      <bpmn:incoming>Flow_Cancelled</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:serviceTask id="Task_Publish" name="Publish">
+      <bpmn:incoming>Flow_NoReview_Publish</bpmn:incoming>
+      <bpmn:incoming>Flow_Accepted_Publish</bpmn:incoming>
+      <bpmn:outgoing>Flow_Publish_Split</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="Gateway_Split" name="Notify and&#10;archive">
+      <bpmn:incoming>Flow_Publish_Split</bpmn:incoming>
+      <bpmn:outgoing>Flow_Split_Notify</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Split_Archive</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:sendTask id="Task_Notify" name="Notify requester">
+      <bpmn:incoming>Flow_Split_Notify</bpmn:incoming>
+      <bpmn:outgoing>Flow_Notify_Join</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:serviceTask id="Task_Archive" name="Archive package">
+      <bpmn:incoming>Flow_Split_Archive</bpmn:incoming>
+      <bpmn:outgoing>Flow_Archive_Join</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:parallelGateway id="Gateway_Join" name="Done?">
+      <bpmn:incoming>Flow_Notify_Join</bpmn:incoming>
+      <bpmn:incoming>Flow_Archive_Join</bpmn:incoming>
+      <bpmn:outgoing>Flow_Join_End</bpmn:outgoing>
+    </bpmn:parallelGateway>
+    <bpmn:endEvent id="End_Published" name="Published">
+      <bpmn:incoming>Flow_Join_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Draft" sourceRef="Start_Draft" targetRef="Task_Draft" />
+    <bpmn:sequenceFlow id="Flow_Draft_Gateway" sourceRef="Task_Draft" targetRef="Gateway_ReviewNeeded" />
+    <bpmn:sequenceFlow id="Flow_NoReview_Publish" name="no" sourceRef="Gateway_ReviewNeeded" targetRef="Task_Publish" />
+    <bpmn:sequenceFlow id="Flow_ReviewNeeded" name="yes" sourceRef="Gateway_ReviewNeeded" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Review_Accepted" sourceRef="Task_Review" targetRef="Gateway_Accepted" />
+    <bpmn:sequenceFlow id="Flow_Accepted_Publish" name="accepted" sourceRef="Gateway_Accepted" targetRef="Task_Publish" />
+    <bpmn:sequenceFlow id="Flow_Changes_Revise" name="changes" sourceRef="Gateway_Accepted" targetRef="Task_Revise" />
+    <bpmn:sequenceFlow id="Flow_Revise_Back_To_Review" name="retry" sourceRef="Task_Revise" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Cancelled" name="reject" sourceRef="Gateway_ReviewNeeded" targetRef="End_Cancelled" />
+    <bpmn:sequenceFlow id="Flow_Publish_Split" sourceRef="Task_Publish" targetRef="Gateway_Split" />
+    <bpmn:sequenceFlow id="Flow_Split_Notify" sourceRef="Gateway_Split" targetRef="Task_Notify" />
+    <bpmn:sequenceFlow id="Flow_Split_Archive" sourceRef="Gateway_Split" targetRef="Task_Archive" />
+    <bpmn:sequenceFlow id="Flow_Notify_Join" sourceRef="Task_Notify" targetRef="Gateway_Join" />
+    <bpmn:sequenceFlow id="Flow_Archive_Join" sourceRef="Task_Archive" targetRef="Gateway_Join" />
+    <bpmn:sequenceFlow id="Flow_Join_End" sourceRef="Gateway_Join" targetRef="End_Published" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_GatewaysBranchesLoops">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_GatewaysBranchesLoops" bpmnElement="Process_GatewaysBranchesLoops">
+      <bpmndi:BPMNShape id="Start_Draft_di" bpmnElement="Start_Draft">
+        <dc:Bounds x="57" y="52" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="30" y="96" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Draft_di" bpmnElement="Task_Draft">
+        <dc:Bounds x="143" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ReviewNeeded_di" bpmnElement="Gateway_ReviewNeeded" isMarkerVisible="true">
+        <dc:Bounds x="293" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="272" y="18" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review">
+        <dc:Bounds x="393" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Accepted_di" bpmnElement="Gateway_Accepted" isMarkerVisible="true">
+        <dc:Bounds x="543" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="534" y="25" width="69" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Revise_di" bpmnElement="Task_Revise">
+        <dc:Bounds x="643" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
+        <dc:Bounds x="425" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="419" y="346" width="49" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Publish_di" bpmnElement="Task_Publish">
+        <dc:Bounds x="643" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Split_di" bpmnElement="Gateway_Split" isMarkerVisible="true">
+        <dc:Bounds x="793" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="785" y="12" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Notify_di" bpmnElement="Task_Notify">
+        <dc:Bounds x="893" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Archive_di" bpmnElement="Task_Archive">
+        <dc:Bounds x="893" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Join_di" bpmnElement="Gateway_Join" isMarkerVisible="true">
+        <dc:Bounds x="1043" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1047" y="25" width="42" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Published_di" bpmnElement="End_Published">
+        <dc:Bounds x="1143" y="52" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1116" y="96" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Draft_di" bpmnElement="Flow_Start_Draft">
+        <di:waypoint x="93" y="70" />
+        <di:waypoint x="143" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Draft_Gateway_di" bpmnElement="Flow_Draft_Gateway">
+        <di:waypoint x="243" y="70" />
+        <di:waypoint x="293" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_NoReview_Publish_di" bpmnElement="Flow_NoReview_Publish">
+        <di:waypoint x="318" y="45" />
+        <di:waypoint x="318" y="-20" />
+        <di:waypoint x="693" y="-20" />
+        <di:waypoint x="693" y="30" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="499" y="-37" width="13" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewNeeded_di" bpmnElement="Flow_ReviewNeeded">
+        <di:waypoint x="343" y="70" />
+        <di:waypoint x="393" y="70" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="353" y="54" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Review_Accepted_di" bpmnElement="Flow_Review_Accepted">
+        <di:waypoint x="493" y="70" />
+        <di:waypoint x="543" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Accepted_Publish_di" bpmnElement="Flow_Accepted_Publish">
+        <di:waypoint x="593" y="70" />
+        <di:waypoint x="643" y="70" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="587" y="54" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Changes_Revise_di" bpmnElement="Flow_Changes_Revise">
+        <di:waypoint x="568" y="95" />
+        <di:waypoint x="568" y="180" />
+        <di:waypoint x="643" y="180" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="577.5" y="164" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Revise_Back_To_Review_di" bpmnElement="Flow_Revise_Back_To_Review">
+        <di:waypoint x="693" y="220" />
+        <di:waypoint x="693" y="250" />
+        <di:waypoint x="443" y="250" />
+        <di:waypoint x="443" y="110" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="546.5000000000001" y="234" width="43" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cancelled_di" bpmnElement="Flow_Cancelled">
+        <di:waypoint x="318" y="95" />
+        <di:waypoint x="318" y="320" />
+        <di:waypoint x="425" y="320" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="358" y="304" width="27" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Publish_Split_di" bpmnElement="Flow_Publish_Split">
+        <di:waypoint x="743" y="70" />
+        <di:waypoint x="793" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Notify_di" bpmnElement="Flow_Split_Notify">
+        <di:waypoint x="843" y="70" />
+        <di:waypoint x="893" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Split_Archive_di" bpmnElement="Flow_Split_Archive">
+        <di:waypoint x="818" y="95" />
+        <di:waypoint x="818" y="180" />
+        <di:waypoint x="893" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Notify_Join_di" bpmnElement="Flow_Notify_Join">
+        <di:waypoint x="993" y="70" />
+        <di:waypoint x="1043" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Archive_Join_di" bpmnElement="Flow_Archive_Join">
+        <di:waypoint x="993" y="180" />
+        <di:waypoint x="1068" y="180" />
+        <di:waypoint x="1068" y="95" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Join_End_di" bpmnElement="Flow_Join_End">
+        <di:waypoint x="1093" y="70" />
+        <di:waypoint x="1143" y="70" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

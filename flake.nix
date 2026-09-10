@@ -27,11 +27,34 @@
       packages = forAllSystems (
         pkgs:
         let
+          python = pkgs.python3.withPackages (ps: [
+            ps.fastapi
+            ps.uvicorn
+            ps.websockets
+          ]);
+          feedback = pkgs.writeShellApplication {
+            name = "bpmn-feedback";
+            runtimeInputs = [ pkgs.python3 ];
+            text = ''
+              exec ${pkgs.python3}/bin/python3 ${./tools/bpmn_feedback.py} "$@"
+            '';
+          };
+          feedback-ui = pkgs.writeShellApplication {
+            name = "bpmn-feedback-ui";
+            runtimeInputs = [
+              python
+              layout-cli
+              bpmn-to-image.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-to-image
+            ];
+            text = ''
+              exec ${python}/bin/python3 ${./tools/bpmn_feedback_server.py} "$@"
+            '';
+          };
           layout = pkgs.buildNpmPackage {
             pname = "bpmn-auto-layout";
             version = "0.1.0";
             src = ./packages/bpmn-auto-layout;
-            npmDepsHash = "sha256-pd6+yofPb3uf8ia83osisSFOr9wexl0Tc+dgbLAG8wc=";
+            npmDepsHash = "sha256-jt8/WwDl0Wx13wyCkQ+HWCMIqwTLdtJsgaDUeKzrFgA=";
             npmBuildHook = "";
             buildPhase = "npm run build";
             installPhase = ''
@@ -39,10 +62,7 @@
               cp -r dist package.json node_modules $out/lib/node_modules/bpmn-auto-layout/
             '';
           };
-        in
-        {
-          bpmn-auto-layout = layout;
-          default = pkgs.writeShellApplication {
+          layout-cli = pkgs.writeShellApplication {
             name = "bpmn-auto-layout";
             runtimeInputs = [ pkgs.nodejs ];
             text = ''
@@ -63,6 +83,12 @@
             '';
             meta.mainProgram = "bpmn-auto-layout";
           };
+        in
+        {
+          bpmn-auto-layout = layout;
+          bpmn-feedback = feedback;
+          bpmn-feedback-ui = feedback-ui;
+          default = layout-cli;
         }
       );
 
@@ -71,7 +97,10 @@
           packages = [
             self.packages.${pkgs.stdenv.hostPlatform.system}.default
             bpmn-to-image.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-to-image
+            self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-feedback
+            pkgs.gnumake
             pkgs.python3
+            self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-feedback-ui
           ];
         };
       });

@@ -104,7 +104,12 @@ export async function ensureLabelDi(xml: string): Promise<string> {
       if (!di?.bounds || !validBounds(di.bounds) || validBounds(di.label?.bounds)) continue;
       const labelBounds =
         element.$type === "bpmn:Lane"
-          ? { x: di.bounds.x - di.bounds.height / 2 + 15, y: di.bounds.y + di.bounds.height / 2 - 15, width: di.bounds.height, height: 30 }
+          ? {
+              x: di.bounds.x - di.bounds.height / 2 + 15,
+              y: di.bounds.y + di.bounds.height / 2 - 15,
+              width: di.bounds.height,
+              height: 30,
+            }
           : { x: di.bounds.x + di.bounds.width / 2 - 45, y: di.bounds.y + di.bounds.height, width: 90, height: 20 };
       di.label = moddle.create("bpmndi:BPMNLabel", {
         bounds: moddle.create("dc:Bounds", labelBounds),
@@ -168,9 +173,7 @@ export function labelLayout() {
 
         const diElements = diagram.plane.planeElement ?? [];
         const diById = new Map(
-          diElements
-            .filter((di) => di.bpmnElement?.id)
-            .map((di) => [di.bpmnElement!.id, di] as const),
+          diElements.filter((di) => di.bpmnElement?.id).map((di) => [di.bpmnElement!.id, di] as const),
         );
         const elements: ElementLike[] = [];
         const visit = (element: ElementLike) => {
@@ -197,7 +200,12 @@ export function labelLayout() {
             continue;
           }
           if (isExternalLabelTarget(element)) labels.push({ target: element, bounds: di.label.bounds, di });
-          if (element.$type === "bpmn:Lane" && di.bounds && validBounds(di.bounds) && !contains(di.bounds, di.label.bounds)) {
+          if (
+            element.$type === "bpmn:Lane" &&
+            di.bounds &&
+            validBounds(di.bounds) &&
+            !contains(di.bounds, di.label.bounds)
+          ) {
             reporter.report(element.id, "Lane label must remain inside its lane boundary");
           }
         }
@@ -239,7 +247,10 @@ export function labelLayout() {
             });
             for (const boundary of boundaries) {
               if (validBounds(boundary.bounds) && !contains(boundary.bounds, label.bounds)) {
-                reporter.report(label.target.id, `BPMN label must remain inside boundary '${boundary.bpmnElement!.id}'`);
+                reporter.report(
+                  label.target.id,
+                  `BPMN label must remain inside boundary '${boundary.bpmnElement!.id}'`,
+                );
               }
             }
           }

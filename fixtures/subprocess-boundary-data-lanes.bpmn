@@ -1,0 +1,176 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_SubprocessBoundaryDataLanes" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:dataStore id="DataStore_Inventory" name="Inventory" />
+  <bpmn:process id="Process_SubprocessBoundaryDataLanes" name="Subprocess, boundary event, data, and lanes" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Process_SubprocessBoundaryDataLanes">
+      <bpmn:lane id="Lane_Requester" name="Requester">
+        <bpmn:flowNodeRef>Data_Order</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Submit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Start_Request</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Automation" name="Automation">
+        <bpmn:flowNodeRef>Store_Inventory</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Escalate</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sub_Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sub_End</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Escalated</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>SubProcess_Handle</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Handled</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Boundary_Timeout</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Request" name="Request">
+      <bpmn:outgoing>Flow_Request_Submit</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Submit" name="Submit request">
+      <bpmn:incoming>Flow_Request_Submit</bpmn:incoming>
+      <bpmn:outgoing>Flow_Submit_Handle</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:subProcess id="SubProcess_Handle" name="Handle request">
+      <bpmn:incoming>Flow_Submit_Handle</bpmn:incoming>
+      <bpmn:outgoing>Flow_Handle_End</bpmn:outgoing>
+      <bpmn:startEvent id="Sub_Start" name="Begin">
+        <bpmn:outgoing>Sub_Flow_Start_Check</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:serviceTask id="Sub_Task_Check" name="Check inventory">
+        <bpmn:incoming>Sub_Flow_Start_Check</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Check_End</bpmn:outgoing>
+      </bpmn:serviceTask>
+      <bpmn:endEvent id="Sub_End" name="Ready">
+        <bpmn:incoming>Sub_Flow_Check_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Sub_Flow_Start_Check" sourceRef="Sub_Start" targetRef="Sub_Task_Check" />
+      <bpmn:sequenceFlow id="Sub_Flow_Check_End" sourceRef="Sub_Task_Check" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="Boundary_Timeout" name="Timeout" attachedToRef="SubProcess_Handle">
+      <bpmn:outgoing>Flow_Timeout_Escalate</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Boundary_Timeout_timerEventDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:sendTask id="Task_Escalate" name="Escalate">
+      <bpmn:incoming>Flow_Timeout_Escalate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Escalate_End</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:dataObject id="DataObject_Order" />
+    <bpmn:dataObjectReference id="Data_Order" name="Order data" dataObjectRef="DataObject_Order" />
+    <bpmn:dataStoreReference id="Store_Inventory" name="Inventory store" dataStoreRef="DataStore_Inventory" />
+    <bpmn:endEvent id="End_Handled" name="Handled">
+      <bpmn:incoming>Flow_Handle_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Escalated" name="Escalated">
+      <bpmn:incoming>Flow_Escalate_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Request_Submit" sourceRef="Start_Request" targetRef="Task_Submit" />
+    <bpmn:sequenceFlow id="Flow_Submit_Handle" sourceRef="Task_Submit" targetRef="SubProcess_Handle" />
+    <bpmn:sequenceFlow id="Flow_Handle_End" sourceRef="SubProcess_Handle" targetRef="End_Handled" />
+    <bpmn:sequenceFlow id="Flow_Timeout_Escalate" name="timeout" sourceRef="Boundary_Timeout" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_Escalate_End" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_SubprocessBoundaryDataLanes">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_SubprocessBoundaryDataLanes" bpmnElement="Process_SubprocessBoundaryDataLanes">
+      <bpmndi:BPMNShape id="Lane_Automation_di" bpmnElement="Lane_Automation" isHorizontal="true">
+        <dc:Bounds x="40" y="220" width="960" height="380" />
+        <bpmndi:BPMNLabel />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Requester_di" bpmnElement="Lane_Requester">
+        <dc:Bounds x="40" y="40" width="960" height="180" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="52" y="48" width="120" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Request_di" bpmnElement="Start_Request">
+        <dc:Bounds x="80" y="112" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="78" y="154" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit">
+        <dc:Bounds x="170" y="90" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubProcess_Handle_di" bpmnElement="SubProcess_Handle" isExpanded="true">
+        <dc:Bounds x="330" y="260" width="360" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="365" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="369" y="364" width="29" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Task_Check_di" bpmnElement="Sub_Task_Check">
+        <dc:Bounds x="435" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="590" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="592" y="364" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Sub_Flow_Start_Check_di" bpmnElement="Sub_Flow_Start_Check">
+        <di:waypoint x="401" y="340" />
+        <di:waypoint x="435" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Check_End_di" bpmnElement="Sub_Flow_Check_End">
+        <di:waypoint x="535" y="340" />
+        <di:waypoint x="590" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Task_Escalate_di" bpmnElement="Task_Escalate">
+        <dc:Bounds x="750" y="450" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Data_Order_di" bpmnElement="Data_Order">
+        <dc:Bounds x="65" y="505" width="50" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="64" y="569" width="53" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Store_Inventory_di" bpmnElement="Store_Inventory">
+        <dc:Bounds x="155" y="505" width="50" height="64" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="144" y="569" width="73" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Handled_di" bpmnElement="End_Handled">
+        <dc:Bounds x="910" y="332" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="908" y="374" width="41" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Escalated_di" bpmnElement="End_Escalated">
+        <dc:Bounds x="910" y="472" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="904" y="514" width="49" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Timeout_di" bpmnElement="Boundary_Timeout">
+        <dc:Bounds x="590" y="422" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="540" y="453" width="40" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Request_Submit_di" bpmnElement="Flow_Request_Submit">
+        <di:waypoint x="116" y="130" />
+        <di:waypoint x="170" y="130" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Submit_Handle_di" bpmnElement="Flow_Submit_Handle">
+        <di:waypoint x="270" y="130" />
+        <di:waypoint x="300" y="130" />
+        <di:waypoint x="300" y="320" />
+        <di:waypoint x="330" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Handle_End_di" bpmnElement="Flow_Handle_End">
+        <di:waypoint x="690" y="350" />
+        <di:waypoint x="910" y="350" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timeout_Escalate_di" bpmnElement="Flow_Timeout_Escalate">
+        <di:waypoint x="608" y="458" />
+        <di:waypoint x="608" y="490" />
+        <di:waypoint x="750" y="490" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="661" y="473" width="37" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Escalate_End_di" bpmnElement="Flow_Escalate_End">
+        <di:waypoint x="850" y="490" />
+        <di:waypoint x="910" y="490" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
