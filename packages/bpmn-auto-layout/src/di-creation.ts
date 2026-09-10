@@ -10,6 +10,7 @@ import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import { resolveRoutingPolicy } from "./layout-policy";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
 import { planChannels } from "./channel-planning";
+import { computeLaneBands, laneBandsBottom, laneLabelBounds } from "./lane-layout";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, validateConnectionPoints } from "./collision-repair";
 import {
@@ -116,12 +117,28 @@ export function createCollaborationDi(
     const participantX = 30;
     const participantY = nextParticipantY;
     const participantW = maxX - minX + PAD_LEFT + PAD_RIGHT;
-    const participantH = maxY - minY + PAD_TOP + PAD_BOTTOM;
+    let participantH = maxY - minY + PAD_TOP + PAD_BOTTOM;
 
     // Translation from process-local to collaboration-plane coords
     const dx = Math.round((participantX + PAD_LEFT - minX) / opts.gridSize) * opts.gridSize;
     const dy = Math.round((participantY + PAD_TOP - minY) / opts.gridSize) * opts.gridSize;
     participantOffsets.set(process.id, { dx, dy });
+
+    // Lane DI: partition every lane (including nested childLaneSet lanes
+    // and lanes with no member nodes) to fill the participant box to the
+    // right of its own label gutter. Computed in plane-absolute coordinates
+    // so bands align with the (already dx/dy-shifted) node shapes.
+    const LANE_GUTTER = 30;
+    const shiftedForLanes = new Map<string, NodeLayout>();
+    for (const [id, node] of layout.nodes) {
+      shiftedForLanes.set(id, { ...node, x: node.x + dx, y: node.y + dy });
+    }
+    const laneXSpan = { x: participantX + LANE_GUTTER, width: participantW - LANE_GUTTER };
+    const laneYSpan = { y: participantY, height: participantH };
+    const laneBands = computeLaneBands(process.laneSets || [], shiftedForLanes, laneXSpan, laneYSpan);
+    // Grow the pool to fit its lanes if the lanes (e.g. empty ones needing
+    // a reserved default band) need more height than the raw node content.
+    participantH = laneBandsBottom(laneBands, participantY + participantH) - participantY;
 
     const participantBounds = {
       x: participantX,
@@ -153,41 +170,20 @@ export function createCollaborationDi(
     nextParticipantY += participantH + 40;
 
     // ── 2. Lane shapes for this participant ───────────────────────────────
-    for (const laneSet of process.laneSets || []) {
-      for (const lane of laneSet.lanes || []) {
-        const members = (lane.flowNodeRef || [])
-          .map((ref: any) => layout.nodes.get(ref.id))
-          .filter((n: NodeLayout | undefined): n is NodeLayout =>
-            Boolean(n && !n.isSubProcessChild),
-          );
-        if (members.length === 0) continue;
-        const lMinX = Math.min(...members.map((n: NodeLayout) => n.x));
-        const lMaxX = Math.max(...members.map((n: NodeLayout) => n.x + n.width));
-        const lMinY = Math.min(...members.map((n: NodeLayout) => n.y));
-        const lMaxY = Math.max(...members.map((n: NodeLayout) => n.y + n.height));
-        const laneBounds = {
-          x: lMinX + dx - 30,
-          y: lMinY + dy - 15,
-          width: lMaxX - lMinX + 60,
-          height: lMaxY - lMinY + 30,
-        };
-        const laneAttrs: any = {
-          id: `${lane.id}_di`,
-          bpmnElement: lane,
-          isHorizontal: true,
-          bounds: moddle.create("dc:Bounds", laneBounds),
-        };
-        if (lane.name)
-          laneAttrs.label = moddle.create("bpmndi:BPMNLabel", {
-            bounds: moddle.create("dc:Bounds", {
-              x: laneBounds.x + 3,
-              y: laneBounds.y + laneBounds.height / 2 - 10,
-              width: 20,
-              height: 20,
-            }),
-          });
-        planeElements.push(moddle.create("bpmndi:BPMNShape", laneAttrs));
+    for (const band of laneBands) {
+      const bounds = { x: band.x, y: band.y, width: band.width, height: band.height };
+      const laneAttrs: any = {
+        id: `${band.lane.id}_di`,
+        bpmnElement: band.lane,
+        isHorizontal: true,
+        bounds: moddle.create("dc:Bounds", bounds),
+      };
+      if (band.lane.name) {
+        laneAttrs.label = moddle.create("bpmndi:BPMNLabel", {
+          bounds: moddle.create("dc:Bounds", laneLabelBounds(band)),
+        });
       }
+      planeElements.push(moddle.create("bpmndi:BPMNShape", laneAttrs));
     }
 
     // ── 3. Node (flow element) shapes for this participant ────────────────
@@ -603,32 +599,34 @@ export function createProcessDi(
   opts: ResolvedLayoutOptions,
 ): void {
   const planeElements: any[] = [];
-  const namedLabel = (x: number, y: number, width = 90, height = 20) =>
-    moddle.create("bpmndi:BPMNLabel", {
-      bounds: moddle.create("dc:Bounds", { x, y, width, height }),
-    });
 
-  // Lane DI: derive bounds from referenced member nodes
-  for (const laneSet of process.laneSets || []) {
-    for (const lane of laneSet.lanes || []) {
-      const members = (lane.flowNodeRef || [])
-        .map((ref: any) => layout.nodes.get(ref.id))
-        .filter((node: NodeLayout | undefined): node is NodeLayout =>
-          Boolean(node && !node.isSubProcessChild),
-        );
-      if (members.length === 0) continue;
-      const minX = Math.min(...members.map((node: NodeLayout) => node.x));
-      const maxX = Math.max(...members.map((node: NodeLayout) => node.x + node.width));
-      const minY = Math.min(...members.map((node: NodeLayout) => node.y));
-      const maxY = Math.max(...members.map((node: NodeLayout) => node.y + node.height));
-      const bounds = { x: minX - 30, y: minY - 30, width: maxX - minX + 60, height: maxY - minY + 60 };
-      const shapeAttrs: any = {
-        id: `${lane.id}_di`,
-        bpmnElement: lane,
-        bounds: moddle.create("dc:Bounds", bounds),
-      };
-      if (lane.name) shapeAttrs.label = namedLabel(bounds.x + 15, bounds.y + 15, 90, 20);
-      planeElements.push(moddle.create("bpmndi:BPMNShape", shapeAttrs));
+  // Lane DI: partition every lane (including nested childLaneSet lanes and
+  // lanes with no member nodes) into contiguous, non-overlapping bands
+  // spanning the full width of the process's content.
+  if ((process.laneSets || []).length > 0) {
+    const topNodes = Array.from(layout.nodes.values()).filter((node) => !node.isSubProcessChild);
+    if (topNodes.length > 0) {
+      const minX = Math.min(...topNodes.map((node) => node.x));
+      const maxX = Math.max(...topNodes.map((node) => node.x + node.width));
+      const minY = Math.min(...topNodes.map((node) => node.y));
+      const maxY = Math.max(...topNodes.map((node) => node.y + node.height));
+      const xSpan = { x: minX - 30, width: maxX - minX + 60 };
+      const ySpan = { y: minY - 30, height: maxY - minY + 60 };
+      const bands = computeLaneBands(process.laneSets, layout.nodes, xSpan, ySpan);
+      for (const band of bands) {
+        const bounds = { x: band.x, y: band.y, width: band.width, height: band.height };
+        const shapeAttrs: any = {
+          id: `${band.lane.id}_di`,
+          bpmnElement: band.lane,
+          bounds: moddle.create("dc:Bounds", bounds),
+        };
+        if (band.lane.name) {
+          shapeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
+            bounds: moddle.create("dc:Bounds", laneLabelBounds(band)),
+          });
+        }
+        planeElements.push(moddle.create("bpmndi:BPMNShape", shapeAttrs));
+      }
     }
   }
 
