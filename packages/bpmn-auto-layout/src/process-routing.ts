@@ -28,6 +28,19 @@ import { ROUTE_DEPARTURE_GAP, CHANNEL_LANE_GAP } from "./element-dimensions";
 
 export type RoutePoint = { x: number; y: number };
 
+/** Drop consecutive duplicate points, which contribute no geometry and inflate
+ * bend counts (#46). Applied wherever a route is finalized so no code path
+ * -- fallback construction, repair, or a later reassert pass -- can ship one. */
+export function dedupeConsecutivePoints(points: RoutePoint[]): RoutePoint[] {
+  const result: RoutePoint[] = [];
+  for (const point of points) {
+    const previous = result[result.length - 1];
+    if (previous && previous.x === point.x && previous.y === point.y) continue;
+    result.push(point);
+  }
+  return result;
+}
+
 /**
  * Order flows for routing by structural span (column + track distance
  * between endpoints), then by source/target id. Routing in document order
@@ -195,10 +208,10 @@ export function routeProcessFlows(
       if (fallback && validateConnectionPoints(fallback, source, target)) {
         const repairedFallback = repairSegmentCollisions(fallback, layout, flow, edgeWaypoints, routingPolicy);
         if (validateConnectionPoints(repairedFallback, source, target)) {
-          edgeWaypoints.set(flowId, repairedFallback);
+          edgeWaypoints.set(flowId, dedupeConsecutivePoints(repairedFallback));
           continue;
         }
-        edgeWaypoints.set(flowId, fallback);
+        edgeWaypoints.set(flowId, dedupeConsecutivePoints(fallback));
         continue;
       }
       // No candidate validated even after every fallback. Per #32's
@@ -212,10 +225,10 @@ export function routeProcessFlows(
         flowId,
         `sequence flow ${flowId} has no route whose endpoints validate against both node boundaries; emitted the best available geometry instead`,
       );
-      edgeWaypoints.set(flowId, fallback ?? orthogonal);
+      edgeWaypoints.set(flowId, dedupeConsecutivePoints(fallback ?? orthogonal));
       continue;
     }
-    edgeWaypoints.set(flowId, snapRouteWaypoints(orthogonal, opts.gridSize));
+    edgeWaypoints.set(flowId, dedupeConsecutivePoints(snapRouteWaypoints(orthogonal, opts.gridSize)));
   }
 
   // Reassert only gateway channel routes. Non-gateway routes have already
@@ -274,7 +287,7 @@ export function routeProcessFlows(
       }
     }
     if (accepted) {
-      edgeWaypoints.set(flow.id, accepted);
+      edgeWaypoints.set(flow.id, dedupeConsecutivePoints(accepted));
       continue;
     }
     // The channel route can run through a boundary event or subprocess;
@@ -286,7 +299,7 @@ export function routeProcessFlows(
       validateConnectionPoints(repaired, src, tgt) &&
       countRouteHits(repaired, layout, flow, edgeWaypoints) === 0
     ) {
-      edgeWaypoints.set(flow.id, repaired);
+      edgeWaypoints.set(flow.id, dedupeConsecutivePoints(repaired));
     }
   }
 

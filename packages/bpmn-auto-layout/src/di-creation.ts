@@ -18,7 +18,7 @@ import {
   leafLaneBoundsByNodeId,
 } from "./lane-layout";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
-import { routeProcessFlows, snapRouteWaypoints } from "./process-routing";
+import { routeProcessFlows, snapRouteWaypoints, dedupeConsecutivePoints } from "./process-routing";
 import type { LayoutWarning } from "./layout-warnings";
 import {
   ensureOrthogonalWaypoints,
@@ -297,8 +297,12 @@ export function createCollaborationDi(
     const edgeAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: points.map((p) =>
-        moddle.create("dc:Point", { x: Math.round(p.x), y: Math.round(p.y) }),
+      // Drop consecutive duplicate points here, at the one place every
+      // route's waypoints become dc:Point elements, so no upstream pass --
+      // a fixed-offset fallback, a repair step -- can ship a zero-length
+      // segment into the DI regardless of how it was produced (#46).
+      waypoint: dedupeConsecutivePoints(points.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }))).map((p) =>
+        moddle.create("dc:Point", p),
       ),
     };
     if (flow.name) {
@@ -577,11 +581,12 @@ function buildProcessShapesAndEdges(
     const edgeDiAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: waypoints.map((pt) =>
-        moddle.create("dc:Point", {
-          x: Math.round(pt.x),
-          y: Math.round(pt.y),
-        }),
+      // See the message-flow edge above: dedupe here too, at the point
+      // waypoints become dc:Point elements, so the label re-repair pass
+      // just above (which can rewrite a route) can't reintroduce a
+      // zero-length segment that earlier dedup passes already removed (#46).
+      waypoint: dedupeConsecutivePoints(waypoints.map((pt) => ({ x: Math.round(pt.x), y: Math.round(pt.y) }))).map(
+        (pt) => moddle.create("dc:Point", pt),
       ),
     };
 
