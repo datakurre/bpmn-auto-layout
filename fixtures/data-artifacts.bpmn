@@ -7,7 +7,6 @@
     </bpmn:startEvent>
     <bpmn:serviceTask id="Artifact_Task" name="Transform data">
       <bpmn:incoming>Artifact_Flow_Start</bpmn:incoming>
-      <bpmn:outgoing>Artifact_Association_Out</bpmn:outgoing>
       <bpmn:outgoing>Artifact_Flow_End</bpmn:outgoing>
       <bpmn:ioSpecification id="Artifact_Task_ioSpecification">
         <bpmn:dataInput id="Artifact_Task_Input" name="Input" />
