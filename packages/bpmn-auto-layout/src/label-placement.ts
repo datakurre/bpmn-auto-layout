@@ -14,7 +14,13 @@
  */
 
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
-import { LABEL_SLIDE_SLACK } from "./element-dimensions";
+import {
+  LABEL_SLIDE_SLACK,
+  NODE_LABEL_GAP,
+  SNUG_LABEL_GAP,
+  GATEWAY_LABEL_GAP,
+  EDGE_LABEL_GAP,
+} from "./element-dimensions";
 
 export interface LabelBounds {
   x: number;
@@ -371,7 +377,7 @@ export function computeEdgeLabelBounds(
 
   const width = Math.min(90, Math.max(30, Math.round(text.length * 6.5) + 10));
   const height = 14;
-  const edgeLabelGap = 2;
+  const edgeLabelGap = EDGE_LABEL_GAP;
 
   if (horizSegs.length > 0) {
     // Every eligible horizontal segment contributes its own candidates, so
@@ -528,10 +534,10 @@ export function solveLabelPlacement(
     const maxLineChars = Math.max(...lineArray.map((l) => l.length));
     const tightW = isGateway ? Math.max(30, Math.min(W, Math.round(maxLineChars * 6.8) + 8)) : W;
     const H = lines === 1 ? (isGateway ? 14 : 20) : lines === 2 ? 27 : lines * 14;
-    const gap = 8;
+    const gap = NODE_LABEL_GAP;
     const snugOffset = isGateway ? 0 : 2;
-    const snugGap = 6;
-    const gatewayGap = 6;
+    const snugGap = SNUG_LABEL_GAP;
+    const gatewayGap = GATEWAY_LABEL_GAP;
 
     const primaryY = preferredTop
       ? Math.round(node.y - H - gap)
@@ -650,7 +656,7 @@ export function solveLabelPlacement(
     const defaultLines = estimateTextLines(name, defaultW);
     const defaultH =
       defaultLines === 1 ? (isGateway ? 14 : 20) : defaultLines === 2 ? 27 : defaultLines * 14;
-    const defaultGap = 8;
+    const defaultGap = NODE_LABEL_GAP;
     const defaultY = preferredTop
       ? Math.round(node.y - defaultH - defaultGap)
       : Math.round(node.y + node.height + defaultGap);

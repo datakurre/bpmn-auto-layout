@@ -71,3 +71,17 @@ export const ROUTE_BEND_PENALTY = 10_000;
  * sufficiently long segment" is actually enforced.
  */
 export const LABEL_SLIDE_SLACK = 15;
+
+/**
+ * Default gaps used across label placement, consolidated here so "labels
+ * shall use consistent default gaps" (§4) is one place to check, not four
+ * separately-declared local constants (see #18).
+ */
+/** Gap between a plain node/event label and its shape. */
+export const NODE_LABEL_GAP = 8;
+/** Gap for a label placed snug against a gateway's corner. */
+export const SNUG_LABEL_GAP = 6;
+/** Gap between a gateway's primary/alternate label position and its shape. */
+export const GATEWAY_LABEL_GAP = 6;
+/** Gap between an edge label and the segment it sits on. */
+export const EDGE_LABEL_GAP = 2;

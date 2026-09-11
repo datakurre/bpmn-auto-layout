@@ -143,8 +143,8 @@
     {
       "id": "labels.node-gap-by-element-class",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:460-475"],
-      "rule": "The label solver uses an 8 px primary/alternate vertical gap for named events and a 6 px primary/alternate vertical gap for gateways; collision-free candidate selection can choose a different side or offset. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
+      "source_lines": ["packages/bpmn-auto-layout/src/element-dimensions.ts:66-79", "packages/bpmn-auto-layout/src/label-placement.ts:460-475"],
+      "rule": "The label solver uses an 8 px primary/alternate vertical gap for named events (NODE_LABEL_GAP) and a 6 px primary/alternate vertical gap for gateways (GATEWAY_LABEL_GAP), with a 6 px snug-corner gap (SNUG_LABEL_GAP) and a 2 px edge-label gap (EDGE_LABEL_GAP); collision-free candidate selection can choose a different side or offset. These four gaps are named constants in element-dimensions.ts rather than repeated local literals, so \"labels shall use consistent default gaps\" (§4) is checkable. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
     },
     {
       "id": "labels.edge-placement",
@@ -171,6 +171,12 @@
       "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:151-163", "packages/bpmn-auto-layout/src/label-placement.ts:563-599", "packages/bpmn-auto-layout/src/di-creation.ts:416-428", "packages/bpmn-auto-layout/src/lane-layout.ts:159-174"],
       "rule": "solveLabelPlacement and computeEdgeLabelBounds reject any candidate not fully contained (containedIn) by the label's own owning container -- di-creation.ts's containerBoundsFor resolves this per node as its subprocess if it is a child, else its leaf lane band (leafLaneBoundsByNodeId), else its participant pool, else no constraint for a standalone process with no lanes. Containment is enforced ahead of edge-collision avoidance and is relaxed only as a last resort, after every candidate fails it, so a label degrades to escaping its container rather than failing to render. The `cand.x < 10 || cand.y < 0` canvas-origin clamp still applies underneath this as a final absolute floor.",
       "note": "A label's owning node can itself be drawn outside its declared lane band by a separate, pre-existing node-placement bug (see node_containment_violations); when that happens no candidate near the node can satisfy lane containment either, and the fallback tier is used."
+    },
+    {
+      "id": "labels.message-flow-and-data-reference",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:344-372", "packages/bpmn-auto-layout/src/di-creation.ts:728-742"],
+      "rule": "Message-flow labels are computed by computeEdgeLabelBounds against the collaboration-wide node map and every already-placed sequence-flow, message-flow, and (for a message flow) other message-flow label, with no container-containment constraint since a message flow spans two pools by definition. Data-object/data-store reference labels are computed by solveLabelPlacement the same way an event/gateway label is, including the node's own container containment. Every label from both paths is pushed into the relevant placedLabels list so later labels see it too -- neither path emits an unchecked fixed box any more."
     },
     {
       "id": "labels.ensure-default-di",

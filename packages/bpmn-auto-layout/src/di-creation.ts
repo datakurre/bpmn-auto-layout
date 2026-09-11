@@ -176,6 +176,10 @@ export function createCollaborationDi(
   const collaborationNodes = new Map<string, NodeLayout>();
   const allContainerObstacles: NodeLayout[] = [];
   const sequenceFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
+  // Every label already placed for every participant's own nodes/edges, so
+  // a message-flow label can avoid them too, not just other message-flow
+  // labels (#18).
+  const collaborationLabels: LabelBounds[] = [];
 
   // ── 1. Participant (pool) shapes ─────────────────────────────────────────
   let nextParticipantY = 50;
@@ -299,6 +303,7 @@ export function createCollaborationDi(
     allContainerObstacles.push(...containerObstacles);
     for (const [id, node] of built.nodes) collaborationNodes.set(id, node);
     for (const [id, points] of built.edgeWaypoints) sequenceFlowWaypoints.set(id, points);
+    collaborationLabels.push(...built.placedLabels);
   }
 
   // ── 4. Message flow edges ─────────────────────────────────────────────
@@ -314,6 +319,7 @@ export function createCollaborationDi(
     containerObstacles: allContainerObstacles,
   };
   const messageFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
+  const messageFlowLabels: LabelBounds[] = [];
   for (const flow of collaboration.messageFlows || []) {
     const source = collaborationNodes.get(flow.sourceRef?.id);
     const target = collaborationNodes.get(flow.targetRef?.id);
@@ -349,17 +355,26 @@ export function createCollaborationDi(
       ),
     };
     if (flow.name) {
-      const first = points[0]!;
-      const last = points[points.length - 1]!;
-      const labelMidY = (first.y + last.y) / 2;
-      edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
-        bounds: moddle.create("dc:Bounds", {
-          x: (first.x + last.x) / 2 - 45,
-          y: vertical ? labelMidY - 20 : labelMidY - 10,
-          width: 90,
-          height: 20,
-        }),
-      });
+      // Route through the same candidate-enumeration/collision-rejection
+      // pipeline sequence-flow labels use, instead of an unchecked fixed
+      // box that never entered placedLabels and so was invisible to every
+      // other label's own collision check (#18). A message flow spans two
+      // pools by definition, so it has no single owning container to
+      // constrain the label to.
+      const blockedEdgesForLabel = new Map([...sequenceFlowWaypoints, ...messageFlowWaypoints]);
+      const labelBounds = computeEdgeLabelBounds(
+        flow,
+        points,
+        blockedEdgesForLabel,
+        [...collaborationLabels, ...messageFlowLabels],
+        collaborationNodes,
+      );
+      if (labelBounds) {
+        messageFlowLabels.push(labelBounds);
+        edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
+          bounds: moddle.create("dc:Bounds", labelBounds),
+        });
+      }
     }
     planeElements.push(moddle.create("bpmndi:BPMNEdge", edgeAttrs));
   }
@@ -396,6 +411,8 @@ interface ProcessShapesAndEdges {
   nodes: Map<string, NodeLayout>;
   /** Final sequence-flow waypoints, keyed by flow id, in plane-absolute coordinates. */
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>>;
+  /** Every label bounds emitted for this process's nodes and edges. */
+  placedLabels: LabelBounds[];
 }
 
 function buildProcessShapesAndEdges(
@@ -730,7 +747,19 @@ function buildProcessShapesAndEdges(
       (node.element.$type === "bpmn:DataObjectReference" ||
         node.element.$type === "bpmn:DataStoreReference")
     ) {
-      shapeAttrs.label = namedLabel(node.x + node.width / 2 - 45, node.y + node.height + 8);
+      // Route through the same candidate-enumeration/collision-rejection
+      // pipeline as event/gateway labels, instead of an unchecked fixed box
+      // that never entered placedLabels and so was invisible to every other
+      // label's own collision check (#18).
+      const labelBounds = solveLabelPlacement(
+        node,
+        edgeWaypoints,
+        shiftedNodes,
+        placedLabels,
+        containerBoundsFor(node),
+      );
+      placedLabels.push(labelBounds);
+      shapeAttrs.label = namedLabel(labelBounds.x, labelBounds.y, labelBounds.width, labelBounds.height);
     }
 
     elements.push(moddle.create("bpmndi:BPMNShape", shapeAttrs));
@@ -767,7 +796,7 @@ function buildProcessShapesAndEdges(
     elements.push(moddle.create("bpmndi:BPMNEdge", edgeDiAttrs));
   }
 
-  return { elements, nodes: shiftedNodes, edgeWaypoints };
+  return { elements, nodes: shiftedNodes, edgeWaypoints, placedLabels };
 }
 
 export function createProcessDi(
