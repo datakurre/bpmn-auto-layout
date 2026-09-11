@@ -8,6 +8,7 @@ import html
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -804,6 +805,22 @@ def run_command(command: list[str], purpose: str) -> None:
         )
 
 
+def run_engine_command(command: list[str], purpose: str) -> str | None:
+    """Like run_command, but returns an error description instead of raising
+    when the command is missing or fails. An N-way engine comparison must
+    degrade a misbehaving or absent third-party engine to an empty column
+    for the fixtures it fails on, never abort the whole run for every other
+    engine and fixture (#53 item 4)."""
+    executable = shutil.which(command[0]) if command else None
+    if not executable:
+        return f"command not found on PATH: {command[0] if command else '<empty>'}"
+    completed = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        return f"{purpose} failed with exit code {completed.returncode}" + (f": {detail}" if detail else "")
+    return None
+
+
 def run_command_if_available(command: list[str], purpose: str) -> bool:
     """Like run_command, but returns False instead of raising when the
     command itself is missing from PATH (a real failure of an available
@@ -835,15 +852,13 @@ def resolve_dist_index() -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
-    """Lay out every file in `targets` in place by importing layoutProcess
-    from the built package directly, bypassing the bpmn-auto-layout CLI
-    wrapper flake.nix defines. Works in any environment with the package
-    already built -- a plain CI runner, a container, an agent working
-    directly in the repo -- not only inside `nix develop` (#43)."""
-    node = shutil.which("node")
-    if not node:
-        raise SystemExit("node not found on PATH; cannot run the layout engine directly")
+def write_layout_via_node_script(dist_index: Path) -> Path:
+    """Write (to a fresh temp file the caller must clean up) a small ESM
+    script that imports layoutProcess from the built package directly and
+    transforms every file named on argv in place. Shared by layout_via_node
+    (batches every target in one process) and the report command's "ours"
+    fallback (invoked once per file, same calling convention as an external
+    --layout-command)."""
     script = (
         'import { readFile, writeFile } from "node:fs/promises";\n'
         f"import {{ layoutProcess }} from {json.dumps(dist_index.resolve().as_posix())};\n"
@@ -854,7 +869,19 @@ def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
     )
     with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False, encoding="utf8") as handle:
         handle.write(script)
-        script_path = Path(handle.name)
+        return Path(handle.name)
+
+
+def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
+    """Lay out every file in `targets` in place by importing layoutProcess
+    from the built package directly, bypassing the bpmn-auto-layout CLI
+    wrapper flake.nix defines. Works in any environment with the package
+    already built -- a plain CI runner, a container, an agent working
+    directly in the repo -- not only inside `nix develop` (#43)."""
+    node = shutil.which("node")
+    if not node:
+        raise SystemExit("node not found on PATH; cannot run the layout engine directly")
+    script_path = write_layout_via_node_script(dist_index)
     try:
         completed = subprocess.run(
             [node, str(script_path), *[str(target) for target in targets]],
@@ -903,6 +930,75 @@ def layout_fixtures(targets: list[Path], layout_command: list[str], structure_on
     )
 
 
+def parse_engine_specs(specs: list[str], default_layout_command: str) -> dict[str, list[str]]:
+    """Turn repeated --engine NAME=COMMAND options into an ordered
+    name -> command mapping, with our own engine ("ours") always present
+    and first -- from --layout-command by default, or overridden by an
+    explicit --engine ours=... spec -- so zero --engine flags keeps
+    today's behaviour (source vs our own output) and any additional
+    --engine entries are baselines layered on top (#53)."""
+    engines: dict[str, list[str]] = {"ours": split_command(default_layout_command)}
+    for spec in specs:
+        name, sep, command = spec.partition("=")
+        name = name.strip()
+        if not sep or not name:
+            raise SystemExit(f"--engine expects NAME=COMMAND, got: {spec!r}")
+        engines[name] = split_command(command)
+    return engines
+
+
+def resolve_engine_command(name: str, command: list[str]) -> list[str]:
+    """Resolve an engine's layout command for the report's own invocation
+    convention (`command + [file]`, in place). Falls back to running the
+    locally built package directly through node when this is our own engine
+    and its configured command isn't on PATH -- the same fallback
+    selftest/regression rely on (#43), extended here so N-way comparisons
+    also work without nix or a globally installed CLI."""
+    if name == "ours" and not (command and shutil.which(command[0])):
+        dist_index = resolve_dist_index()
+        if dist_index:
+            node = shutil.which("node")
+            if node:
+                return [node, str(write_layout_via_node_script(dist_index))]
+    return command
+
+
+def ours_version() -> str:
+    """The version to record for our own engine, regardless of how it was
+    actually invoked (CLI on PATH or the node/dist fallback) -- the package
+    manifest is the one source of truth for what "ours" means (#53, #54)."""
+    package_json = repo_root() / "packages" / "bpmn-auto-layout" / "package.json"
+    try:
+        return json.loads(package_json.read_text(encoding="utf8"))["version"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return "unknown"
+
+
+def engine_version(name: str, command: list[str]) -> str:
+    """Best-effort resolved version for an engine, so a published comparison
+    records what was actually measured (#53, #54). A moving, unpinned
+    command (a bare package name with no @version) resolves to "unknown"
+    rather than a guess -- an unreproducible comparison should look
+    unreproducible, not silently pass as pinned."""
+    if name == "ours":
+        return ours_version()
+    for part in command:
+        match = re.search(r"@(\d[\w.\-]*)$", part)
+        if match:
+            return match.group(1)
+    return "unknown"
+
+
+def source_has_di(source: Path) -> bool:
+    """Whether `source` already carries diagram interchange -- used to skip
+    the "original" comparison column for a source that has none, per #53's
+    "the source diagram stays column 0 when it has DI"."""
+    try:
+        return "BPMNPlane" in source.read_text(encoding="utf8", errors="ignore")
+    except OSError:
+        return False
+
+
 def clear_reports(output_dir: str) -> None:
     root = Path(output_dir)
     if not root.exists():
@@ -913,6 +1009,10 @@ def clear_reports(output_dir: str) -> None:
 
 
 def render_report(args: argparse.Namespace) -> Path:
+    """Render an N-way comparison: the source diagram (when it carries DI)
+    alongside every configured engine's output, scored identically (#53).
+    Zero --engine flags keeps today's behaviour of one column, our own
+    engine, named "ours"."""
     report_root = Path(args.output_dir)
     report_root.mkdir(parents=True, exist_ok=True)
     if args.clear_output:
@@ -921,48 +1021,81 @@ def render_report(args: argparse.Namespace) -> Path:
     inputs = [Path(path) for path in args.inputs]
     if not inputs:
         inputs = [Path("fixtures") / filename for filename in sorted(persisted_fixtures())]
-    layout_command = split_command(args.layout_command)
     image_command = split_command(args.image_command)
 
-    entries: list[dict[str, object]] = []
-    for index, source in enumerate(inputs, start=1):
-        if not source.exists():
-            raise SystemExit(f"input BPMN does not exist: {source}")
-        part_dir = workdir / f"part-{index:02d}-{source.stem}"
-        part_dir.mkdir()
-        original_bpmn = part_dir / "original.bpmn"
-        transformed_bpmn = part_dir / "transformed.bpmn"
-        shutil.copyfile(source, original_bpmn)
-        shutil.copyfile(source, transformed_bpmn)
-        run_command(layout_command + [str(transformed_bpmn)], f"layout {source}")
-        original_svg = part_dir / "original.svg"
-        transformed_svg = part_dir / "transformed.svg"
-        run_command(image_command + [str(original_bpmn), str(original_svg)], f"render original {source}")
-        run_command(image_command + [str(transformed_bpmn), str(transformed_svg)], f"render transformed {source}")
-        original_metrics = collect_metrics(original_bpmn)
-        transformed_metrics = collect_metrics(transformed_bpmn)
-        entries.append(
-            {
+    raw_engine_commands = parse_engine_specs(getattr(args, "engines", []) or [], args.layout_command)
+    engine_versions = {name: engine_version(name, command) for name, command in raw_engine_commands.items()}
+    resolved_commands = {name: resolve_engine_command(name, command) for name, command in raw_engine_commands.items()}
+    cleanup_paths = [
+        Path(command[1])
+        for name, command in resolved_commands.items()
+        if command != raw_engine_commands[name] and len(command) > 1
+    ]
+
+    try:
+        entries: list[dict[str, object]] = []
+        for index, source in enumerate(inputs, start=1):
+            if not source.exists():
+                raise SystemExit(f"input BPMN does not exist: {source}")
+            part_dir = workdir / f"part-{index:02d}-{source.stem}"
+            part_dir.mkdir()
+
+            entry: dict[str, object] = {
                 "title": source.name,
                 "source": str(source),
                 "directory": part_dir.name,
-                "original_bpmn": str(original_bpmn.relative_to(workdir)),
-                "transformed_bpmn": str(transformed_bpmn.relative_to(workdir)),
-                "original_svg": str(original_svg.relative_to(workdir)),
-                "transformed_svg": str(transformed_svg.relative_to(workdir)),
-                "original_metrics": original_metrics,
-                "transformed_metrics": transformed_metrics,
+                "original": None,
+                "engines": {},
             }
-        )
 
-    metrics_doc = {"schema": "bpmn-layout-report/v1", "entries": entries}
-    (workdir / "metrics.json").write_text(json.dumps(metrics_doc, indent=2, sort_keys=True) + "\n", encoding="utf8")
-    (workdir / "index.html").write_text(report_html(metrics_doc), encoding="utf8")
-    return workdir / "index.html"
+            if source_has_di(source):
+                original_bpmn = part_dir / "original.bpmn"
+                shutil.copyfile(source, original_bpmn)
+                original_svg = part_dir / "original.svg"
+                run_command(image_command + [str(original_bpmn), str(original_svg)], f"render original {source}")
+                entry["original"] = {
+                    "bpmn": str(original_bpmn.relative_to(workdir)),
+                    "svg": str(original_svg.relative_to(workdir)),
+                    "metrics": collect_metrics(original_bpmn),
+                    "error": None,
+                }
+
+            for name, command in resolved_commands.items():
+                engine_bpmn = part_dir / f"{name}.bpmn"
+                shutil.copyfile(source, engine_bpmn)
+                column: dict[str, object] = {"bpmn": None, "svg": None, "metrics": None, "error": None}
+                error = run_engine_command(command + [str(engine_bpmn)], f"layout ({name}) {source}")
+                if error is None:
+                    engine_svg = part_dir / f"{name}.svg"
+                    error = run_engine_command(
+                        image_command + [str(engine_bpmn), str(engine_svg)], f"render ({name}) {source}"
+                    )
+                    if error is None:
+                        column["bpmn"] = str(engine_bpmn.relative_to(workdir))
+                        column["svg"] = str(engine_svg.relative_to(workdir))
+                        column["metrics"] = collect_metrics(engine_bpmn)
+                column["error"] = error
+                entry["engines"][name] = column  # type: ignore[index]
+
+            entries.append(entry)
+
+        metrics_doc = {
+            "schema": "bpmn-layout-report/v2",
+            "engines": [
+                {"name": name, "command": shlex.join(raw_engine_commands[name]), "version": engine_versions[name]}
+                for name in raw_engine_commands
+            ],
+            "entries": entries,
+        }
+        (workdir / "metrics.json").write_text(json.dumps(metrics_doc, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        (workdir / "index.html").write_text(report_html(metrics_doc), encoding="utf8")
+        return workdir / "index.html"
+    finally:
+        for path in cleanup_paths:
+            path.unlink(missing_ok=True)
 
 
-def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> str:
-    paths = [
+METRIC_ROW_PATHS: list[tuple[str, tuple[str, ...]]] = [
         ("diagrams", ("layout", "diagrams")),
         ("shapes", ("layout", "shapes")),
         ("edges", ("layout", "edges")),
@@ -994,50 +1127,104 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("message flows", ("semantic", "message_flows")),
         ("lanes", ("semantic", "lanes")),
         ("data references", ("semantic", "data_references")),
-    ]
+]
 
-    def get(doc: dict[str, object], path: tuple[str, ...]) -> object:
-        current: object = doc
-        for key in path:
-            current = current[key]  # type: ignore[index]
-        return current
 
+def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
+    """Look up a dotted metric path in a metrics document, returning None
+    (rather than raising) when the document is absent (an engine that
+    errored) or does not have that path -- a column that could not be
+    scored must read as missing, never crash the whole report (#53)."""
+    current: object = doc
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+def format_metric_cell(value: object, error: str | None) -> str:
+    if error is not None:
+        return "error"
+    if value is None:
+        return "n/a"
+    return str(value)
+
+
+ReportColumn = tuple[str, dict[str, object] | None, str | None]
+
+
+def metric_rows(columns: list[ReportColumn]) -> str:
+    """Render one row per tracked metric across N named (name, metrics,
+    error) columns -- generalized from the original fixed (original,
+    transformed) pair so a report can compare any number of engines (#53)."""
     rows = []
-    for label, path in paths:
-        before = get(original, path)
-        after = get(transformed, path)
-        rows.append(f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(before))}</td><td>{html.escape(str(after))}</td></tr>")
+    for label, path in METRIC_ROW_PATHS:
+        cells = "".join(
+            f"<td>{html.escape(format_metric_cell(get_metric(metrics, path), error))}</td>"
+            for _name, metrics, error in columns
+        )
+        rows.append(f"<tr><th>{html.escape(label)}</th>{cells}</tr>")
     return "\n".join(rows)
 
 
 def report_html(metrics_doc: dict[str, object]) -> str:
     entries = metrics_doc["entries"]  # type: ignore[index]
+    engines = metrics_doc.get("engines", [])  # type: ignore[union-attr]
+    engine_names = [engine["name"] for engine in engines]  # type: ignore[index]
     sections: list[str] = []
     for entry in entries:  # type: ignore[assignment]
         title = html.escape(entry["title"])
-        original_svg = html.escape(entry["original_svg"])
-        transformed_svg = html.escape(entry["transformed_svg"])
-        original_metrics = entry["original_metrics"]
-        transformed_metrics = entry["transformed_metrics"]
+        columns: list[ReportColumn] = []
+        figures: list[str] = []
+        original = entry.get("original")
+        if original:
+            columns.append(("original", original["metrics"], original["error"]))
+            figures.append(
+                f'<figure><figcaption>original</figcaption>'
+                f'<img src="{html.escape(original["svg"])}" alt="original BPMN image for {title}"></figure>'
+            )
+        for name in engine_names:
+            column = entry["engines"][name]  # type: ignore[index]
+            columns.append((name, column["metrics"], column["error"]))
+            if column["svg"]:
+                figures.append(
+                    f'<figure><figcaption>{html.escape(name)}</figcaption>'
+                    f'<img src="{html.escape(column["svg"])}" alt="{html.escape(name)} BPMN image for {title}"></figure>'
+                )
+            else:
+                figures.append(
+                    f'<figure><figcaption>{html.escape(name)}</figcaption>'
+                    f'<p class="engine-error">{html.escape(column["error"] or "no output")}</p></figure>'
+                )
+        header_cells = "".join(f"<th>{html.escape(name)}</th>" for name, _metrics, _error in columns)
+        details = "".join(
+            f"<details><summary>{html.escape(name)} metrics JSON</summary>"
+            f"<pre>{html.escape(json.dumps(metrics, indent=2, sort_keys=True) if metrics is not None else (error or 'n/a'))}</pre></details>"
+            for name, metrics, error in columns
+        )
         sections.append(
             f"""
 <section class="part">
   <h2>{title}</h2>
   <p><strong>Source:</strong> {html.escape(entry['source'])}</p>
   <h3>Images</h3>
-  <div class="images">
-    <figure><figcaption>Original</figcaption><img src="{original_svg}" alt="Original BPMN image for {title}"></figure>
-    <figure><figcaption>Transformed</figcaption><img src="{transformed_svg}" alt="Transformed BPMN image for {title}"></figure>
+  <div class="images" style="grid-template-columns: repeat({max(len(figures), 1)}, minmax(0, 1fr));">
+    {''.join(figures)}
   </div>
   <h3>Deterministic metrics</h3>
-  <table><thead><tr><th>Metric</th><th>Original</th><th>Transformed</th></tr></thead><tbody>
-    {metric_rows(original_metrics, transformed_metrics)}
+  <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+    {metric_rows(columns)}
   </tbody></table>
-  <details><summary>Original metrics JSON</summary><pre>{html.escape(json.dumps(original_metrics, indent=2, sort_keys=True))}</pre></details>
-  <details><summary>Transformed metrics JSON</summary><pre>{html.escape(json.dumps(transformed_metrics, indent=2, sort_keys=True))}</pre></details>
+  {details}
 </section>
 """
         )
+    engine_meta = "".join(
+        f"<li><strong>{html.escape(engine['name'])}</strong>: "  # type: ignore[index]
+        f"<code>{html.escape(engine['command'])}</code> (version {html.escape(engine['version'])})</li>"  # type: ignore[index]
+        for engine in engines
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1046,10 +1233,11 @@ def report_html(metrics_doc: dict[str, object]) -> str:
 <style>
 body {{ font-family: sans-serif; margin: 2rem; color: #1f2328; }}
 .part {{ border-top: 1px solid #d0d7de; padding-top: 1.5rem; margin-top: 1.5rem; }}
-.images {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }}
+.images {{ display: grid; gap: 1rem; }}
 figure {{ margin: 0; border: 1px solid #d0d7de; padding: .75rem; overflow: auto; }}
 figcaption {{ font-weight: 600; margin-bottom: .5rem; }}
 img {{ max-width: 100%; background: white; }}
+.engine-error {{ color: #a40e26; font-family: monospace; white-space: pre-wrap; }}
 table {{ border-collapse: collapse; margin: 1rem 0; }}
 th, td {{ border: 1px solid #d0d7de; padding: .35rem .5rem; text-align: right; }}
 th:first-child {{ text-align: left; }}
@@ -1059,6 +1247,8 @@ pre {{ overflow: auto; background: #f6f8fa; padding: 1rem; }}
 <body>
 <h1>BPMN layout feedback report</h1>
 <p>This report is ephemeral and workspace-local. Metrics are also available in <a href="metrics.json">metrics.json</a>.</p>
+<h2>Engines</h2>
+<ul>{engine_meta}</ul>
 {''.join(sections)}
 </body>
 </html>
@@ -1505,6 +1695,7 @@ def latest_report(output_dir: str) -> Path:
 # change: pass/fail behavior (exit non-zero if any failure exists) is unchanged
 # (see #29).
 METRIC_PRIORITY_LEVEL: dict[str, int] = {
+    "ours_engine_error": 1,
     "node_containment_violations": 1,
     "label_containment_violations": 1,
     "invalid_edge_attachments": 1,
@@ -1538,7 +1729,18 @@ def check_report(args: argparse.Namespace) -> None:
 
     for entry in document.get("entries", []):
         title = entry.get("title", entry.get("source", "diagram"))
-        layout = entry["transformed_metrics"]["layout"]
+        # check_report gates only our own engine ("ours") -- a baseline's
+        # failures are information for the comparison report, never a build
+        # failure (#53). Our own engine erroring out entirely is itself a
+        # gate failure: a report where "ours" produced no output cannot
+        # certify anything.
+        ours = entry.get("engines", {}).get("ours")
+        if ours is None:
+            raise SystemExit(f"{title}: report has no 'ours' engine column to check")
+        if ours.get("metrics") is None:
+            add("ours_engine_error", f"{title}: our own engine failed to produce output: {ours.get('error')}")
+            continue
+        layout = ours["metrics"]["layout"]
         for metric in (
             "edge_crossings",
             "edge_shape_intersections",
@@ -1602,13 +1804,22 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("inputs", nargs="*", help="BPMN files; omitted means persisted fixtures")
     report.add_argument("--output-dir", default=".bpmn-feedback/reports", help="workspace-local ephemeral report directory root")
     report.add_argument("--clear-output", action="store_true", help="remove previous report directories before rendering")
-    report.add_argument("--layout-command", default="bpmn-auto-layout", help="layout command, shell-style string")
+    report.add_argument("--layout-command", default="bpmn-auto-layout", help="our own engine's layout command, shell-style string")
+    report.add_argument(
+        "--engine",
+        action="append",
+        dest="engines",
+        default=[],
+        metavar="NAME=COMMAND",
+        help='additional named engine to compare against, e.g. --engine upstream="npx bpmn-auto-layout@1.3.0" '
+        "(repeatable; our own engine is always included as 'ours' unless overridden with --engine ours=...)",
+    )
     report.add_argument("--image-command", default="bpmn-to-image", help="image command, shell-style string")
 
     latest = subparsers.add_parser("latest", help="print the newest report index path")
     latest.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
-    check = subparsers.add_parser("check", help="fail if transformed report metrics contain layout defects")
+    check = subparsers.add_parser("check", help="fail if our own engine's report metrics contain layout defects")
     check.add_argument("--report", help="report HTML path or report directory; omitted means newest report")
     check.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
