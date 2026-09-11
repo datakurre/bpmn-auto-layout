@@ -974,6 +974,19 @@ def ours_version() -> str:
         return "unknown"
 
 
+def installed_npm_package_version(node_modules_root: Path, package: str) -> str | None:
+    """Read the resolved version of `package` from a node_modules tree that
+    has already been `npm install`-ed, e.g. tools/upstream-baseline's pinned
+    bpmn-auto-layout@1.3.0 (#54) -- the manifest under node_modules is what
+    was actually installed, which is what a reproducible comparison must
+    record, not just what package.json asked for."""
+    package_json = node_modules_root / "node_modules" / package / "package.json"
+    try:
+        return json.loads(package_json.read_text(encoding="utf8"))["version"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+
+
 def engine_version(name: str, command: list[str]) -> str:
     """Best-effort resolved version for an engine, so a published comparison
     records what was actually measured (#53, #54). A moving, unpinned
@@ -986,6 +999,16 @@ def engine_version(name: str, command: list[str]) -> str:
         match = re.search(r"@(\d[\w.\-]*)$", part)
         if match:
             return match.group(1)
+    # A wrapper script invoked by path (tools/upstream-baseline/run.mjs, the
+    # pinned bpmn-io/bpmn-auto-layout baseline) carries no @version in the
+    # command itself -- resolve it from what was actually npm-installed
+    # alongside the script instead.
+    for part in command:
+        script = Path(part)
+        if script.suffix == ".mjs" and script.is_file():
+            version = installed_npm_package_version(script.parent, "bpmn-auto-layout")
+            if version:
+                return version
     return "unknown"
 
 
@@ -1789,6 +1812,18 @@ def check_report(args: argparse.Namespace) -> None:
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             add("missing_named_labels", f"{title}: missing_named_labels={missing}")
+    # A pinned baseline (e.g. the upstream bpmn-io/bpmn-auto-layout engine,
+    # #54) that starts erroring on a fixture it used to handle is a real
+    # signal -- a new upstream release broke, or someone's local install
+    # drifted -- but it is not a build failure of *our* engine, so it must
+    # never affect the exit code (#53's "a baseline's failures are
+    # information"). Print it instead: visible in CI logs on every run
+    # rather than silently altering what the comparison measures.
+    for entry in document.get("entries", []):
+        title = entry.get("title", entry.get("source", "diagram"))
+        for name, column in entry.get("engines", {}).items():
+            if name != "ours" and column.get("error"):
+                print(f"baseline engine {name!r} failed on {title}: {column['error']}")
     if failures:
         failures.sort(key=lambda item: item[0])
         lines = [f"  [L{level}] {text}" if level != 99 else f"  {text}" for level, text in failures]

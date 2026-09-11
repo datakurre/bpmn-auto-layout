@@ -162,6 +162,12 @@
             pkgs.gnumake
             pkgs.python3
             self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-feedback-ui
+            # `node`/`npm` on PATH for tools/upstream-baseline (#54): the
+            # pinned bpmn-io/bpmn-auto-layout comparison baseline is a plain
+            # npm install kept deliberately outside the nix package graph
+            # (a moving external engine is not something to vendor
+            # hermetically), installed and run through this instead.
+            pkgs.nodejs
           ];
         };
       });

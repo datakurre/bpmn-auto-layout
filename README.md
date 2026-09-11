@@ -69,6 +69,25 @@ Persisted source fixtures are stored directly under `fixtures/`; layout commands
 operate on ephemeral report copies so source BPMN cannot be overwritten by a
 broken layout implementation.
 
+## Comparing against another engine
+
+`report` accepts a repeatable `--engine NAME=COMMAND` option to lay out the
+same inputs with additional engines and score them identically alongside our
+own output (our own engine is always included as `ours` unless overridden):
+
+```sh
+nix develop --command npm ci --prefix tools/upstream-baseline
+nix develop --command python3 tools/bpmn_feedback.py report fixtures/*.bpmn \
+  --engine upstream="node tools/upstream-baseline/run.mjs"
+```
+
+`tools/upstream-baseline` is a pinned, isolated install of
+`bpmn-io/bpmn-auto-layout` -- the upstream project this repo shares a name
+with -- used as a fixed external comparison baseline. An engine that errors
+or is missing degrades to an empty column with the error recorded; `check`
+still gates only `ours`, so a baseline's numbers are information, never a
+build failure.
+
 Run a stdlib-only validation with:
 
 ```sh

@@ -41,6 +41,14 @@ jobs:
         with:
           extra_nix_config: |
             experimental-features = nix-command flakes
+      # Pinned external comparison baseline (#54): a fixed version of the
+      # upstream bpmn-io/bpmn-auto-layout engine we share a name with,
+      # installed as a plain npm dependency (not vendored into the nix
+      # package graph -- a moving third-party engine is not something to
+      # pin hermetically there) so every report also shows how our output
+      # compares against it.
+      - name: Install pinned upstream baseline
+        run: nix develop --command npm ci --prefix tools/upstream-baseline
       # Not a required check yet (#44): the fixture corpus currently has
       # ~70 findings, mostly pre-existing lane/subprocess containment
       # issues (§8 priority level 1) unrelated to any single change. This
@@ -48,10 +56,13 @@ jobs:
       # means a regression here shows as a warning annotation instead of
       # a red X, so the gate can be tightened fixture-by-fixture without
       # blocking unrelated work in the meantime. Flip continue-on-error to
-      # false once priority 1-2 findings are cleared.
+      # false once priority 1-2 findings are cleared. The baseline's own
+      # failures never affect this: check_report gates only our own engine
+      # and merely prints when the baseline errors (see #53).
       - name: Report and check layout quality
         continue-on-error: true
         run: |
           nix develop --command python3 tools/bpmn_feedback.py \
-            report fixtures/*.bpmn
+            report fixtures/*.bpmn \
+            --engine upstream="node tools/upstream-baseline/run.mjs"
           nix develop --command python3 tools/bpmn_feedback.py check

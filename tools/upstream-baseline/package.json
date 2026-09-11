@@ -1,0 +1,9 @@
+{
+  "name": "bpmn-auto-layout-upstream-baseline",
+  "private": true,
+  "description": "Pinned bpmn-io/bpmn-auto-layout install used as a fixed external comparison baseline by tools/bpmn_feedback.py's N-way report (#54). Never import from application code -- this is a standalone install kept deliberately isolated from packages/bpmn-auto-layout's own dependencies so the two engines' resolved versions never drift into each other.",
+  "type": "module",
+  "dependencies": {
+    "bpmn-auto-layout": "1.3.0"
+  }
+}
