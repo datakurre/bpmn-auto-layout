@@ -1,0 +1,296 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_NestedSubprocessExceptions" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:message id="Message_Confirmed" name="Confirmed" />
+  <bpmn:process id="Process_NestedSubprocessExceptions" name="Nested subprocess with exception semantics" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Request received">
+      <bpmn:outgoing>Flow_Start_Validate</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Validate" name="Validate request">
+      <bpmn:incoming>Flow_Start_Validate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Validate_Route</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:exclusiveGateway id="Gateway_Route" name="Route request" default="Flow_Route_Fallback">
+      <bpmn:incoming>Flow_Validate_Route</bpmn:incoming>
+      <bpmn:outgoing>Flow_Route_Fallback</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Route_Fulfil</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Fallback" name="Handle manually">
+      <bpmn:incoming>Flow_Route_Fallback</bpmn:incoming>
+      <bpmn:outgoing>Flow_Fallback_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Fallback" name="Handled manually">
+      <bpmn:incoming>Flow_Fallback_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:subProcess id="SubProcess_Outer" name="Fulfil order">
+      <bpmn:incoming>Flow_Route_Fulfil</bpmn:incoming>
+      <bpmn:outgoing>Flow_Outer_Wait</bpmn:outgoing>
+      <bpmn:startEvent id="Sub_Start" name="Begin">
+        <bpmn:outgoing>Sub_Flow_Start_Gateway</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:exclusiveGateway id="Sub_Gateway_Split" name="Ship type?" default="Sub_Flow_Split_Standard">
+        <bpmn:incoming>Sub_Flow_Start_Gateway</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Split_Standard</bpmn:outgoing>
+        <bpmn:outgoing>Sub_Flow_Split_Freight</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:task id="Sub_Task_Standard" name="Standard pick">
+        <bpmn:incoming>Sub_Flow_Split_Standard</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Standard_Join</bpmn:outgoing>
+      </bpmn:task>
+      <bpmn:subProcess id="SubProcess_Inner" name="Prepare freight">
+        <bpmn:incoming>Sub_Flow_Split_Freight</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Freight_Join</bpmn:outgoing>
+        <bpmn:startEvent id="Inner_Start" name="Begin">
+          <bpmn:outgoing>Inner_Flow_Start_Task</bpmn:outgoing>
+        </bpmn:startEvent>
+        <bpmn:task id="Inner_Task_Package" name="Package freight">
+          <bpmn:incoming>Inner_Flow_Start_Task</bpmn:incoming>
+          <bpmn:outgoing>Inner_Flow_Task_End</bpmn:outgoing>
+        </bpmn:task>
+        <bpmn:endEvent id="Inner_End" name="Freight ready">
+          <bpmn:incoming>Inner_Flow_Task_End</bpmn:incoming>
+        </bpmn:endEvent>
+        <bpmn:sequenceFlow id="Inner_Flow_Start_Task" sourceRef="Inner_Start" targetRef="Inner_Task_Package" />
+        <bpmn:sequenceFlow id="Inner_Flow_Task_End" sourceRef="Inner_Task_Package" targetRef="Inner_End" />
+      </bpmn:subProcess>
+      <bpmn:exclusiveGateway id="Sub_Gateway_Join" name="Ready">
+        <bpmn:incoming>Sub_Flow_Standard_Join</bpmn:incoming>
+        <bpmn:incoming>Sub_Flow_Freight_Join</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Join_End</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="Sub_End" name="Ready to ship">
+        <bpmn:incoming>Sub_Flow_Join_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Sub_Flow_Start_Gateway" sourceRef="Sub_Start" targetRef="Sub_Gateway_Split" />
+      <bpmn:sequenceFlow id="Sub_Flow_Split_Standard" name="standard" sourceRef="Sub_Gateway_Split" targetRef="Sub_Task_Standard" />
+      <bpmn:sequenceFlow id="Sub_Flow_Split_Freight" sourceRef="Sub_Gateway_Split" targetRef="SubProcess_Inner">
+        <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${shipType == "freight"}</bpmn:conditionExpression>
+      </bpmn:sequenceFlow>
+      <bpmn:sequenceFlow id="Sub_Flow_Standard_Join" sourceRef="Sub_Task_Standard" targetRef="Sub_Gateway_Join" />
+      <bpmn:sequenceFlow id="Sub_Flow_Freight_Join" sourceRef="SubProcess_Inner" targetRef="Sub_Gateway_Join" />
+      <bpmn:sequenceFlow id="Sub_Flow_Join_End" sourceRef="Sub_Gateway_Join" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:eventBasedGateway id="Gateway_AwaitResponse" name="Await response">
+      <bpmn:incoming>Flow_Outer_Wait</bpmn:incoming>
+      <bpmn:outgoing>Flow_Wait_Timeout</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Wait_Confirmed</bpmn:outgoing>
+    </bpmn:eventBasedGateway>
+    <bpmn:intermediateCatchEvent id="Catch_Timeout" name="No response">
+      <bpmn:incoming>Flow_Wait_Timeout</bpmn:incoming>
+      <bpmn:outgoing>Flow_Timeout_Error</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Catch_Timeout_timerEventDefinition" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="End_Error" name="Fulfilment failed">
+      <bpmn:incoming>Flow_Timeout_Error</bpmn:incoming>
+      <bpmn:errorEventDefinition id="End_Error_errorEventDefinition" />
+    </bpmn:endEvent>
+    <bpmn:intermediateCatchEvent id="Catch_Confirmed" name="Customer confirmed">
+      <bpmn:incoming>Flow_Wait_Confirmed</bpmn:incoming>
+      <bpmn:outgoing>Flow_Confirmed_End</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Catch_Confirmed_messageEventDefinition" messageRef="Message_Confirmed" />
+    </bpmn:intermediateCatchEvent>
+    <bpmn:endEvent id="End_Fulfilled" name="Fulfilled">
+      <bpmn:incoming>Flow_Confirmed_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Validate" sourceRef="Start_1" targetRef="Task_Validate" />
+    <bpmn:sequenceFlow id="Flow_Validate_Route" sourceRef="Task_Validate" targetRef="Gateway_Route" />
+    <bpmn:sequenceFlow id="Flow_Route_Fallback" name="invalid" sourceRef="Gateway_Route" targetRef="Task_Fallback" />
+    <bpmn:sequenceFlow id="Flow_Route_Fulfil" sourceRef="Gateway_Route" targetRef="SubProcess_Outer">
+      <bpmn:conditionExpression xsi:type="bpmn:tFormalExpression">${valid}</bpmn:conditionExpression>
+    </bpmn:sequenceFlow>
+    <bpmn:sequenceFlow id="Flow_Fallback_End" sourceRef="Task_Fallback" targetRef="End_Fallback" />
+    <bpmn:sequenceFlow id="Flow_Outer_Wait" sourceRef="SubProcess_Outer" targetRef="Gateway_AwaitResponse" />
+    <bpmn:sequenceFlow id="Flow_Wait_Timeout" sourceRef="Gateway_AwaitResponse" targetRef="Catch_Timeout" />
+    <bpmn:sequenceFlow id="Flow_Wait_Confirmed" sourceRef="Gateway_AwaitResponse" targetRef="Catch_Confirmed" />
+    <bpmn:sequenceFlow id="Flow_Timeout_Error" sourceRef="Catch_Timeout" targetRef="End_Error" />
+    <bpmn:sequenceFlow id="Flow_Confirmed_End" sourceRef="Catch_Confirmed" targetRef="End_Fulfilled" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_NestedSubprocessExceptions">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_NestedSubprocessExceptions" bpmnElement="Process_NestedSubprocessExceptions">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="236" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate">
+        <dc:Bounds x="148" y="170" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Route_di" bpmnElement="Gateway_Route" isMarkerVisible="true">
+        <dc:Bounds x="298" y="185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="303" y="152" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fallback_di" bpmnElement="Task_Fallback">
+        <dc:Bounds x="390" y="470" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Fallback_di" bpmnElement="End_Fallback">
+        <dc:Bounds x="540" y="492" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="513" y="536" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubProcess_Outer_di" bpmnElement="SubProcess_Outer" isExpanded="true">
+        <dc:Bounds x="398" y="10" width="809" height="400" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_AwaitResponse_di" bpmnElement="Gateway_AwaitResponse" isMarkerVisible="true">
+        <dc:Bounds x="1257" y="185" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1262" y="152" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Timeout_di" bpmnElement="Catch_Timeout">
+        <dc:Bounds x="1357" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1330" y="236" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Error_di" bpmnElement="End_Error">
+        <dc:Bounds x="1443" y="192" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1421" y="236" width="80" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Catch_Confirmed_di" bpmnElement="Catch_Confirmed">
+        <dc:Bounds x="1352" y="492" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1325" y="536" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Fulfilled_di" bpmnElement="End_Fulfilled">
+        <dc:Bounds x="1438" y="492" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1416" y="536" width="80" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="442" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="415" y="366" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Gateway_Split_di" bpmnElement="Sub_Gateway_Split" isMarkerVisible="true">
+        <dc:Bounds x="528" y="315" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="533" y="282" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Task_Standard_di" bpmnElement="Sub_Task_Standard">
+        <dc:Bounds x="628" y="300" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubProcess_Inner_di" bpmnElement="SubProcess_Inner" isExpanded="true">
+        <dc:Bounds x="620" y="40" width="360" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Gateway_Join_di" bpmnElement="Sub_Gateway_Join" isMarkerVisible="true">
+        <dc:Bounds x="1035" y="315" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1039" y="371" width="42" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="1135" y="322" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1108" y="366" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_Start_di" bpmnElement="Inner_Start">
+        <dc:Bounds x="662" y="92" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="635" y="136" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_Task_Package_di" bpmnElement="Inner_Task_Package">
+        <dc:Bounds x="748" y="70" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_End_di" bpmnElement="Inner_End">
+        <dc:Bounds x="898" y="92" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="871" y="136" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Validate_di" bpmnElement="Flow_Start_Validate">
+        <di:waypoint x="98" y="210" />
+        <di:waypoint x="148" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Validate_Route_di" bpmnElement="Flow_Validate_Route">
+        <di:waypoint x="248" y="210" />
+        <di:waypoint x="298" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Route_Fallback_di" bpmnElement="Flow_Route_Fallback">
+        <di:waypoint x="323" y="235" />
+        <di:waypoint x="323" y="510" />
+        <di:waypoint x="390" y="510" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="328.5" y="494" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Route_Fulfil_di" bpmnElement="Flow_Route_Fulfil">
+        <di:waypoint x="348" y="210" />
+        <di:waypoint x="398" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fallback_End_di" bpmnElement="Flow_Fallback_End">
+        <di:waypoint x="490" y="510" />
+        <di:waypoint x="540" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Outer_Wait_di" bpmnElement="Flow_Outer_Wait">
+        <di:waypoint x="1207" y="210" />
+        <di:waypoint x="1257" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Wait_Timeout_di" bpmnElement="Flow_Wait_Timeout">
+        <di:waypoint x="1307" y="210" />
+        <di:waypoint x="1357" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Wait_Confirmed_di" bpmnElement="Flow_Wait_Confirmed">
+        <di:waypoint x="1282" y="235" />
+        <di:waypoint x="1282" y="510" />
+        <di:waypoint x="1352" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timeout_Error_di" bpmnElement="Flow_Timeout_Error">
+        <di:waypoint x="1393" y="210" />
+        <di:waypoint x="1443" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Confirmed_End_di" bpmnElement="Flow_Confirmed_End">
+        <di:waypoint x="1388" y="510" />
+        <di:waypoint x="1438" y="510" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Inner_Flow_Start_Task_di" bpmnElement="Inner_Flow_Start_Task">
+        <di:waypoint x="698" y="110" />
+        <di:waypoint x="748" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Inner_Flow_Task_End_di" bpmnElement="Inner_Flow_Task_End">
+        <di:waypoint x="848" y="110" />
+        <di:waypoint x="898" y="110" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Start_Gateway_di" bpmnElement="Sub_Flow_Start_Gateway">
+        <di:waypoint x="478" y="340" />
+        <di:waypoint x="528" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Split_Standard_di" bpmnElement="Sub_Flow_Split_Standard">
+        <di:waypoint x="578" y="359" />
+        <di:waypoint x="628" y="359" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="572" y="363" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Split_Freight_di" bpmnElement="Sub_Flow_Split_Freight">
+        <di:waypoint x="578" y="336" />
+        <di:waypoint x="618" y="336" />
+        <di:waypoint x="618" y="140" />
+        <di:waypoint x="620" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Standard_Join_di" bpmnElement="Sub_Flow_Standard_Join">
+        <di:waypoint x="728" y="340" />
+        <di:waypoint x="1035" y="340" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Freight_Join_di" bpmnElement="Sub_Flow_Freight_Join">
+        <di:waypoint x="980" y="140" />
+        <di:waypoint x="1060" y="140" />
+        <di:waypoint x="1060" y="315" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Join_End_di" bpmnElement="Sub_Flow_Join_End">
+        <di:waypoint x="1085" y="340" />
+        <di:waypoint x="1135" y="340" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

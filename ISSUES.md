@@ -43,16 +43,28 @@ No urgent issue was found here. Keep this fixture as a smoke test for:
 
 ## Fixture: `collaboration-lanes-messages.bpmn`
 
-**Assessment: mostly good baseline.**
+**Assessment: pool separation is good; the newly-added lanes expose the
+untested lane-emitting branch of collaboration DI generation (see #38).**
 
-The two pools/lane-like participant regions are compact and the message flows
-are visually distinguishable from sequence flows. `Send order` to `Order
-message` and `Send confirmation` to `Receive confirmation` are understandable.
+The two pools and the dashed message-flow routing are still compact and
+readable, as before. Each participant now also carries two lanes (added to
+close a corpus coverage gap: pools and lanes previously never co-occurred in
+any fixture, so the lane-emitting branch of `createCollaborationDi`
+(`di-creation.ts:152-186`) ran nowhere in the corpus). With that branch now
+exercised, `nix develop --command python3 tools/bpmn_feedback.py check`
+reports real §8 L1 defects that this fixture previously could not surface:
 
-The main thing to preserve is the pool separation and the dashed message-flow
-routing. This fixture should be used as a regression test whenever container
-packing or collaboration DI generation changes. It is not the first target for
-algorithm work.
+- `Catch_Confirmation`'s label escapes both its lane (`Lane_Customer_Fulfilment`)
+  and its participant (`Participant_Customer`).
+- `MessageFlow_Order` and `MessageFlow_Confirmation` cross lane bands they do
+  not belong to (`Lane_Customer_Fulfilment`, `Lane_Supplier_Intake`).
+- Several lane/participant label boxes overlap each other and the lane bands
+  themselves (L2).
+
+These were not visible before this fixture had lanes; they are open work, not
+something this corpus-coverage change attempted to fix. Preserve the pool
+separation and message-flow routing as the baseline to protect while fixing
+the lane-label and message-flow-vs-lane-band defects above.
 
 ## Fixture: `data-artifacts.bpmn`
 
@@ -267,35 +279,54 @@ Recommended direction:
 - Separate data-artifact packing from flow-node track assignment so unused
   artifacts do not dictate the exception-route geometry.
 
+## Fixture: `nested-subprocess-exceptions.bpmn`
+
+**Assessment: new fixture, added to close a corpus coverage gap (#38); its
+first report already surfaces a real §8 L1 containment defect.**
+
+Added because the corpus had no nesting depth beyond one level, no gateway
+branch inside a subprocess, and no `default`/`conditionExpression`/
+`errorEventDefinition` semantics anywhere (see the coverage-gap issue for the
+full inventory). This fixture nests `SubProcess_Inner` inside
+`SubProcess_Outer`, branches on a gateway inside each container, marks a
+`default` flow on both gateways, attaches a `conditionExpression` to the
+non-default branches, routes an `eventBasedGateway` to a timer/message race,
+and ends one branch on an `errorEventDefinition` end event.
+
+`nix develop --command python3 tools/bpmn_feedback.py check` on this fixture
+reports:
+
+- `Inner_Flow_Start_Task` and `Inner_Flow_Task_End` (both entirely inside
+  `SubProcess_Inner`) intersect the *outer* container `SubProcess_Outer` (L1).
+  This is the nesting-depth-2 case the corpus previously could not produce.
+- `Sub_Flow_Split_Standard`'s label intersects both its own gateway and its
+  target task (L2).
+
+Not fixed here — this fixture's purpose is to make the defect visible, not to
+change the routing algorithm in the same change as a corpus-coverage fix.
+
 ## Tooling issue: fixture self-test contract
 
-The direct command
+The self-test's required-element-type inventory and the persisted fixture set
+have since been reconciled (`tools/bpmn_feedback.py`'s `selftest` command
+passes as of this review). Keep it that way: run
 
 ```sh
 nix develop --command python3 tools/bpmn_feedback.py selftest
 ```
 
-currently fails before layout validation because the self-test expects element
-types that are not present in the checked-in fixture set. The reported missing
-types include `receiveTask`, `businessRuleTask`, `callActivity`,
-`complexGateway`, `eventBasedGateway`, and several event-definition types.
-
-This is not evidence that the current layouts contain those elements. It means
-the fixture inventory and the persisted fixtures have diverged.
-
-Before using the self-test or feedback quality gate as a required regression
-step, choose one contract and make it explicit:
-
-- add fixtures covering every required type; or
-- reduce the required-type inventory to the types intentionally covered; or
-- split the inventory into “required coverage” and “optional future coverage”.
-
-The fix should be separate from routing changes so a failed inventory check
-does not obscure layout regressions.
+after adding or removing a fixture, and add a matching entry to `regression`'s
+`REGRESSION_CHECKS` whenever a new fixture under `fixtures/regression/` pins a
+single-concern invariant (see `AGENTS.md`).
 
 ## Suggested handoff for a new agent
 
-Start with `gateways-branches-loops.bpmn` and
+Two coverage gaps closed after this review now have their own findings above
+and are worth picking up alongside the original priority list:
+`collaboration-lanes-messages.bpmn`'s lane-label/message-flow defects, and
+`nested-subprocess-exceptions.bpmn`'s nesting-depth-2 containment defect.
+
+Otherwise, start with `gateways-branches-loops.bpmn` and
 `subprocess-boundary-data-lanes.bpmn`, not with the simple fixtures. Reproduce
 the observations by laying out copies and rendering them with
 `nix develop --command bpmn-to-image`. Inspect the generated DI for the named
