@@ -151,6 +151,52 @@ def attach_side(point: tuple[float, float], box: dict[str, float]) -> str | None
     return None
 
 
+def segment_direction(a: tuple[float, float], b: tuple[float, float]) -> tuple[str, int] | None:
+    """Which way a single orthogonal segment travels, as (axis, sign), or
+    None for a degenerate (near zero-length) segment. Used to tell a
+    genuine corner from a collinear pass-through waypoint (#56)."""
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    if abs(dx) < 0.5 and abs(dy) < 0.5:
+        return None
+    if abs(dx) >= abs(dy):
+        return ("x", 1 if dx > 0 else -1)
+    return ("y", 1 if dy > 0 else -1)
+
+
+def count_real_bends(points: list[tuple[float, float]]) -> tuple[int, list[tuple[float, float]]]:
+    """Count genuine direction changes in an orthogonal polyline, and
+    separately return any collinear intermediate waypoint found along the
+    way -- an intermediate point where the route does not actually turn.
+
+    #46 already excluded exact duplicate waypoints from bend/length counts
+    (a repeated point is a zero-length segment). This closes the same gap
+    for a collinear-but-not-duplicate point: `max(0, len(points) - 2)`
+    (the previous definition of total_bends, and of excess_turns' actual
+    bend count) silently counted every intermediate waypoint as a bend
+    whether or not the route actually turned there. Confirmed live in this
+    engine's own output during #56's cross-engine metric audit: a
+    MessageFlow with three collinear waypoints on a single straight line,
+    inflating its bend count by one for no geometric reason. The risk is
+    symmetric across engines -- any router that leaves a pass-through
+    waypoint (grid-snapping, a channel-plan artifact, a merge of two
+    formerly-distinct segments) would have its bend count inflated the same
+    way, understating a competitor or overstating ourselves depending on
+    which side it happens to occur."""
+    bends = 0
+    collinear: list[tuple[float, float]] = []
+    for i in range(1, len(points) - 1):
+        before = segment_direction(points[i - 1], points[i])
+        after = segment_direction(points[i], points[i + 1])
+        if before is None or after is None:
+            continue  # a degenerate segment is counted separately (#46)
+        if before == after:
+            collinear.append(points[i])
+        else:
+            bends += 1
+    return bends, collinear
+
+
 def min_bend_count(
     source_point: tuple[float, float],
     source_side: str,
@@ -509,8 +555,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
     max_lattice_remainder = 0.0
     degenerate_waypoints = 0
     degenerate_waypoint_details: list[dict[str, object]] = []
+    collinear_waypoints = 0
+    collinear_waypoint_details: list[dict[str, object]] = []
     horizontal_flow_gaps: list[float] = []
     excess_turns_total = 0
+    excess_turns_unscored = 0
+    excess_turns_unscored_details: list[str] = []
     excess_turn_details: list[dict[str, object]] = []
     detour_ratios: list[float] = []
     shapes_by_plane_target = {
@@ -560,7 +610,13 @@ def collect_metrics(path: Path) -> dict[str, object]:
         )
     for edge in edges:
         points = edge["points"]  # type: ignore[assignment]
-        total_bends += max(0, len(points) - 2)
+        real_bends, collinear_points = count_real_bends(points)  # type: ignore[arg-type]
+        total_bends += real_bends
+        for point in collinear_points:
+            collinear_waypoints += 1
+            collinear_waypoint_details.append(
+                {"edge": str(edge["bpmnElement"]), "point": [round(point[0], 2), round(point[1], 2)]}
+            )
         source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
         source = shapes_by_plane_target.get((edge["plane"], source_id))
         target = shapes_by_plane_target.get((edge["plane"], target_id))
@@ -660,12 +716,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
             source_side = attach_side(points[0], source_bounds)
             target_side = attach_side(points[-1], target_bounds)
             if source_side and target_side:
-                actual_bends = max(0, len(points) - 2)
                 baseline_bends = min_bend_count(points[0], source_side, points[-1], target_side)
-                excess = max(0, actual_bends - baseline_bends)
+                excess = max(0, real_bends - baseline_bends)
                 if excess > 0:
                     excess_turns_total += excess
                     excess_turn_details.append({"edge": str(edge["bpmnElement"]), "excess_turns": excess})
+            else:
+                # attach_side found neither endpoint sitting on its node's
+                # boundary -- no baseline could be computed for this edge, so
+                # it contributes neither to excess_turns_total nor silently
+                # to a false 0 (#56 item 3: a metric that cannot be computed
+                # for an edge must be visibly excluded, not folded into the
+                # count as if it scored perfectly).
+                excess_turns_unscored += 1
+                excess_turns_unscored_details.append(str(edge["bpmnElement"]))
             port_distance = abs(points[0][0] - points[-1][0]) + abs(points[0][1] - points[-1][1])
             if port_distance > 0.5:
                 detour_ratios.append(edge_manhattan / port_distance)
@@ -766,8 +830,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "non_orthogonal_segments": non_orthogonal_segments,
             "degenerate_waypoints": degenerate_waypoints,
             "degenerate_waypoint_details": degenerate_waypoint_details,
+            "collinear_waypoints": collinear_waypoints,
+            "collinear_waypoint_details": collinear_waypoint_details,
             "excess_turns": excess_turns_total,
             "excess_turn_details": excess_turn_details,
+            "excess_turns_unscored": excess_turns_unscored,
+            "excess_turns_unscored_details": excess_turns_unscored_details,
             "detour_ratio": {
                 "count": len(detour_ratios),
                 "min": round(min(detour_ratios), 2) if detour_ratios else None,
@@ -1171,6 +1239,7 @@ OTHER_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
     ("label/edge intersections", ("layout", "label_edge_intersections")),
     ("detour ratio average", ("layout", "detour_ratio", "avg")),
     ("detour ratio maximum", ("layout", "detour_ratio", "max")),
+    ("collinear pass-through waypoints", ("layout", "collinear_waypoints")),
     ("non-50px route segments (our grid convention)", ("layout", "route_lattice", "non_multiple_segments")),
     ("grid center-x avg deviation (our grid convention)", ("layout", "grid_center_x_deviation_avg")),
     ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
@@ -1207,6 +1276,9 @@ def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
     return current
 
 
+EXCESS_TURNS_PATH: tuple[str, ...] = ("layout", "excess_turns")
+
+
 def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None, error: str | None) -> str:
     if error is not None:
         return "error"
@@ -1215,6 +1287,15 @@ def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None,
     value = get_metric(metrics, path)
     if value is None:
         return "n/a"
+    if path == EXCESS_TURNS_PATH:
+        # #56: an edge whose attach sides don't resolve to a boundary side
+        # (attach_side returns None) cannot get a baseline bend count, so it
+        # is excluded from `value` rather than silently read as 0 excess.
+        # Surface that exclusion instead of letting a clean-looking total
+        # imply full coverage.
+        unscored = get_metric(metrics, ("layout", "excess_turns_unscored")) or 0
+        if unscored:
+            return f"{value} (+{unscored} unscored)"
     return str(value)
 
 
@@ -1736,6 +1817,228 @@ REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
 }
 
 
+def _metrics_for_xml(xml: str) -> dict[str, object]:
+    """Run collect_metrics against an in-memory BPMN+DI string via a scratch
+    temp file. Backing tool for metric_selftests: each check builds its own
+    minimal, hand-verified DI rather than depending on any layout engine's
+    output (#56 item 4) -- every metric was previously validated only by
+    agreeing with the engine it was written against, which is circular."""
+    with tempfile.NamedTemporaryFile("w", suffix=".bpmn", delete=False, encoding="utf8") as handle:
+        handle.write(xml)
+        temp_path = Path(handle.name)
+    try:
+        return collect_metrics(temp_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+_METRIC_TEST_XML_HEADER = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<bpmn:definitions xmlns:bpmn="{bpmn}" xmlns:bpmndi="{bpmndi}" xmlns:dc="{dc}" xmlns:di="{di}" '
+    'id="Definitions_MetricTest" targetNamespace="https://example.com/metric-test">\n'
+).format(**NS)
+
+
+def _wrap_metric_test(process_body: str, diagram_body: str) -> str:
+    return (
+        f"{_METRIC_TEST_XML_HEADER}"
+        f'  <bpmn:process id="Process_MetricTest" isExecutable="false">\n{process_body}  </bpmn:process>\n'
+        '  <bpmndi:BPMNDiagram id="Diagram_MetricTest">\n'
+        '    <bpmndi:BPMNPlane id="Plane_MetricTest" bpmnElement="Process_MetricTest">\n'
+        f"{diagram_body}    </bpmndi:BPMNPlane>\n"
+        "  </bpmndi:BPMNDiagram>\n"
+        "</bpmn:definitions>\n"
+    )
+
+
+def metric_selftests() -> None:
+    """Pin each audited metric to a value a human verified against
+    hand-built DI, independent of any layout engine (#56 item 4)."""
+    failures: list[str] = []
+    checks = 0
+
+    def expect(name: str, actual: object, expected: object) -> None:
+        nonlocal checks
+        checks += 1
+        if actual != expected:
+            failures.append(f"{name}: expected {expected!r}, got {actual!r}")
+
+    # shape_overlaps: two tasks whose bounds overlap by a known amount.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="50" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("shape_overlaps (two overlapping tasks)", layout["shape_overlaps"], 1)
+
+    # edge_shape_intersections: a flow between A and C drawn straight through
+    # B's bounds, where B is not one of the flow's own endpoints.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n    <bpmn:task id="C" name="C" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="C" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="150" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="300" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="100" y="40" />\n        <di:waypoint x="400" y="40" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("edge_shape_intersections (flow drawn through an uninvolved task)", layout["edge_shape_intersections"], 1)
+
+    # edge_crossings: an unrelated horizontal and vertical flow crossing in
+    # the interior of both segments, far from any node -- not the "routes
+    # converge at a shared node" geometry #48 exempts.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:task id="C" name="C" />\n    <bpmn:task id="D" name="D" />\n'
+            '    <bpmn:sequenceFlow id="Horizontal" sourceRef="A" targetRef="B" />\n'
+            '    <bpmn:sequenceFlow id="Vertical" sourceRef="C" targetRef="D" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-50" y="30" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="130" y="30" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="30" y="-50" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="D_di" bpmnElement="D"><dc:Bounds x="30" y="130" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="Horizontal_di" bpmnElement="Horizontal">\n'
+            '        <di:waypoint x="0" y="50" />\n        <di:waypoint x="120" y="50" />\n'
+            "      </bpmndi:BPMNEdge>\n"
+            '      <bpmndi:BPMNEdge id="Vertical_di" bpmnElement="Vertical">\n'
+            '        <di:waypoint x="40" y="0" />\n        <di:waypoint x="40" y="120" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("edge_crossings (two unrelated flows crossing mid-route)", layout["edge_crossings"], 1)
+
+    # total_bends / collinear_waypoints: a real bend at (100,0), then a
+    # collinear pass-through waypoint at (100,100) that does not turn --
+    # confirmed live in this engine's own output during the #56 audit.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="100" y="150" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="0" y="0" />\n        <di:waypoint x="100" y="0" />\n'
+            '        <di:waypoint x="100" y="100" />\n        <di:waypoint x="100" y="150" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("total_bends (one real bend, one collinear pass-through)", layout["total_bends"], 1)
+    expect("collinear_waypoints (pass-through point excluded from total_bends)", layout["collinear_waypoints"], 1)
+
+    # degenerate_waypoints: a duplicated consecutive point contributes to
+    # neither total_bends nor collinear_waypoints (#46, reconfirmed by #56).
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="0" y="0" />\n        <di:waypoint x="50" y="0" />\n'
+            '        <di:waypoint x="50" y="0" />\n        <di:waypoint x="100" y="0" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("degenerate_waypoints (duplicated consecutive point)", layout["degenerate_waypoints"], 1)
+    expect("total_bends (duplicated point is not a bend)", layout["total_bends"], 0)
+    expect("collinear_waypoints (duplicated point is not collinear either)", layout["collinear_waypoints"], 0)
+
+    # excess_turns: two ports facing each other, aligned so a straight route
+    # is geometrically possible (baseline 0 bends), but the drawn route
+    # takes 4 unnecessary bends -- min_bend_count's baseline must still
+    # reflect 0 so every one of the 4 is reported as excess.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="300" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="100" y="40" />\n        <di:waypoint x="150" y="40" />\n'
+            '        <di:waypoint x="150" y="80" />\n        <di:waypoint x="250" y="80" />\n'
+            '        <di:waypoint x="250" y="40" />\n        <di:waypoint x="300" y="40" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("excess_turns (4 unnecessary bends where a straight route fit)", layout["excess_turns"], 4)
+    expect("excess_turns_unscored (both attach sides resolve cleanly)", layout["excess_turns_unscored"], 0)
+
+    # label_overlaps: two overlapping label boxes on unrelated elements.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A">\n'
+            '        <dc:Bounds x="0" y="0" width="100" height="80" />\n'
+            '        <bpmndi:BPMNLabel><dc:Bounds x="200" y="0" width="80" height="20" /></bpmndi:BPMNLabel>\n'
+            "      </bpmndi:BPMNShape>\n"
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B">\n'
+            '        <dc:Bounds x="300" y="100" width="100" height="80" />\n'
+            '        <bpmndi:BPMNLabel><dc:Bounds x="240" y="10" width="80" height="20" /></bpmndi:BPMNLabel>\n'
+            "      </bpmndi:BPMNShape>\n",
+        )
+    )["layout"]
+    expect("label_overlaps (two overlapping label boxes)", layout["label_overlaps"], 1)
+
+    # node_containment_violations: a subprocess child shape that overflows
+    # its parent's bounds.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:subProcess id="Sub" name="Sub">\n      <bpmn:task id="Inner" name="Inner" />\n    </bpmn:subProcess>\n',
+            '      <bpmndi:BPMNShape id="Sub_di" bpmnElement="Sub"><dc:Bounds x="0" y="0" width="200" height="200" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Inner_di" bpmnElement="Inner"><dc:Bounds x="150" y="150" width="100" height="100" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("node_containment_violations (subprocess child overflows its bounds)", layout["node_containment_violations"], 1)
+
+    # named_label_coverage.missing: a named gateway with no BPMNLabel at all
+    # -- a real, countable finding, not vacuous, even for an engine that
+    # emits zero labels (#54, #55): every named element without label DI is
+    # missing, whatever the reason.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:exclusiveGateway id="G" name="Decide?" />\n',
+            '      <bpmndi:BPMNShape id="G_di" bpmnElement="G"><dc:Bounds x="0" y="0" width="50" height="50" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("named_label_coverage.missing (named gateway with no label DI)", layout["named_label_coverage"]["missing"], 1)
+
+    # format_metric_cell: the report-level n/a treatment (#55) is itself
+    # pinned here, independent of any fixture -- a label-collision metric
+    # reads as n/a when the column emits no labels, but named_label_coverage
+    # is never treated this way, and a genuine error always wins.
+    no_labels = {"layout": {"labels": 0, "label_overlaps": 0, "named_label_coverage": {"missing": 3}}}
+    has_labels = {"layout": {"labels": 2, "label_overlaps": 1, "named_label_coverage": {"missing": 0}}}
+    expect(
+        "format_metric_cell (label_overlaps, no labels emitted)",
+        format_metric_cell(("layout", "label_overlaps"), no_labels, None),
+        "n/a (emits no labels)",
+    )
+    expect(
+        "format_metric_cell (label_overlaps, labels emitted)",
+        format_metric_cell(("layout", "label_overlaps"), has_labels, None),
+        "1",
+    )
+    expect(
+        "format_metric_cell (named_label_coverage.missing is never label-dependent n/a)",
+        format_metric_cell(("layout", "named_label_coverage", "missing"), no_labels, None),
+        "3",
+    )
+    expect(
+        "format_metric_cell (an engine error always wins over a value)",
+        format_metric_cell(("layout", "shape_overlaps"), has_labels, "boom"),
+        "error",
+    )
+
+    if failures:
+        raise SystemExit("metric selftests failed:\n" + "\n".join(f"  {failure}" for failure in failures))
+    print(f"metric selftests OK: {checks} checks passed against hand-built DI, independent of any layout engine")
+
+
 def regression(layout_command: list[str] | None = None, structure_only: bool = False) -> None:
     """Lay out each fixture under fixtures/regression/ and assert the one
     invariant it exists to pin -- not image comparison, so a fix elsewhere
@@ -1803,6 +2106,7 @@ METRIC_PRIORITY_LEVEL: dict[str, int] = {
     "non_orthogonal_segments": 3,
     "missing_named_labels": 5,
     "excess_turns": 6,
+    "collinear_waypoints": 6,
 }
 
 
@@ -1840,6 +2144,7 @@ def check_report(args: argparse.Namespace) -> None:
             "invalid_edge_attachments",
             "non_orthogonal_segments",
             "degenerate_waypoints",
+            "collinear_waypoints",
             "label_overlaps",
             "invalid_label_bounds",
             "shape_overlaps",
@@ -1870,6 +2175,8 @@ def check_report(args: argparse.Namespace) -> None:
             add("edge_shape_intersections", f"{title}: {detail['edge']} intersects {detail['shape']}")
         for detail in layout.get("degenerate_waypoint_details", []):
             add("degenerate_waypoints", f"{title}: {detail['edge']} has a duplicated waypoint at {detail['point']}")
+        for detail in layout.get("collinear_waypoint_details", []):
+            add("collinear_waypoints", f"{title}: {detail['edge']} has a collinear pass-through waypoint at {detail['point']}")
         for detail in layout.get("edge_container_intersection_details", []):
             add("edge_container_intersections", f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):
@@ -1927,6 +2234,11 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--report", help="report HTML path or report directory; omitted means newest report")
     check.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
+    subparsers.add_parser(
+        "metric-selftest",
+        help="pin every audited metric to a value verified against hand-built DI, independent of any layout engine",
+    )
+
     selftest_parser = subparsers.add_parser(
         "selftest",
         help="re-verify persisted fixtures against fresh layout-engine output (fails if no engine is available)",
@@ -1981,6 +2293,8 @@ def main(argv: list[str] | None = None) -> int:
         print(latest_report(args.output_dir))
     elif args.command == "check":
         check_report(args)
+    elif args.command == "metric-selftest":
+        metric_selftests()
     elif args.command == "selftest":
         selftest(split_command(args.layout_command), args.structure_only)
     elif args.command == "regression":

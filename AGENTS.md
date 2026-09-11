@@ -35,6 +35,14 @@ correct.
    nix develop --command python3 tools/bpmn_feedback.py regression
    ```
 
+   `metric-selftest` (no engine required) separately pins every metric
+   `collect_metrics` computes to a value verified against hand-built DI --
+   run it after changing anything in `collect_metrics` itself:
+
+   ```sh
+   python3 tools/bpmn_feedback.py metric-selftest
+   ```
+
 3. Change the TypeScript implementation in
    `packages/bpmn-auto-layout/src/`. Keep placement and routing deterministic:
    the same BPMN input and options must produce the same BPMN DI.

@@ -1,4 +1,4 @@
-.PHONY: shell feedback-ui feedback-selftest feedback-regression feedback-report feedback-check
+.PHONY: shell feedback-ui feedback-selftest feedback-metric-selftest feedback-regression feedback-report feedback-check
 
 shell:
 	nix develop
@@ -12,6 +12,10 @@ feedback-ui:
 
 feedback-selftest:
 	bpmn-feedback selftest
+
+# Pins every collect_metrics metric against hand-built DI; no engine needed.
+feedback-metric-selftest:
+	bpmn-feedback metric-selftest
 
 # Lay out fixtures/regression/*.bpmn and assert each one's pinned invariant.
 feedback-regression:

@@ -22,7 +22,7 @@ jobs:
       - run: npm test
 
   flake-check:
-    name: nix flake check (selftest, regression)
+    name: nix flake check (selftest, regression, metric-selftest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -150,6 +150,15 @@
                 bpmn-feedback regression --layout-command bpmn-auto-layout
                 touch $out
               '';
+
+          # Pins every collect_metrics metric to a value verified against
+          # hand-built DI (#56) -- no layout engine needed, so this check
+          # can never flake and stays hermetic without a fixtures/ copy.
+          metric-selftest =
+            pkgs.runCommand "bpmn-auto-layout-metric-selftest" { nativeBuildInputs = [ feedback ]; } ''
+              bpmn-feedback metric-selftest
+              touch $out
+            '';
         }
       );
 
