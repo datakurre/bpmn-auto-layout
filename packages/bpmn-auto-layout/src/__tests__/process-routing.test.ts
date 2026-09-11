@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { routeProcessFlows } from "../process-routing";
+import { routeProcessFlows, checkTerminalRouteInvariants, type RoutePoint } from "../process-routing";
 import { DEFAULT_OPTIONS } from "../element-dimensions";
 import type { NodeLayout, ProcessLayoutResult } from "../layout-types";
 import type { LayoutWarning } from "../layout-warnings";
@@ -96,8 +96,11 @@ test("routeProcessFlows returns a direct two-point route when nothing obstructs 
 // whole rather than trusting that whichever pass produced a piece of
 // geometry got it right -- the #41 regression was exactly a route that was
 // fine when computed and wrong by the time routing finished, with nothing
-// noticing. These tests exercise that pass directly against a hand-built
-// layout, the same way the routing tests above do.
+// noticing. It is a separate function from routeProcessFlows (#51): a real
+// pipeline must call it after every later pass that can still move a
+// waypoint (di-creation.ts's label re-repair loop), not right after routing.
+// These tests call it directly against a hand-built layout, the same way
+// the routing tests above exercise routeProcessFlows directly.
 test("routeProcessFlows warns when two unrelated shapes overlap, tagged with their §8 priority level", () => {
   const a = node({ id: "A", x: 0, y: 0, w: 100, h: 80, track: 0, col: 0 });
   const b = node({ id: "B", x: 50, y: 0, w: 100, h: 80, track: 0, col: 1 });
@@ -108,11 +111,46 @@ test("routeProcessFlows warns when two unrelated shapes overlap, tagged with the
   const layout: ProcessLayoutResult = { nodes, allFlows: [] };
 
   const warnings: LayoutWarning[] = [];
-  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  const edgeWaypoints = routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  checkTerminalRouteInvariants(layout, edgeWaypoints, warnings);
 
   const overlap = warnings.find((w) => w.code === "SHAPE_OVERLAPS_SHAPE");
   assert.ok(overlap, `expected a SHAPE_OVERLAPS_SHAPE warning, got ${JSON.stringify(warnings)}`);
   assert.equal(overlap!.priorityLevel, 2, "no-overlaps is §8 priority level 2");
+});
+
+// #51: a ROUTE_INTERSECTS_OBSTACLE message used to say only "overlaps a
+// node, container, or another route" -- which sent readers investigating
+// what it actually hit instead of being a one-line read. Pin that the
+// message names the obstacle's kind and id.
+test("checkTerminalRouteInvariants names the obstacle kind and id a route still hits", () => {
+  const src = node({ id: "Src", x: 0, y: 100, w: 100, h: 80, track: 0, col: 0 });
+  const obstacle = node({ id: "Obstacle", x: 200, y: 100, w: 100, h: 80, track: 0, col: 1 });
+  const tgt = node({ id: "Tgt", x: 400, y: 100, w: 100, h: 80, track: 0, col: 2 });
+  const nodes = new Map<string, NodeLayout>([
+    [src.id, src],
+    [obstacle.id, obstacle],
+    [tgt.id, tgt],
+  ]);
+  const flow = { id: "Flow_1", sourceRef: { id: "Src" }, targetRef: { id: "Tgt" } };
+  const layout: ProcessLayoutResult = { nodes, allFlows: [flow] };
+
+  // A route drawn straight through Obstacle's bounds, set up directly
+  // rather than produced by routing -- this test pins only what the
+  // warning reports, not whether routing would ever ship this geometry.
+  const edgeWaypoints = new Map<string, RoutePoint[]>([
+    ["Flow_1", [
+      { x: 100, y: 140 },
+      { x: 400, y: 140 },
+    ]],
+  ]);
+
+  const warnings: LayoutWarning[] = [];
+  checkTerminalRouteInvariants(layout, edgeWaypoints, warnings);
+
+  const hit = warnings.find((w) => w.code === "ROUTE_INTERSECTS_OBSTACLE");
+  assert.ok(hit, `expected a ROUTE_INTERSECTS_OBSTACLE warning, got ${JSON.stringify(warnings)}`);
+  assert.ok(hit!.message.includes("shape Obstacle"), `expected the message to name the obstacle it hit, got: ${hit!.message}`);
 });
 
 test("routeProcessFlows does not warn about a subprocess containing its own child", () => {
@@ -125,7 +163,8 @@ test("routeProcessFlows does not warn about a subprocess containing its own chil
   const layout: ProcessLayoutResult = { nodes, allFlows: [] };
 
   const warnings: LayoutWarning[] = [];
-  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  const edgeWaypoints = routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  checkTerminalRouteInvariants(layout, edgeWaypoints, warnings);
 
   assert.ok(
     !warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE"),
@@ -150,7 +189,8 @@ test("routeProcessFlows does not warn about a boundary event overlapping its own
   const layout: ProcessLayoutResult = { nodes, allFlows: [] };
 
   const warnings: LayoutWarning[] = [];
-  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  const edgeWaypoints = routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  checkTerminalRouteInvariants(layout, edgeWaypoints, warnings);
 
   assert.ok(
     !warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE"),
@@ -175,7 +215,8 @@ test("routeProcessFlows still warns when a boundary event overlaps a shape that 
   const layout: ProcessLayoutResult = { nodes, allFlows: [] };
 
   const warnings: LayoutWarning[] = [];
-  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  const edgeWaypoints = routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+  checkTerminalRouteInvariants(layout, edgeWaypoints, warnings);
 
   assert.ok(
     warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE" && w.message.includes("Boundary") && w.message.includes("Bystander")),

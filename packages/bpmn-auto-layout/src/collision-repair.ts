@@ -486,6 +486,37 @@ export function countRouteHits(
   return n;
 }
 
+export interface RouteHit {
+  obstacleId: string;
+  obstacleType: string;
+}
+
+/**
+ * Like countRouteHits, but names which obstacles a route actually hit
+ * instead of just how many hits there were -- so a ROUTE_INTERSECTS_OBSTACLE
+ * warning can say what it hit (kind and id) instead of sending the reader on
+ * an investigation to find out (#51).
+ */
+export function findRouteHits(
+  points: Array<{ x: number; y: number }>,
+  layout: ProcessLayoutResult,
+  flow: any,
+  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
+): RouteHit[] {
+  const obstacles = routeObstacles(layout, flow, blockedPaths);
+  const hits: RouteHit[] = [];
+  for (let i = 0; i < points.length - 1; i += 1) {
+    const p = points[i]!;
+    const q = points[i + 1]!;
+    for (const obstacle of obstacles) {
+      if (segmentHitCount(p, q, [obstacle]) > 0) {
+        hits.push({ obstacleId: obstacle.id, obstacleType: (obstacle.element?.$type as string) ?? "unknown" });
+      }
+    }
+  }
+  return hits;
+}
+
 /**
  * Synthetic obstacle types layered onto the real node set by routeObstacles:
  * other flows' already-placed segments and labels. They matter for their

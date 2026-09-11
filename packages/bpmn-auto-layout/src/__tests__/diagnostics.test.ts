@@ -37,6 +37,23 @@ test("layoutProcessWithDiagnostics does not warn SHAPE_OVERLAPS_SHAPE for a boun
   );
 });
 
+test("layoutProcessWithDiagnostics's ROUTE_INTERSECTS_OBSTACLE warnings reflect the geometry that ships, not stale pre-label-repair geometry (#51)", async () => {
+  // The terminal check used to run inside routeProcessFlows, before
+  // di-creation.ts's label re-repair pass could still rewrite a flow's
+  // waypoints to dodge a label. Stress_Flow_Reject and Stress_Flow_Repair
+  // were flagged against each other's *pre-repair* routes even though the
+  // re-repair pass moved Stress_Flow_Repair's route away from the conflict
+  // before anything shipped -- a false positive on a route that never
+  // actually overlapped anything in the emitted DI.
+  const xml = readFixture("stress-dense-routing.bpmn");
+  const { warnings } = await layoutProcessWithDiagnostics(xml);
+  const flaggedIds = new Set(warnings.filter((w) => w.code === "ROUTE_INTERSECTS_OBSTACLE").map((w) => w.elementId));
+  assert.ok(
+    !flaggedIds.has("Stress_Flow_Reject") && !flaggedIds.has("Stress_Flow_Repair"),
+    `expected the resolved Stress_Flow_Reject/Stress_Flow_Repair conflict to no longer be flagged, got: ${JSON.stringify([...flaggedIds])}`,
+  );
+});
+
 test("layoutProcessWithDiagnostics surfaces a structured warning instead of a silent or thrown degradation", async () => {
   // This fixture is known (via the bpmn-feedback quality gate) to have a
   // label that cannot avoid overlapping a shape/edge no matter which

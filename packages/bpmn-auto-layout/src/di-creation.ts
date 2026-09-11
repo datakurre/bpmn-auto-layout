@@ -18,7 +18,7 @@ import {
   leafLaneBoundsByNodeId,
 } from "./lane-layout";
 import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, validateConnectionPoints } from "./collision-repair";
-import { routeProcessFlows, snapRouteWaypoints, dedupeConsecutivePoints } from "./process-routing";
+import { routeProcessFlows, snapRouteWaypoints, dedupeConsecutivePoints, checkTerminalRouteInvariants } from "./process-routing";
 import type { LayoutWarning } from "./layout-warnings";
 import {
   ensureOrthogonalWaypoints,
@@ -581,6 +581,11 @@ function buildProcessShapesAndEdges(
       edgeWaypoints.set(flow.id, snapRouteWaypoints(ensureOrthogonalWaypoints(repaired), opts.gridSize));
     }
   }
+
+  // Check terminal route invariants now that every pass able to move a
+  // waypoint, including the label re-repair loop just above, has run --
+  // checking any earlier missed later moves entirely (#51).
+  checkTerminalRouteInvariants(shiftedLayout, edgeWaypoints, warnings);
 
   // 3. Edge DI for each sequence flow
   for (const flow of shiftedLayout.allFlows) {
