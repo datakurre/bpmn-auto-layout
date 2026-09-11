@@ -79,13 +79,7 @@ export function routeProcessFlows(
       if (!src || !tgt) continue;
       edgeWaypoints.set(
         flow.id,
-        repairSegmentCollisions(
-          computeWaypoints(src, tgt, layout, flow),
-          layout,
-          flow,
-          new Map(),
-          routingPolicy,
-        ),
+        repairSegmentCollisions(computeWaypoints(src, tgt, layout, flow), layout, flow, new Map(), routingPolicy),
       );
     }
   }
@@ -229,7 +223,13 @@ export function routeProcessFlows(
   for (const flow of layout.allFlows) {
     const src = layout.nodes.get(flow.sourceRef?.id);
     const tgt = layout.nodes.get(flow.targetRef?.id);
-    if (!src || !tgt || src.track !== tgt.track || !src.element?.$type.endsWith("Gateway") || tgt.x <= src.x + src.width) {
+    if (
+      !src ||
+      !tgt ||
+      src.track !== tgt.track ||
+      !src.element?.$type.endsWith("Gateway") ||
+      tgt.x <= src.x + src.width
+    ) {
       continue;
     }
     const branches = layout.allFlows

@@ -26,6 +26,11 @@ export interface LayoutWarning {
 }
 
 /** Small helper so call sites read as one line instead of an inline object literal. */
-export function warn(warnings: LayoutWarning[] | undefined, code: LayoutWarningCode, elementId: string | undefined, message: string): void {
+export function warn(
+  warnings: LayoutWarning[] | undefined,
+  code: LayoutWarningCode,
+  elementId: string | undefined,
+  message: string,
+): void {
   warnings?.push({ code, elementId, message });
 }
