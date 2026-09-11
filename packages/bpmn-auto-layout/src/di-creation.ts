@@ -16,6 +16,7 @@ import {
   laneLabelBounds,
   laneDividerObstacles,
   participantBoundaryObstacles,
+  leafLaneBoundsByNodeId,
 } from "./lane-layout";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
@@ -290,7 +291,10 @@ export function createCollaborationDi(
       ...participantBoundaryObstacles(participantBounds, LANE_GUTTER),
       ...laneDividerObstacles(laneBands),
     ];
-    const built = buildProcessShapesAndEdges(moddle, process, layout, opts, dx, dy, containerObstacles);
+    const built = buildProcessShapesAndEdges(
+      moddle, process, layout, opts, dx, dy, containerObstacles,
+      leafLaneBoundsByNodeId(laneBands), participantBounds,
+    );
     for (const el of built.elements) planeElements.push(el);
     allContainerObstacles.push(...containerObstacles);
     for (const [id, node] of built.nodes) collaborationNodes.set(id, node);
@@ -402,6 +406,8 @@ function buildProcessShapesAndEdges(
   dx = 0,
   dy = 0,
   containerObstacles: NodeLayout[] = [],
+  laneBoundsByNodeId: Map<string, LabelBounds> = new Map(),
+  participantBounds?: LabelBounds,
 ): ProcessShapesAndEdges {
   const elements: any[] = [];
   const routingPolicy = resolveRoutingPolicy(opts.routing);
@@ -409,6 +415,20 @@ function buildProcessShapesAndEdges(
     moddle.create("bpmndi:BPMNLabel", {
       bounds: moddle.create("dc:Bounds", { x, y, width, height }),
     });
+
+  /**
+   * The tightest applicable label-containment bound for `node`: its own
+   * subprocess if it is a child, else its lane, else its participant pool,
+   * else no constraint (a standalone process with no lanes) (#15).
+   */
+  const containerBoundsFor = (node: NodeLayout | undefined): LabelBounds | undefined => {
+    if (!node) return undefined;
+    if (node.isSubProcessChild && node.containerId) {
+      const container = shiftedNodes.get(node.containerId);
+      if (container) return { x: container.x, y: container.y, width: container.width, height: container.height };
+    }
+    return laneBoundsByNodeId.get(node.id) ?? participantBounds;
+  };
 
   // Build a shifted view of the layout nodes so waypoint computation uses
   // the offset coordinates (edge-routing relies on NodeLayout .x/.y).
@@ -653,7 +673,14 @@ function buildProcessShapesAndEdges(
   for (const flow of shiftedLayout.allFlows) {
     const waypoints = edgeWaypoints.get(flow.id);
     if (!waypoints) continue;
-    const edgeLabel = computeEdgeLabelBounds(flow, waypoints, edgeWaypoints, placedLabels, shiftedLayout.nodes);
+    const edgeLabel = computeEdgeLabelBounds(
+      flow,
+      waypoints,
+      edgeWaypoints,
+      placedLabels,
+      shiftedLayout.nodes,
+      containerBoundsFor(shiftedLayout.nodes.get(flow.sourceRef?.id)),
+    );
     if (edgeLabel) {
       edgeLabelBounds.set(flow.id, edgeLabel);
       placedLabels.push(edgeLabel);
@@ -684,7 +711,13 @@ function buildProcessShapesAndEdges(
       (node.element.$type.endsWith("Event") || node.element.$type.endsWith("Gateway")) && hasName;
 
     if (needsLabel) {
-      const labelBounds = solveLabelPlacement(node, edgeWaypoints, shiftedNodes, placedLabels);
+      const labelBounds = solveLabelPlacement(
+        node,
+        edgeWaypoints,
+        shiftedNodes,
+        placedLabels,
+        containerBoundsFor(node),
+      );
       placedLabels.push(labelBounds);
       shapeAttrs.label = namedLabel(
         labelBounds.x,
@@ -746,6 +779,7 @@ export function createProcessDi(
 ): void {
   const planeElements: any[] = [];
   let containerObstacles: NodeLayout[] = [];
+  let laneBoundsByNodeId = new Map<string, LabelBounds>();
 
   // Lane DI: partition every lane (including nested childLaneSet lanes and
   // lanes with no member nodes) into contiguous, non-overlapping bands
@@ -761,6 +795,7 @@ export function createProcessDi(
       const ySpan = { y: minY - 30, height: maxY - minY + 60 };
       const bands = computeLaneBands(process.laneSets, layout.nodes, xSpan, ySpan);
       containerObstacles = laneDividerObstacles(bands);
+      laneBoundsByNodeId = leafLaneBoundsByNodeId(bands);
       for (const band of bands) {
         const bounds = { x: band.x, y: band.y, width: band.width, height: band.height };
         const shapeAttrs: any = {
@@ -780,7 +815,9 @@ export function createProcessDi(
 
   // Generate node shapes and edge DI using the shared helper (no offset for
   // standalone processes — dx=0, dy=0).
-  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts, 0, 0, containerObstacles).elements) {
+  for (const el of buildProcessShapesAndEdges(
+    moddle, process, layout, opts, 0, 0, containerObstacles, laneBoundsByNodeId,
+  ).elements) {
     planeElements.push(el);
   }
 

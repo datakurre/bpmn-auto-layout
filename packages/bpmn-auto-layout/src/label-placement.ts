@@ -69,7 +69,10 @@ function segmentIntersectsBox(
   return tEnter <= tExit;
 }
 
-function labelCollidesWithLanes(
+/** Checks against routed edge segments (previously misnamed
+ * labelCollidesWithLanes). Lane/pool/subprocess containment is a separate
+ * constraint -- see containedIn. */
+function labelCollidesWithEdges(
   bounds: LabelBounds,
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>>,
   margin = 4,
@@ -143,6 +146,22 @@ function boxOverlap(
   const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
   const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
   return w > 0 && h > 0 ? w * h : 0;
+}
+
+/**
+ * Whether `bounds` fits entirely inside `container` -- the owning pool,
+ * lane, or subprocess a label's target node (or, for an edge label, its
+ * flow's source node) belongs to. No container (a standalone process with
+ * no lanes) means no constraint (see #15).
+ */
+function containedIn(bounds: LabelBounds, container?: LabelBounds): boolean {
+  if (!container) return true;
+  return (
+    bounds.x >= container.x &&
+    bounds.y >= container.y &&
+    bounds.x + bounds.width <= container.x + container.width &&
+    bounds.y + bounds.height <= container.y + container.height
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -301,6 +320,7 @@ export function computeEdgeLabelBounds(
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>>,
   placedLabels: LabelBounds[] = [],
   nodes: Map<string, NodeLayout> = new Map(),
+  containerBounds?: LabelBounds,
 ): LabelBounds | null {
   if (!flow.name || typeof flow.name !== "string" || flow.name.trim().length === 0) return null;
   const text = flow.name.trim();
@@ -389,8 +409,9 @@ export function computeEdgeLabelBounds(
         candidates.push({ x, y, width, height });
       }
     }
+    const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
     return pickLabel(
-      candidates,
+      containedCandidates.length > 0 ? containedCandidates : candidates,
       { x: centeredX, y: primaryY, width, height },
       flow,
       placedLabels,
@@ -409,8 +430,9 @@ export function computeEdgeLabelBounds(
       candidates.push({ x: rightX, y: y + dy, width, height });
       candidates.push({ x: leftX, y: y + dy, width, height });
     }
+    const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
     return pickLabel(
-      candidates,
+      containedCandidates.length > 0 ? containedCandidates : candidates,
       { x: rightX, y, width, height },
       flow,
       placedLabels,
@@ -429,6 +451,7 @@ export function solveLabelPlacement(
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>>,
   nodes: Map<string, NodeLayout>,
   placedLabels: LabelBounds[],
+  containerBounds?: LabelBounds,
 ): LabelBounds {
   const name = node.element.name || "";
   const isGateway = node.element.$type.endsWith("Gateway");
@@ -560,17 +583,34 @@ export function solveLabelPlacement(
     }
   }
 
-  // Choose first candidate with no collisions
+  // Choose first candidate with no collisions, fully inside the node's own
+  // pool/lane/subprocess. Containment outranks edge-crossing avoidance
+  // (§8: container containment before no-overlap), so it is enforced in
+  // both this pass and the edge-collision-relaxed fallback below.
   let chosen: (LabelBounds & { lines: number }) | null = null;
   for (const cand of candidates) {
     if (cand.x < 10 || cand.y < 0) continue;
-    if (labelCollidesWithLanes(cand, edgeWaypoints)) continue;
+    if (!containedIn(cand, containerBounds)) continue;
+    if (labelCollidesWithEdges(cand, edgeWaypoints)) continue;
     if (labelCollidesWithElements(cand, node.id, nodes)) continue;
     if (labelCollidesWithOtherLabels(cand, placedLabels)) continue;
     chosen = cand;
     break;
   }
-  // Fallback: ignore lane collision
+  // Fallback: ignore edge collision, keep containment
+  if (!chosen) {
+    for (const cand of candidates) {
+      if (cand.x < 10 || cand.y < 0) continue;
+      if (!containedIn(cand, containerBounds)) continue;
+      if (labelCollidesWithElements(cand, node.id, nodes)) continue;
+      if (labelCollidesWithOtherLabels(cand, placedLabels)) continue;
+      chosen = cand;
+      break;
+    }
+  }
+  // Fallback: no candidate fits inside the container at all (e.g. a lane
+  // too narrow for the text) -- accept the least-bad element/label-free
+  // candidate instead of forcing the unconstrained default box below.
   if (!chosen) {
     for (const cand of candidates) {
       if (cand.x < 10 || cand.y < 0) continue;

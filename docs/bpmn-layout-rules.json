@@ -138,7 +138,7 @@
       "id": "labels.node-placement",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:430-530", "packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
-      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; single-line primary gateway labels align their top edge with a 4 px gap, while multi-line primary labels shift upward so their bottom edge aligns with the single-line label row. Snug candidates keep a 6 px horizontal clearance. When a selected gateway candidate needs multiple lines to avoid path or element collisions, the formatted line break is serialized into the element name so renderers display the intended rows. Candidates that collide with lanes, elements, or previously placed labels are rejected before fallback."
+      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; single-line primary gateway labels align their top edge with a 4 px gap, while multi-line primary labels shift upward so their bottom edge aligns with the single-line label row. Snug candidates keep a 6 px horizontal clearance. When a selected gateway candidate needs multiple lines to avoid path or element collisions, the formatted line break is serialized into the element name so renderers display the intended rows. Candidates are rejected, in order of decreasing priority, for: escaping the node's own container, colliding with a routed edge, colliding with an element, or colliding with a previously placed label; each constraint is relaxed only if no candidate satisfies it and every stricter constraint before it."
     },
     {
       "id": "labels.node-gap-by-element-class",
@@ -157,6 +157,13 @@
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:93-121", "packages/bpmn-auto-layout/src/label-placement.ts:268-278", "packages/bpmn-auto-layout/src/label-placement.ts:365-373"],
       "rule": "Every label-collision predicate (labelCollidesWithElements, pickLabel's overlap scoring, computeEdgeLabelBounds' straddled-segment scan) treats expanded-subprocess children as ordinary collision obstacles. The subprocess container itself is skipped as an obstacle only via isOwnContainer -- when the label's own owner (the node, or the flow's source node) is a child of that specific subprocess -- so a label may sit near or inside the container that legitimately owns it, but a label belonging to an unrelated node must still avoid the container's box and everything inside it."
+    },
+    {
+      "id": "labels.container-containment",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:151-163", "packages/bpmn-auto-layout/src/label-placement.ts:563-599", "packages/bpmn-auto-layout/src/di-creation.ts:416-428", "packages/bpmn-auto-layout/src/lane-layout.ts:159-174"],
+      "rule": "solveLabelPlacement and computeEdgeLabelBounds reject any candidate not fully contained (containedIn) by the label's own owning container -- di-creation.ts's containerBoundsFor resolves this per node as its subprocess if it is a child, else its leaf lane band (leafLaneBoundsByNodeId), else its participant pool, else no constraint for a standalone process with no lanes. Containment is enforced ahead of edge-collision avoidance and is relaxed only as a last resort, after every candidate fails it, so a label degrades to escaping its container rather than failing to render. The `cand.x < 10 || cand.y < 0` canvas-origin clamp still applies underneath this as a final absolute floor.",
+      "note": "A label's owning node can itself be drawn outside its declared lane band by a separate, pre-existing node-placement bug (see node_containment_violations); when that happens no candidate near the node can satisfy lane containment either, and the fallback tier is used."
     },
     {
       "id": "labels.ensure-default-di",

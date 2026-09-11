@@ -144,6 +144,24 @@ export function leafLaneOrderIndex(laneSets: any[]): Map<string, number> {
   return result;
 }
 
+/**
+ * Maps every flow node id to the bounds of the leaf lane band that owns it
+ * (a node belongs to exactly one leaf lane, per BPMN's flowNodeRef).  Used
+ * to constrain label placement to the node's own lane (see #15).
+ */
+export function leafLaneBoundsByNodeId(
+  bands: LaneBand[],
+): Map<string, { x: number; y: number; width: number; height: number }> {
+  const result = new Map<string, { x: number; y: number; width: number; height: number }>();
+  for (const band of bands) {
+    if ((band.lane.childLaneSet?.lanes?.length ?? 0) > 0) continue;
+    for (const ref of band.lane.flowNodeRef || []) {
+      result.set(ref.id, { x: band.x, y: band.y, width: band.width, height: band.height });
+    }
+  }
+  return result;
+}
+
 /** The bottom-most Y reached by any band, or ySpan's bottom if there are none. */
 export function laneBandsBottom(bands: LaneBand[], fallback: number): number {
   return bands.length === 0 ? fallback : Math.max(...bands.map((band) => band.y + band.height));
