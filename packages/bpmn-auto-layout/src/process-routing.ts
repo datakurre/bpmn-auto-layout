@@ -21,12 +21,86 @@ import type { ResolvedLayoutOptions } from "./element-dimensions";
 import { resolveRoutingPolicy, isOrthogonal } from "./layout-policy";
 import { planContainerScopedChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
-import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
+import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, validateConnectionPoints } from "./collision-repair";
 import { fanOutAttachPoints, ensureOrthogonalWaypoints } from "./label-placement";
 import { warn, type LayoutWarning } from "./layout-warnings";
 import { ROUTE_DEPARTURE_GAP, CHANNEL_LANE_GAP } from "./element-dimensions";
 
 export type RoutePoint = { x: number; y: number };
+
+/** Drop consecutive duplicate points, which contribute no geometry and inflate
+ * bend counts (#46). Applied wherever a route is finalized so no code path
+ * -- fallback construction, repair, or a later reassert pass -- can ship one. */
+export function dedupeConsecutivePoints(points: RoutePoint[]): RoutePoint[] {
+  const result: RoutePoint[] = [];
+  for (const point of points) {
+    const previous = result[result.length - 1];
+    if (previous && previous.x === point.x && previous.y === point.y) continue;
+    result.push(point);
+  }
+  return result;
+}
+
+/**
+ * Build a hit-free horizontal channel route from `src` to `tgt` when they sit
+ * on the same track and the naive direct/S-curve fallback would cut through
+ * whatever sits between them. Departs `src`'s near side, jogs into a channel
+ * above or below the track, and arrives at `tgt`'s near side. Tries several
+ * lane offsets *and* several departure/arrival gaps -- a fixed gap can land
+ * exactly inside the clearance zone of the very obstacle it exists to avoid,
+ * which a lane search alone can never fix since every lane shares the same
+ * departure/arrival segment (#41).
+ *
+ * Prefers a candidate that is clear of every obstacle (other routed flows
+ * and labels included), but in a dense diagram where every lane still
+ * crosses some *other flow's* path near a crowded gateway, settles for the
+ * best candidate that is at least clear of every real BPMN shape -- the
+ * concrete, unambiguous requirement this exists to satisfy -- rather than
+ * rejecting all of them and falling back to a route that cuts through a
+ * shape outright.
+ */
+function findClearChannelRoute(
+  src: NodeLayout,
+  tgt: NodeLayout,
+  layout: ProcessLayoutResult,
+  flow: any,
+  edgeWaypoints: Map<string, RoutePoint[]>,
+): RoutePoint[] | null {
+  const leaveLeft = src.centerX > tgt.centerX;
+  const srcX = leaveLeft ? src.x : src.x + src.width;
+  const tgtX = leaveLeft ? tgt.x + tgt.width : tgt.x;
+  const span = Math.abs(tgtX - srcX);
+  const gaps = [...new Set([Math.min(ROUTE_DEPARTURE_GAP, Math.max(4, span / 4)), 20, 12, 6, 4])];
+  let bestShapeClean: { candidate: RoutePoint[]; hits: number } | null = null;
+  for (const side of ["below", "above"] as const) {
+    for (let lane = 0; lane < 6; lane += 1) {
+      const base = channelY(layout, flow, side, src.centerX, tgt.centerX);
+      const channelValue = side === "below" ? base + lane * CHANNEL_LANE_GAP : base - lane * CHANNEL_LANE_GAP;
+      for (const gap of gaps) {
+        const departX = leaveLeft ? srcX - gap : srcX + gap;
+        const arriveX = leaveLeft ? tgtX + gap : tgtX - gap;
+        const candidate: RoutePoint[] = dedupeConsecutivePoints([
+          { x: srcX, y: src.centerY },
+          { x: departX, y: src.centerY },
+          { x: departX, y: channelValue },
+          { x: arriveX, y: channelValue },
+          { x: arriveX, y: tgt.centerY },
+          { x: tgtX, y: tgt.centerY },
+        ]);
+        if (!validateConnectionPoints(candidate, src, tgt)) continue;
+        const hits = countRouteHits(candidate, layout, flow, edgeWaypoints);
+        if (hits === 0) return candidate;
+        if (
+          (bestShapeClean === null || hits < bestShapeClean.hits) &&
+          countShapeRouteHits(candidate, layout, flow, edgeWaypoints) === 0
+        ) {
+          bestShapeClean = { candidate, hits };
+        }
+      }
+    }
+  }
+  return bestShapeClean?.candidate ?? null;
+}
 
 /**
  * Order flows for routing by structural span (column + track distance
@@ -162,8 +236,13 @@ export function routeProcessFlows(
     const target = flow ? layout.nodes.get(flow.targetRef?.id) : undefined;
     const orthogonal = ensureOrthogonalWaypoints(points);
     if (!validateConnectionPoints(orthogonal, source, target)) {
+      const channelDetour =
+        source && target && (source.centerX < target.x || source.centerX > target.x + target.width)
+          ? findClearChannelRoute(source, target, layout, flow, edgeWaypoints)
+          : null;
       const fallback =
-        source && target && source.centerX < target.x
+        channelDetour ??
+        (source && target && source.centerX < target.x
           ? [
               { x: source.x + source.width, y: source.centerY },
               { x: target.x - 30, y: source.centerY },
@@ -191,14 +270,16 @@ export function routeProcessFlows(
                     { x: target.centerX, y: target.y + target.height + 30 },
                     { x: target.centerX, y: target.y + target.height },
                   ]
-                : undefined;
+                : undefined);
       if (fallback && validateConnectionPoints(fallback, source, target)) {
-        const repairedFallback = repairSegmentCollisions(fallback, layout, flow, edgeWaypoints, routingPolicy);
+        const repairedFallback = channelDetour
+          ? fallback
+          : repairSegmentCollisions(fallback, layout, flow, edgeWaypoints, routingPolicy);
         if (validateConnectionPoints(repairedFallback, source, target)) {
-          edgeWaypoints.set(flowId, repairedFallback);
+          edgeWaypoints.set(flowId, dedupeConsecutivePoints(repairedFallback));
           continue;
         }
-        edgeWaypoints.set(flowId, fallback);
+        edgeWaypoints.set(flowId, dedupeConsecutivePoints(fallback));
         continue;
       }
       // No candidate validated even after every fallback. Per #32's
@@ -212,10 +293,10 @@ export function routeProcessFlows(
         flowId,
         `sequence flow ${flowId} has no route whose endpoints validate against both node boundaries; emitted the best available geometry instead`,
       );
-      edgeWaypoints.set(flowId, fallback ?? orthogonal);
+      edgeWaypoints.set(flowId, dedupeConsecutivePoints(fallback ?? orthogonal));
       continue;
     }
-    edgeWaypoints.set(flowId, snapRouteWaypoints(orthogonal, opts.gridSize));
+    edgeWaypoints.set(flowId, dedupeConsecutivePoints(snapRouteWaypoints(orthogonal, opts.gridSize)));
   }
 
   // Reassert only gateway channel routes. Non-gateway routes have already
@@ -243,36 +324,17 @@ export function routeProcessFlows(
     // at the boundary reads as sliding along the shape's own edge rather
     // than leaving it, and fails validateConnectionPoints's departure check
     // (#41).
-    const gap = Math.min(ROUTE_DEPARTURE_GAP, Math.max(4, (tgt.x - (src.x + src.width)) / 4));
-    const buildCandidate = (channelValue: number): RoutePoint[] => [
-      { x: src.x + src.width, y: src.centerY },
-      { x: src.x + src.width + gap, y: src.centerY },
-      { x: src.x + src.width + gap, y: channelValue },
-      { x: tgt.x - gap, y: channelValue },
-      { x: tgt.x - gap, y: tgt.centerY },
-      { x: tgt.x, y: tgt.centerY },
-    ];
+    //
     // validateConnectionPoints only checks that the endpoints attach to the
     // right side of each node -- it says nothing about what the channel
     // segment in between passes through, so a route that "validates" can
     // still cut straight through the very node it exists to bypass (#41).
-    // countRouteHits is what actually tells us the channel is clear. The
-    // channel plan hands back one default lane for a flow it never recorded
-    // a request for (as this one didn't, at the point the plan was built),
-    // so when that lane is already crowded, try the next few lanes out
-    // before falling back to per-segment repair.
-    const baseChannel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
-    let accepted: RoutePoint[] | null = null;
-    for (let lane = 0; lane < 6; lane += 1) {
-      const candidate = buildCandidate(baseChannel + lane * CHANNEL_LANE_GAP);
-      if (
-        validateConnectionPoints(candidate, src, tgt) &&
-        countRouteHits(candidate, layout, flow, edgeWaypoints) === 0
-      ) {
-        accepted = candidate;
-        break;
-      }
-    }
+    // countRouteHits is what actually tells us the channel is clear.
+    // findClearChannelRoute searches both lane offset *and* departure/arrival
+    // gap: a fixed gap can land inside the clearance zone of the very
+    // obstacle it exists to avoid, and no lane offset fixes that since every
+    // lane shares the same departure/arrival segment.
+    const accepted = findClearChannelRoute(src, tgt, layout, flow, edgeWaypoints);
     if (accepted) {
       edgeWaypoints.set(flow.id, accepted);
       continue;
@@ -281,10 +343,53 @@ export function routeProcessFlows(
     // repair it like every other route, and if it still does not validate
     // or is still not hit-free, keep the previous (already validated)
     // route rather than ship it.
-    const repaired = repairSegmentCollisions(buildCandidate(baseChannel), layout, flow, edgeWaypoints, routingPolicy);
+    const gap = Math.min(ROUTE_DEPARTURE_GAP, Math.max(4, (tgt.x - (src.x + src.width)) / 4));
+    const baseChannel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
+    const plainCandidate: RoutePoint[] = [
+      { x: src.x + src.width, y: src.centerY },
+      { x: src.x + src.width + gap, y: src.centerY },
+      { x: src.x + src.width + gap, y: baseChannel },
+      { x: tgt.x - gap, y: baseChannel },
+      { x: tgt.x - gap, y: tgt.centerY },
+      { x: tgt.x, y: tgt.centerY },
+    ];
+    const repaired = repairSegmentCollisions(plainCandidate, layout, flow, edgeWaypoints, routingPolicy);
     if (
       validateConnectionPoints(repaired, src, tgt) &&
       countRouteHits(repaired, layout, flow, edgeWaypoints) === 0
+    ) {
+      edgeWaypoints.set(flow.id, dedupeConsecutivePoints(repaired));
+    }
+  }
+
+  // Terminal shape-clearance pass, independent of whether diagnostics were
+  // requested: every earlier pass (fan-out, upper-channel restoration, the
+  // gateway reassert above) can leave -- or reintroduce -- a route that
+  // still validates its endpoint attachment yet cuts straight through a
+  // real shape, because validateConnectionPoints only checks attachment
+  // direction, never obstacle clearance (#41). This runs unconditionally
+  // (unlike the warning pass below, which only fires when the caller wants
+  // diagnostics) because it changes the shipped geometry, not just what is
+  // reported about it -- levels 1-2 of the §8 ladder must hold on what is
+  // actually emitted, not only be checkable after the fact.
+  for (const flow of layout.allFlows) {
+    const points = edgeWaypoints.get(flow.id);
+    if (!points || countShapeRouteHits(points, layout, flow, edgeWaypoints) === 0) continue;
+    const src = layout.nodes.get(flow.sourceRef?.id);
+    const tgt = layout.nodes.get(flow.targetRef?.id);
+    if (!src || !tgt) continue;
+    const detour =
+      src.centerX < tgt.x || src.centerX > tgt.x + tgt.width
+        ? findClearChannelRoute(src, tgt, layout, flow, edgeWaypoints)
+        : null;
+    if (detour) {
+      edgeWaypoints.set(flow.id, dedupeConsecutivePoints(detour));
+      continue;
+    }
+    const repaired = dedupeConsecutivePoints(repairSegmentCollisions(points, layout, flow, edgeWaypoints, routingPolicy));
+    if (
+      validateConnectionPoints(repaired, src, tgt) &&
+      countShapeRouteHits(repaired, layout, flow, edgeWaypoints) < countShapeRouteHits(points, layout, flow, edgeWaypoints)
     ) {
       edgeWaypoints.set(flow.id, repaired);
     }

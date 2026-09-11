@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_GatewayBidirectionalBypass" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:process id="Process_GatewayBidirectionalBypass" name="Gateway and its loop-back both bypass a same-track sibling" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Decide</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gateway_Decide" name="Needs review?">
+      <bpmn:incoming>Flow_Start_Decide</bpmn:incoming>
+      <bpmn:incoming>Flow_Review_Decide</bpmn:incoming>
+      <bpmn:outgoing>Flow_Decide_Repair</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decide_Review</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Decide_Cancelled</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Repair" name="Repair">
+      <bpmn:incoming>Flow_Decide_Repair</bpmn:incoming>
+      <bpmn:outgoing>Flow_Repair_Review</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_Review" name="Review">
+      <bpmn:incoming>Flow_Decide_Review</bpmn:incoming>
+      <bpmn:incoming>Flow_Repair_Review</bpmn:incoming>
+      <bpmn:outgoing>Flow_Review_Decide</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Review_Publish</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_Publish" name="Publish">
+      <bpmn:incoming>Flow_Review_Publish</bpmn:incoming>
+      <bpmn:outgoing>Flow_Publish_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_1" name="Published">
+      <bpmn:incoming>Flow_Publish_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Cancelled" name="Cancelled">
+      <bpmn:incoming>Flow_Decide_Cancelled</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Decide" sourceRef="Start_1" targetRef="Gateway_Decide" />
+    <bpmn:sequenceFlow id="Flow_Decide_Repair" name="repair" sourceRef="Gateway_Decide" targetRef="Task_Repair" />
+    <bpmn:sequenceFlow id="Flow_Decide_Review" name="review" sourceRef="Gateway_Decide" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Decide_Cancelled" name="cancel" sourceRef="Gateway_Decide" targetRef="End_Cancelled" />
+    <bpmn:sequenceFlow id="Flow_Repair_Review" name="retry review" sourceRef="Task_Repair" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Review_Decide" name="needs another pass" sourceRef="Task_Review" targetRef="Gateway_Decide" />
+    <bpmn:sequenceFlow id="Flow_Review_Publish" name="accepted" sourceRef="Task_Review" targetRef="Task_Publish" />
+    <bpmn:sequenceFlow id="Flow_Publish_End" sourceRef="Task_Publish" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_GatewayBidirectionalBypass">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_GatewayBidirectionalBypass" bpmnElement="Process_GatewayBidirectionalBypass">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="82" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="126" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Decide_di" bpmnElement="Gateway_Decide" isMarkerVisible="true">
+        <dc:Bounds x="148" y="75" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="140" y="45" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Repair_di" bpmnElement="Task_Repair">
+        <dc:Bounds x="248" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review">
+        <dc:Bounds x="398" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Publish_di" bpmnElement="Task_Publish">
+        <dc:Bounds x="548" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="698" y="82" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="671" y="126" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
+        <dc:Bounds x="155" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="128" y="326" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Decide_di" bpmnElement="Flow_Start_Decide">
+        <di:waypoint x="98" y="100" />
+        <di:waypoint x="148" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decide_Repair_di" bpmnElement="Flow_Decide_Repair">
+        <di:waypoint x="198" y="100" />
+        <di:waypoint x="248" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decide_Review_di" bpmnElement="Flow_Decide_Review">
+        <di:waypoint x="173" y="75" />
+        <di:waypoint x="173" y="20" />
+        <di:waypoint x="448" y="20" />
+        <di:waypoint x="448" y="60" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Decide_Cancelled_di" bpmnElement="Flow_Decide_Cancelled">
+        <di:waypoint x="173" y="125" />
+        <di:waypoint x="173" y="282" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Repair_Review_di" bpmnElement="Flow_Repair_Review">
+        <di:waypoint x="348" y="100" />
+        <di:waypoint x="398" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Review_Decide_di" bpmnElement="Flow_Review_Decide">
+        <di:waypoint x="448" y="60" />
+        <di:waypoint x="448" y="10" />
+        <di:waypoint x="173" y="10" />
+        <di:waypoint x="173" y="75" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Review_Publish_di" bpmnElement="Flow_Review_Publish">
+        <di:waypoint x="498" y="100" />
+        <di:waypoint x="548" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Publish_End_di" bpmnElement="Flow_Publish_End">
+        <di:waypoint x="648" y="100" />
+        <di:waypoint x="698" y="100" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

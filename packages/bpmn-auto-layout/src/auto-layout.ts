@@ -29,6 +29,7 @@ import { computeProcessLayout } from "./node-placement";
 import { createProcessDi, createCollaborationDi, getCollaborationProcessIds } from "./di-creation";
 import { DEFAULT_OPTIONS, type AutoLayoutOptions, type ResolvedLayoutOptions } from "./element-dimensions";
 import type { LayoutWarning } from "./layout-warnings";
+import { comparePriorityViolations } from "./layout-policy";
 
 export type { AutoLayoutOptions };
 export type { LayoutWarning, LayoutWarningCode } from "./layout-warnings";
@@ -95,5 +96,16 @@ export async function layoutProcessWithDiagnostics(
 ): Promise<LayoutResult> {
   const warnings: LayoutWarning[] = [];
   const outputXml = await runLayout(xml, options, warnings);
-  return { xml: outputXml, warnings };
+  // §8's priority ladder (LAYOUT_PRIORITY_LEVELS / comparePriorityViolations
+  // in layout-policy.ts) previously had no call site outside its own tests
+  // (#42): warnings were reported in discovery order, so a low-priority
+  // spacing warning could sit ahead of a high-priority overlap in the list a
+  // caller reads first. Order by the same comparator the ladder defines, so
+  // a caller who only looks at warnings[0] sees the most important
+  // unsatisfied constraint, not just the first one the engine happened to
+  // notice.
+  const sortedWarnings = [...warnings].sort((a, b) =>
+    comparePriorityViolations(new Set([a.priorityLevel]), new Set([b.priorityLevel])),
+  );
+  return { xml: outputXml, warnings: sortedWarnings };
 }

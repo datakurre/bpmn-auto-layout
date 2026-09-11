@@ -484,6 +484,8 @@ def collect_metrics(path: Path) -> dict[str, object]:
     non_orthogonal_segments = 0
     non_lattice_segments = 0
     max_lattice_remainder = 0.0
+    degenerate_waypoints = 0
+    degenerate_waypoint_details: list[dict[str, object]] = []
     horizontal_flow_gaps: list[float] = []
     excess_turns_total = 0
     excess_turn_details: list[dict[str, object]] = []
@@ -553,6 +555,16 @@ def collect_metrics(path: Path) -> dict[str, object]:
             segment_length = abs(a[0] - b[0]) + abs(a[1] - b[1])
             total_manhattan += segment_length
             edge_manhattan += segment_length
+            if segment_length < 0.5:
+                # A repeated (or near-repeated) consecutive waypoint pair
+                # contributes no geometry: it inflates total_bends for free
+                # and, since both coordinate deltas are ~0, incidentally
+                # passes the orthogonal check below rather than failing it
+                # (#46).
+                degenerate_waypoints += 1
+                degenerate_waypoint_details.append(
+                    {"edge": str(edge["bpmnElement"]), "point": [round(a[0], 2), round(a[1], 2)]}
+                )
             if abs(a[0] - b[0]) >= 0.5 and abs(a[1] - b[1]) >= 0.5:
                 non_orthogonal_segments += 1
             remainder = segment_length % ROUTE_UNIT
@@ -714,6 +726,8 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "total_bends": total_bends,
             "total_manhattan_length": round(total_manhattan, 2),
             "non_orthogonal_segments": non_orthogonal_segments,
+            "degenerate_waypoints": degenerate_waypoints,
+            "degenerate_waypoint_details": degenerate_waypoint_details,
             "excess_turns": excess_turns_total,
             "excess_turn_details": excess_turn_details,
             "detour_ratio": {
@@ -924,6 +938,7 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("node containment violations", ("layout", "node_containment_violations")),
         ("label containment violations", ("layout", "label_containment_violations")),
         ("total bends", ("layout", "total_bends")),
+        ("degenerate waypoints", ("layout", "degenerate_waypoints")),
         ("excess turns", ("layout", "excess_turns")),
         ("detour ratio average", ("layout", "detour_ratio", "avg")),
         ("detour ratio maximum", ("layout", "detour_ratio", "max")),
@@ -1338,11 +1353,41 @@ def check_gateway_bypass_avoids_sibling(root: ET.Element) -> list[str]:
     return problems
 
 
+def check_no_degenerate_waypoints(root: ET.Element) -> list[str]:
+    """Pins #46: no emitted edge may have two consecutive waypoints at (or
+    within rounding of) the same point. A repeated point is a zero-length
+    segment -- it contributes no geometry, inflates total_bends for free, and
+    passes the orthogonal check incidentally rather than by being a real
+    axis-aligned segment."""
+    problems: list[str] = []
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            for a, b in zip(points, points[1:]):
+                if abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) < 0.5:
+                    problems.append(f"{edge.get('bpmnElement')} has a duplicated waypoint at {a}")
+    return problems
+
+
+def check_gateway_loop_bypasses_sibling_without_degenerate_waypoints(root: ET.Element) -> list[str]:
+    """Pins #41 and #46 together: a gateway's forward branch *and* its
+    loop-back both route past a same-track sibling sitting directly between
+    them, and neither route may ship a duplicated waypoint while doing so.
+    Filed as one fixture because both defects were reached through the same
+    fallback/reassert code path and were only independently observable, not
+    independently caused."""
+    return check_gateway_bypass_avoids_sibling(root) + check_no_degenerate_waypoints(root)
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
+    "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
 }
 
 
@@ -1402,6 +1447,7 @@ METRIC_PRIORITY_LEVEL: dict[str, int] = {
     "invalid_edge_attachments": 1,
     "invalid_label_bounds": 1,
     "edge_container_intersections": 1,
+    "degenerate_waypoints": 1,
     "edge_crossings": 2,
     "edge_shape_intersections": 2,
     "shape_overlaps": 2,
@@ -1436,6 +1482,7 @@ def check_report(args: argparse.Namespace) -> None:
             "edge_container_intersections",
             "invalid_edge_attachments",
             "non_orthogonal_segments",
+            "degenerate_waypoints",
             "label_overlaps",
             "invalid_label_bounds",
             "shape_overlaps",
@@ -1464,6 +1511,8 @@ def check_report(args: argparse.Namespace) -> None:
             add("edge_crossings", f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
             add("edge_shape_intersections", f"{title}: {detail['edge']} intersects {detail['shape']}")
+        for detail in layout.get("degenerate_waypoint_details", []):
+            add("degenerate_waypoints", f"{title}: {detail['edge']} has a duplicated waypoint at {detail['point']}")
         for detail in layout.get("edge_container_intersection_details", []):
             add("edge_container_intersections", f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):

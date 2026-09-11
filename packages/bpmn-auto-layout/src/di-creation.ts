@@ -17,8 +17,8 @@ import {
   participantBoundaryObstacles,
   leafLaneBoundsByNodeId,
 } from "./lane-layout";
-import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
-import { routeProcessFlows, snapRouteWaypoints } from "./process-routing";
+import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, validateConnectionPoints } from "./collision-repair";
+import { routeProcessFlows, snapRouteWaypoints, dedupeConsecutivePoints } from "./process-routing";
 import type { LayoutWarning } from "./layout-warnings";
 import {
   ensureOrthogonalWaypoints,
@@ -297,8 +297,12 @@ export function createCollaborationDi(
     const edgeAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: points.map((p) =>
-        moddle.create("dc:Point", { x: Math.round(p.x), y: Math.round(p.y) }),
+      // Drop consecutive duplicate points here, at the one place every
+      // route's waypoints become dc:Point elements, so no upstream pass --
+      // a fixed-offset fallback, a repair step -- can ship a zero-length
+      // segment into the DI regardless of how it was produced (#46).
+      waypoint: dedupeConsecutivePoints(points.map((p) => ({ x: Math.round(p.x), y: Math.round(p.y) }))).map((p) =>
+        moddle.create("dc:Point", p),
       ),
     };
     if (flow.name) {
@@ -557,13 +561,22 @@ function buildProcessShapesAndEdges(
     // label placement, so this pass may only trade a label crossing for
     // nothing worse, never for a new or additional shape/edge crossing.
     const beforeShapeHits = countRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
+    // countRouteHits blends real-shape hits together with edge-vs-edge and
+    // container hits into one number, so "no worse than before" against it
+    // alone lets this pass trade away a label crossing for a *new* shape
+    // crossing as long some other component of the blend improved enough to
+    // keep the total flat or lower -- exactly the kind of priority-order
+    // violation #42 exists to prevent. Track real shape hits (§8 priority 2)
+    // separately and never let this label-driven repair increase them (#41).
+    const beforeRealShapeHits = countShapeRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
     const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
     const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
     const repaired = repairSegmentCollisions(waypoints, layoutWithLabels, flow, edgeWaypoints, routingPolicy);
     if (
       validateConnectionPoints(repaired, src, tgt) &&
       countRouteHits(repaired, layoutWithLabels, flow, edgeWaypoints) < beforeWithLabels &&
-      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits
+      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits &&
+      countShapeRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeRealShapeHits
     ) {
       edgeWaypoints.set(flow.id, snapRouteWaypoints(ensureOrthogonalWaypoints(repaired), opts.gridSize));
     }
@@ -577,11 +590,12 @@ function buildProcessShapesAndEdges(
     const edgeDiAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: waypoints.map((pt) =>
-        moddle.create("dc:Point", {
-          x: Math.round(pt.x),
-          y: Math.round(pt.y),
-        }),
+      // See the message-flow edge above: dedupe here too, at the point
+      // waypoints become dc:Point elements, so the label re-repair pass
+      // just above (which can rewrite a route) can't reintroduce a
+      // zero-length segment that earlier dedup passes already removed (#46).
+      waypoint: dedupeConsecutivePoints(waypoints.map((pt) => ({ x: Math.round(pt.x), y: Math.round(pt.y) }))).map(
+        (pt) => moddle.create("dc:Point", pt),
       ),
     };
 
