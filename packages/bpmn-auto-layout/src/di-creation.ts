@@ -164,18 +164,17 @@ export function createCollaborationDi(
 
   const planeElements: any[] = [];
 
-  /**
-   * nodePositions maps every element id (participant, flow node, subprocess child)
-   * to its final absolute bounds within the collaboration plane.  Used later for
-   * message-flow waypoint computation.
-   */
-  const nodePositions = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
-
   // Per-participant absolute offsets: process-local (x,y) → collaboration-plane (x,y)
   const participantOffsets = new Map<string, { dx: number; dy: number }>();
+
+  // Accumulated across every participant, in plane-absolute coordinates, so
+  // message-flow routing can share the same collision-repair pipeline as
+  // sequence flows: every flow node (for obstacle avoidance), every pool's
+  // container boundary strips, and every already-placed sequence-flow route
+  // (so a message flow does not cut across one) (#13).
+  const collaborationNodes = new Map<string, NodeLayout>();
+  const allContainerObstacles: NodeLayout[] = [];
+  const sequenceFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
 
   // ── 1. Participant (pool) shapes ─────────────────────────────────────────
   let nextParticipantY = 50;
@@ -233,7 +232,18 @@ export function createCollaborationDi(
       width: participantW,
       height: participantH,
     };
-    nodePositions.set(participant.id, participantBounds);
+    // A message flow may attach directly to a pool rather than one of its
+    // flow nodes; give it a NodeLayout-shaped entry too so it is usable as a
+    // route endpoint the same way a flow node is.
+    collaborationNodes.set(participant.id, {
+      id: participant.id,
+      element: participant,
+      col: 0,
+      track: 0,
+      ...participantBounds,
+      centerX: participantBounds.x + participantBounds.width / 2,
+      centerY: participantBounds.y + participantBounds.height / 2,
+    });
 
     planeElements.push(
       moddle.create("bpmndi:BPMNShape", {
@@ -280,31 +290,34 @@ export function createCollaborationDi(
       ...participantBoundaryObstacles(participantBounds, LANE_GUTTER),
       ...laneDividerObstacles(laneBands),
     ];
-    const processPlaneElements = buildProcessShapesAndEdges(
-      moddle, process, layout, opts, dx, dy, containerObstacles,
-    );
-    for (const el of processPlaneElements) planeElements.push(el);
-
-    // Populate nodePositions for all flow nodes (for message-flow routing)
-    for (const node of layout.nodes.values()) {
-      nodePositions.set(node.id, {
-        x: node.x + dx,
-        y: node.y + dy,
-        width: node.width,
-        height: node.height,
-      });
-    }
+    const built = buildProcessShapesAndEdges(moddle, process, layout, opts, dx, dy, containerObstacles);
+    for (const el of built.elements) planeElements.push(el);
+    allContainerObstacles.push(...containerObstacles);
+    for (const [id, node] of built.nodes) collaborationNodes.set(id, node);
+    for (const [id, points] of built.edgeWaypoints) sequenceFlowWaypoints.set(id, points);
   }
 
   // ── 4. Message flow edges ─────────────────────────────────────────────
+  // Message flows now share the same collision-repair pipeline sequence
+  // flows use: a candidate route, repaired against the full obstacle set
+  // (every flow node, every pool's container boundary strips, and every
+  // already-placed sequence- and message-flow route), instead of an
+  // unchecked fixed mid-line (#13).
+  const routingPolicy = resolveRoutingPolicy(opts.routing);
+  const collaborationLayout: ProcessLayoutResult = {
+    nodes: collaborationNodes,
+    allFlows: [],
+    containerObstacles: allContainerObstacles,
+  };
+  const messageFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
   for (const flow of collaboration.messageFlows || []) {
-    const source = nodePositions.get(flow.sourceRef?.id);
-    const target = nodePositions.get(flow.targetRef?.id);
+    const source = collaborationNodes.get(flow.sourceRef?.id);
+    const target = collaborationNodes.get(flow.targetRef?.id);
     if (!source || !target) continue;
-    const srcCx = source.x + source.width / 2;
-    const srcCy = source.y + source.height / 2;
-    const tgtCx = target.x + target.width / 2;
-    const tgtCy = target.y + target.height / 2;
+    const srcCx = source.centerX;
+    const srcCy = source.centerY;
+    const tgtCx = target.centerX;
+    const tgtCy = target.centerY;
     const vertical = Math.abs(tgtCy - srcCy) >= Math.abs(tgtCx - srcCx);
     const sourcePoint = vertical
       ? { x: srcCx, y: tgtCy >= srcCy ? source.y + source.height : source.y }
@@ -314,32 +327,31 @@ export function createCollaborationDi(
       : { x: tgtCx >= srcCx ? target.x : target.x + target.width, y: tgtCy };
     const midY = (sourcePoint.y + targetPoint.y) / 2;
     const midX = (sourcePoint.x + targetPoint.x) / 2;
-    const points = snapRouteWaypoints(
-      vertical
-        ? [
-            sourcePoint,
-            { x: sourcePoint.x, y: midY },
-            { x: targetPoint.x, y: midY },
-            targetPoint,
-          ]
-        : [
-            sourcePoint,
-            { x: midX, y: sourcePoint.y },
-            { x: midX, y: targetPoint.y },
-            targetPoint,
-          ],
-      opts.gridSize,
-    );
+    const candidate = vertical
+      ? [sourcePoint, { x: sourcePoint.x, y: midY }, { x: targetPoint.x, y: midY }, targetPoint]
+      : [sourcePoint, { x: midX, y: sourcePoint.y }, { x: midX, y: targetPoint.y }, targetPoint];
+
+    const blockedPaths = new Map([...sequenceFlowWaypoints, ...messageFlowWaypoints]);
+    const repaired = repairSegmentCollisions(candidate, collaborationLayout, flow, blockedPaths, routingPolicy);
+    const finalRoute = validateConnectionPoints(repaired, source, target) ? repaired : candidate;
+    const points = snapRouteWaypoints(finalRoute, opts.gridSize);
+    messageFlowWaypoints.set(flow.id, points);
+
     const edgeAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: points.map((p) => moddle.create("dc:Point", p)),
+      waypoint: points.map((p) =>
+        moddle.create("dc:Point", { x: Math.round(p.x), y: Math.round(p.y) }),
+      ),
     };
     if (flow.name) {
+      const first = points[0]!;
+      const last = points[points.length - 1]!;
+      const labelMidY = (first.y + last.y) / 2;
       edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
         bounds: moddle.create("dc:Bounds", {
-          x: (sourcePoint.x + targetPoint.x) / 2 - 45,
-          y: vertical ? midY - 20 : (sourcePoint.y + targetPoint.y) / 2 - 10,
+          x: (first.x + last.x) / 2 - 45,
+          y: vertical ? labelMidY - 20 : labelMidY - 10,
           width: 90,
           height: 20,
         }),
@@ -374,6 +386,14 @@ export function createCollaborationDi(
  * Lane shapes are NOT generated here — they are emitted by the caller
  * (createProcessDi for standalone processes, createCollaborationDi for pools).
  */
+interface ProcessShapesAndEdges {
+  elements: any[];
+  /** Shifted (plane-absolute) node geometry, keyed by element id. */
+  nodes: Map<string, NodeLayout>;
+  /** Final sequence-flow waypoints, keyed by flow id, in plane-absolute coordinates. */
+  edgeWaypoints: Map<string, Array<{ x: number; y: number }>>;
+}
+
 function buildProcessShapesAndEdges(
   moddle: any,
   process: any,
@@ -382,7 +402,7 @@ function buildProcessShapesAndEdges(
   dx = 0,
   dy = 0,
   containerObstacles: NodeLayout[] = [],
-): any[] {
+): ProcessShapesAndEdges {
   const elements: any[] = [];
   const routingPolicy = resolveRoutingPolicy(opts.routing);
   const namedLabel = (x: number, y: number, width = 90, height = 20) =>
@@ -714,7 +734,7 @@ function buildProcessShapesAndEdges(
     elements.push(moddle.create("bpmndi:BPMNEdge", edgeDiAttrs));
   }
 
-  return elements;
+  return { elements, nodes: shiftedNodes, edgeWaypoints };
 }
 
 export function createProcessDi(
@@ -760,7 +780,7 @@ export function createProcessDi(
 
   // Generate node shapes and edge DI using the shared helper (no offset for
   // standalone processes — dx=0, dy=0).
-  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts, 0, 0, containerObstacles)) {
+  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts, 0, 0, containerObstacles).elements) {
     planeElements.push(el);
   }
 
