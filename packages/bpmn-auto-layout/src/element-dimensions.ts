@@ -63,5 +63,11 @@ export const ROUTE_DEPARTURE_GAP = 40;
 /** Bend penalty used in the visibility-graph Dijkstra to prefer fewer turns. */
 export const ROUTE_BEND_PENALTY = 10_000;
 
-/** How far an edge label may slide past the ends of its own segment. */
-export const LABEL_SLIDE_SLACK = 45;
+/**
+ * How far an edge label's center may slide past the ends of its own
+ * segment. Was 45 -- more than the length of the shortest eligible segment
+ * (30 px) -- letting a label's center land entirely outside the segment
+ * it's supposedly "on" (see #16). Sharply reduced so §2's "center of a
+ * sufficiently long segment" is actually enforced.
+ */
+export const LABEL_SLIDE_SLACK = 15;

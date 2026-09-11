@@ -284,7 +284,7 @@ function pickLabel(
     return crossings;
   };
 
-  const overlapArea = (bounds: LabelBounds): number => {
+  const shapeOverlapArea = (bounds: LabelBounds): number => {
     let area = 0;
     for (const node of nodes.values()) {
       const isOwnEndpoint = node.id === flow?.sourceRef?.id || node.id === flow?.targetRef?.id;
@@ -293,18 +293,40 @@ function pickLabel(
       area += boxOverlap(bounds, node);
     }
     for (const other of placedLabels) area += boxOverlap(bounds, other);
-    return area + crossedByEdge(bounds) * 120;
+    return area;
   };
 
+  const valid = candidates.filter((cand) => cand.x >= 0 && cand.y >= 0);
+
+  // A candidate that crosses another edge is never preferred over one that
+  // doesn't, no matter how much shape/label overlap the crossing-free one
+  // has -- crossings are a hard constraint here, not a term folded into a
+  // single weighted score (see #16). Only when every candidate crosses
+  // something does the search fall back to minimizing the old combined
+  // score, so the result is still the least-bad option rather than an
+  // arbitrary one.
+  const crossingFree = valid.filter((cand) => crossedByEdge(cand) === 0);
+  if (crossingFree.length > 0) {
+    let best = crossingFree[0]!;
+    let bestArea = shapeOverlapArea(best);
+    for (const cand of crossingFree) {
+      const area = shapeOverlapArea(cand);
+      if (area === 0) return cand;
+      if (area < bestArea) {
+        best = cand;
+        bestArea = area;
+      }
+    }
+    return best;
+  }
+
   let best = fallback;
-  let bestArea = overlapArea(fallback);
-  for (const cand of candidates) {
-    if (cand.x < 0 || cand.y < 0) continue;
-    const area = overlapArea(cand);
-    if (area === 0) return cand;
-    if (area < bestArea) {
+  let bestScore = shapeOverlapArea(fallback) + crossedByEdge(fallback) * 120;
+  for (const cand of valid) {
+    const score = shapeOverlapArea(cand) + crossedByEdge(cand) * 120;
+    if (score < bestScore) {
       best = cand;
-      bestArea = area;
+      bestScore = score;
     }
   }
   return best;
@@ -325,13 +347,13 @@ export function computeEdgeLabelBounds(
   if (!flow.name || typeof flow.name !== "string" || flow.name.trim().length === 0) return null;
   const text = flow.name.trim();
 
-  let bestSeg: {
+  interface Seg {
     p1: { x: number; y: number };
     p2: { x: number; y: number };
-    isHoriz: boolean;
     len: number;
-  } | null = null;
-
+  }
+  const horizSegs: Seg[] = [];
+  let vertSeg: Seg | null = null;
   for (let i = 0; i < waypoints.length - 1; i++) {
     const p1 = waypoints[i];
     const p2 = waypoints[i + 1];
@@ -339,107 +361,110 @@ export function computeEdgeLabelBounds(
     const isHoriz = p1.y === p2.y;
     const isVert = p1.x === p2.x;
     const len = isHoriz ? Math.abs(p2.x - p1.x) : isVert ? Math.abs(p2.y - p1.y) : 0;
-    if (isHoriz && len >= 30) {
-      if (!bestSeg || !bestSeg.isHoriz || len > bestSeg.len) {
-        bestSeg = { p1, p2, isHoriz: true, len };
-      }
-    } else if (!bestSeg && len >= 20) {
-      bestSeg = { p1, p2, isHoriz: false, len };
-    }
+    if (isHoriz && len >= 30) horizSegs.push({ p1, p2, len });
+    else if (isVert && len >= 20 && !vertSeg) vertSeg = { p1, p2, len };
   }
-  if (!bestSeg) return null;
+  if (horizSegs.length === 0 && !vertSeg) return null;
+  // Longest first, so the fallback box (when no candidate anywhere is
+  // collision-free) still prefers the most generous segment.
+  horizSegs.sort((a, b) => b.len - a.len);
 
   const width = Math.min(90, Math.max(30, Math.round(text.length * 6.5) + 10));
   const height = 14;
   const edgeLabelGap = 2;
 
-  if (bestSeg.isHoriz) {
-    const minX = Math.min(bestSeg.p1.x, bestSeg.p2.x);
-    const maxX = Math.max(bestSeg.p1.x, bestSeg.p2.x);
-    const midX = (minX + maxX) / 2;
+  if (horizSegs.length > 0) {
+    // Every eligible horizontal segment contributes its own candidates, so
+    // a crowded segment can be skipped in favor of a clearer one elsewhere
+    // on the same route instead of only ever considering the longest one
+    // (see #16).
+    const allCandidates: LabelBounds[] = [];
+    let fallback = { x: 0, y: 0, width, height };
+    horizSegs.forEach((seg, index) => {
+      const minX = Math.min(seg.p1.x, seg.p2.x);
+      const maxX = Math.max(seg.p1.x, seg.p2.x);
+      const midX = (minX + maxX) / 2;
 
-    const hasFlowAbove =
-      bestSeg.p1.y <= 0 ||
-      Array.from(edgeWaypoints.values()).some((pts) => {
-        for (let j = 0; j < pts.length - 1; j++) {
-          const q1 = pts[j];
-          const q2 = pts[j + 1];
-          if (!q1 || !q2) continue;
-          if (q1.y === q2.y && q1.y < bestSeg!.p1.y && bestSeg!.p1.y - q1.y <= 40) {
-            const qMinX = Math.min(q1.x, q2.x);
-            const qMaxX = Math.max(q1.x, q2.x);
-            if (Math.max(minX, qMinX) < Math.min(maxX, qMaxX)) return true;
+      const hasFlowAbove =
+        seg.p1.y <= 0 ||
+        Array.from(edgeWaypoints.values()).some((pts) => {
+          for (let j = 0; j < pts.length - 1; j++) {
+            const q1 = pts[j];
+            const q2 = pts[j + 1];
+            if (!q1 || !q2) continue;
+            if (q1.y === q2.y && q1.y < seg.p1.y && seg.p1.y - q1.y <= 40) {
+              const qMinX = Math.min(q1.x, q2.x);
+              const qMaxX = Math.max(q1.x, q2.x);
+              if (Math.max(minX, qMinX) < Math.min(maxX, qMaxX)) return true;
+            }
           }
+          return false;
+        });
+
+      const primaryY = hasFlowAbove
+        ? Math.round(seg.p1.y + 4)
+        : Math.round(seg.p1.y - height - edgeLabelGap);
+      const altY = hasFlowAbove
+        ? Math.round(seg.p1.y - height - edgeLabelGap)
+        : Math.round(seg.p1.y + 4);
+      const centeredX = midX - width / 2;
+      if (index === 0) fallback = { x: centeredX, y: primaryY, width, height };
+
+      const straddled = Array.from(nodes.values()).filter(
+        (n) =>
+          !isOwnContainer(n, flow?.sourceRef?.id, nodes) &&
+          n.x <= maxX + width / 2 &&
+          minX - width / 2 <= n.x + n.width &&
+          n.y < seg.p1.y + height &&
+          seg.p1.y - height < n.y + n.height,
+      );
+      const clearAbove = straddled.length
+        ? Math.min(...straddled.map((n) => n.y)) - height - 4
+        : primaryY;
+      const clearBelow = straddled.length
+        ? Math.max(...straddled.map((n) => n.y + n.height)) + 4
+        : altY;
+
+      for (const y of [primaryY, altY, clearAbove, clearBelow]) {
+        for (const dx of [0, 20, -20, 40, -40, 60, -60, 80, -80]) {
+          const x = centeredX + dx;
+          if (x + width / 2 < minX - LABEL_SLIDE_SLACK || x + width / 2 > maxX + LABEL_SLIDE_SLACK) continue;
+          allCandidates.push({ x, y, width, height });
         }
-        return false;
-      });
-
-    const primaryY = hasFlowAbove
-      ? Math.round(bestSeg.p1.y + 4)
-      : Math.round(bestSeg.p1.y - height - edgeLabelGap);
-    const altY = hasFlowAbove
-      ? Math.round(bestSeg.p1.y - height - edgeLabelGap)
-      : Math.round(bestSeg.p1.y + 4);
-    const centeredX = midX - width / 2;
-
-    const straddled = Array.from(nodes.values()).filter(
-      (n) =>
-        !isOwnContainer(n, flow?.sourceRef?.id, nodes) &&
-        n.x <= maxX + width / 2 &&
-        minX - width / 2 <= n.x + n.width &&
-        n.y < bestSeg!.p1.y + height &&
-        bestSeg!.p1.y - height < n.y + n.height,
-    );
-    const clearAbove = straddled.length
-      ? Math.min(...straddled.map((n) => n.y)) - height - 4
-      : primaryY;
-    const clearBelow = straddled.length
-      ? Math.max(...straddled.map((n) => n.y + n.height)) + 4
-      : altY;
-
-    const candidates: LabelBounds[] = [];
-    for (const y of [primaryY, altY, clearAbove, clearBelow]) {
-      for (const dx of [0, 20, -20, 40, -40, 60, -60, 80, -80]) {
-        const x = centeredX + dx;
-        if (
-          x + width / 2 < minX - LABEL_SLIDE_SLACK ||
-          x + width / 2 > maxX + LABEL_SLIDE_SLACK
-        )
-          continue;
-        candidates.push({ x, y, width, height });
       }
-    }
-    const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
+    });
+    const containedCandidates = allCandidates.filter((c) => containedIn(c, containerBounds));
     return pickLabel(
-      containedCandidates.length > 0 ? containedCandidates : candidates,
-      { x: centeredX, y: primaryY, width, height },
-      flow,
-      placedLabels,
-      nodes,
-      edgeWaypoints,
-    );
-  } else {
-    const minY = Math.min(bestSeg.p1.y, bestSeg.p2.y);
-    const maxY = Math.max(bestSeg.p1.y, bestSeg.p2.y);
-    const midY = (minY + maxY) / 2;
-    const y = Math.round(midY - height / 2);
-    const rightX = Math.round(bestSeg.p1.x + 4);
-    const leftX = Math.round(bestSeg.p1.x - width - 4);
-    const candidates: LabelBounds[] = [];
-    for (const dy of [0, -18, 18, -36, 36]) {
-      candidates.push({ x: rightX, y: y + dy, width, height });
-      candidates.push({ x: leftX, y: y + dy, width, height });
-    }
-    const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
-    return pickLabel(
-      containedCandidates.length > 0 ? containedCandidates : candidates,
-      { x: rightX, y, width, height },
+      containedCandidates.length > 0 ? containedCandidates : allCandidates,
+      fallback,
       flow,
       placedLabels,
       nodes,
       edgeWaypoints,
     );
   }
+
+  const seg = vertSeg!;
+  const minY = Math.min(seg.p1.y, seg.p2.y);
+  const maxY = Math.max(seg.p1.y, seg.p2.y);
+  const midY = (minY + maxY) / 2;
+  const y = Math.round(midY - height / 2);
+  const rightX = Math.round(seg.p1.x + 4);
+  const leftX = Math.round(seg.p1.x - width - 4);
+  const candidates: LabelBounds[] = [];
+  for (const dy of [0, -18, 18, -36, 36]) {
+    candidates.push({ x: rightX, y: y + dy, width, height });
+    candidates.push({ x: leftX, y: y + dy, width, height });
+  }
+  const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
+  return pickLabel(
+    containedCandidates.length > 0 ? containedCandidates : candidates,
+    { x: rightX, y, width, height },
+    flow,
+    placedLabels,
+    nodes,
+    edgeWaypoints,
+  );
 }
 
 // ---------------------------------------------------------------------------

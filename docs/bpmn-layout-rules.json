@@ -149,8 +149,15 @@
     {
       "id": "labels.edge-placement",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
-      "rule": "Named sequence flows receive labels on a preferred horizontal segment of at least 30 px, or otherwise a vertical segment of at least 20 px. Horizontal labels are centered on the segment midpoint with a 2 px above-segment clearance when that side is selected. Edge labels are placed before node labels so node-label placement can avoid them."
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:339-450"],
+      "rule": "Named sequence flows receive labels from candidates generated over every eligible horizontal segment (>= 30 px) on the route, longest first, or otherwise a single vertical segment (>= 20 px) if no horizontal segment qualifies. Horizontal labels are centered on each segment's own midpoint with a 2 px above/below clearance depending on whether another route runs close above. A label's center may slide at most LABEL_SLIDE_SLACK (15 px) past either end of the segment it's centered on. Edge labels are placed before node labels so node-label placement can avoid them."
+    },
+    {
+      "id": "labels.edge-crossing-priority",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:252-330"],
+      "rule": "pickLabel treats crossing another route as a harder constraint than shape/label overlap: among the crossing-free candidates (if any exist), it picks the one with the least shape/label overlap, returning immediately on zero overlap. Only when every candidate crosses some route does it fall back to minimizing a single combined score (shape/label overlap area plus 120 per crossing), so the result is still the least-bad option rather than an arbitrary one.",
+      "note": "In fixtures where every reachable candidate across every eligible segment already crosses something (dense gateway/loop areas), this still degrades to the combined-score fallback -- the constraint is enforced, but a genuinely saturated diagram has no crossing-free position to find."
     },
     {
       "id": "labels.subprocess-obstacles",
