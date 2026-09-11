@@ -9,12 +9,18 @@
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import { resolveRoutingPolicy } from "./layout-policy";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
-import { planChannels } from "./channel-planning";
-import { computeLaneBands, laneBandsBottom, laneLabelBounds } from "./lane-layout";
-import { computeWaypoints, channelY } from "./edge-routing";
-import { repairSegmentCollisions, validateConnectionPoints } from "./collision-repair";
 import {
-  fanOutAttachPoints,
+  computeLaneBands,
+  laneBandsBottom,
+  laneLabelBounds,
+  laneDividerObstacles,
+  participantBoundaryObstacles,
+  leafLaneBoundsByNodeId,
+} from "./lane-layout";
+import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
+import { routeProcessFlows, snapRouteWaypoints } from "./process-routing";
+import type { LayoutWarning } from "./layout-warnings";
+import {
   ensureOrthogonalWaypoints,
   solveLabelPlacement,
   computeEdgeLabelBounds,
@@ -76,33 +82,6 @@ function normalizePlaneOrigin(planeElements: any[]): void {
   }
 }
 
-function snapRouteWaypoints(
-  points: Array<{ x: number; y: number }>,
-  gridSize: number,
-): Array<{ x: number; y: number }> {
-  const snapped = points.map((point, index) => {
-    // Keep attachment points on the shape boundary.  diagram-js snaps the
-    // bend location, while the connection endpoint is determined by shape
-    // geometry and may therefore be between grid lines.
-    if (index === 0 || index === points.length - 1) return point;
-    return {
-      x: Math.round(point.x / gridSize) * gridSize,
-      y: Math.round(point.y / gridSize) * gridSize,
-    };
-  });
-  if (
-    snapped.every(
-      (point, index) =>
-        index === 0 ||
-        point.x === snapped[index - 1]!.x ||
-        point.y === snapped[index - 1]!.y,
-    )
-  ) {
-    return snapped;
-  }
-  return points;
-}
-
 /**
  * Returns the set of process IDs that are referenced by any participant in
  * the collaboration, so that createProcessDi can skip those processes.
@@ -124,6 +103,7 @@ export function createCollaborationDi(
   root: any,
   layouts: Map<string, ProcessLayoutResult>,
   opts: ResolvedLayoutOptions,
+  warnings?: LayoutWarning[],
 ): void {
   const collaboration = (root.rootElements || []).find(
     (element: any) => element.$type === "bpmn:Collaboration",
@@ -132,18 +112,21 @@ export function createCollaborationDi(
 
   const planeElements: any[] = [];
 
-  /**
-   * nodePositions maps every element id (participant, flow node, subprocess child)
-   * to its final absolute bounds within the collaboration plane.  Used later for
-   * message-flow waypoint computation.
-   */
-  const nodePositions = new Map<
-    string,
-    { x: number; y: number; width: number; height: number }
-  >();
-
   // Per-participant absolute offsets: process-local (x,y) → collaboration-plane (x,y)
   const participantOffsets = new Map<string, { dx: number; dy: number }>();
+
+  // Accumulated across every participant, in plane-absolute coordinates, so
+  // message-flow routing can share the same collision-repair pipeline as
+  // sequence flows: every flow node (for obstacle avoidance), every pool's
+  // container boundary strips, and every already-placed sequence-flow route
+  // (so a message flow does not cut across one) (#13).
+  const collaborationNodes = new Map<string, NodeLayout>();
+  const allContainerObstacles: NodeLayout[] = [];
+  const sequenceFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
+  // Every label already placed for every participant's own nodes/edges, so
+  // a message-flow label can avoid them too, not just other message-flow
+  // labels (#18).
+  const collaborationLabels: LabelBounds[] = [];
 
   // ── 1. Participant (pool) shapes ─────────────────────────────────────────
   let nextParticipantY = 50;
@@ -201,7 +184,18 @@ export function createCollaborationDi(
       width: participantW,
       height: participantH,
     };
-    nodePositions.set(participant.id, participantBounds);
+    // A message flow may attach directly to a pool rather than one of its
+    // flow nodes; give it a NodeLayout-shaped entry too so it is usable as a
+    // route endpoint the same way a flow node is.
+    collaborationNodes.set(participant.id, {
+      id: participant.id,
+      element: participant,
+      col: 0,
+      track: 0,
+      ...participantBounds,
+      centerX: participantBounds.x + participantBounds.width / 2,
+      centerY: participantBounds.y + participantBounds.height / 2,
+    });
 
     planeElements.push(
       moddle.create("bpmndi:BPMNShape", {
@@ -244,31 +238,43 @@ export function createCollaborationDi(
     // ── 3. Node (flow element) shapes for this participant ────────────────
     //    Use the full createProcessDi shape logic but emit into planeElements
     //    with translated coordinates.
-    const processPlaneElements = buildProcessShapesAndEdges(
-      moddle, process, layout, opts, dx, dy,
+    const containerObstacles = [
+      ...participantBoundaryObstacles(participantBounds, LANE_GUTTER),
+      ...laneDividerObstacles(laneBands),
+    ];
+    const built = buildProcessShapesAndEdges(
+      moddle, process, layout, opts, dx, dy, containerObstacles,
+      leafLaneBoundsByNodeId(laneBands), participantBounds, warnings,
     );
-    for (const el of processPlaneElements) planeElements.push(el);
-
-    // Populate nodePositions for all flow nodes (for message-flow routing)
-    for (const node of layout.nodes.values()) {
-      nodePositions.set(node.id, {
-        x: node.x + dx,
-        y: node.y + dy,
-        width: node.width,
-        height: node.height,
-      });
-    }
+    for (const el of built.elements) planeElements.push(el);
+    allContainerObstacles.push(...containerObstacles);
+    for (const [id, node] of built.nodes) collaborationNodes.set(id, node);
+    for (const [id, points] of built.edgeWaypoints) sequenceFlowWaypoints.set(id, points);
+    collaborationLabels.push(...built.placedLabels);
   }
 
   // ── 4. Message flow edges ─────────────────────────────────────────────
+  // Message flows now share the same collision-repair pipeline sequence
+  // flows use: a candidate route, repaired against the full obstacle set
+  // (every flow node, every pool's container boundary strips, and every
+  // already-placed sequence- and message-flow route), instead of an
+  // unchecked fixed mid-line (#13).
+  const routingPolicy = resolveRoutingPolicy(opts.routing);
+  const collaborationLayout: ProcessLayoutResult = {
+    nodes: collaborationNodes,
+    allFlows: [],
+    containerObstacles: allContainerObstacles,
+  };
+  const messageFlowWaypoints = new Map<string, Array<{ x: number; y: number }>>();
+  const messageFlowLabels: LabelBounds[] = [];
   for (const flow of collaboration.messageFlows || []) {
-    const source = nodePositions.get(flow.sourceRef?.id);
-    const target = nodePositions.get(flow.targetRef?.id);
+    const source = collaborationNodes.get(flow.sourceRef?.id);
+    const target = collaborationNodes.get(flow.targetRef?.id);
     if (!source || !target) continue;
-    const srcCx = source.x + source.width / 2;
-    const srcCy = source.y + source.height / 2;
-    const tgtCx = target.x + target.width / 2;
-    const tgtCy = target.y + target.height / 2;
+    const srcCx = source.centerX;
+    const srcCy = source.centerY;
+    const tgtCx = target.centerX;
+    const tgtCy = target.centerY;
     const vertical = Math.abs(tgtCy - srcCy) >= Math.abs(tgtCx - srcCx);
     const sourcePoint = vertical
       ? { x: srcCx, y: tgtCy >= srcCy ? source.y + source.height : source.y }
@@ -278,36 +284,46 @@ export function createCollaborationDi(
       : { x: tgtCx >= srcCx ? target.x : target.x + target.width, y: tgtCy };
     const midY = (sourcePoint.y + targetPoint.y) / 2;
     const midX = (sourcePoint.x + targetPoint.x) / 2;
-    const points = snapRouteWaypoints(
-      vertical
-        ? [
-            sourcePoint,
-            { x: sourcePoint.x, y: midY },
-            { x: targetPoint.x, y: midY },
-            targetPoint,
-          ]
-        : [
-            sourcePoint,
-            { x: midX, y: sourcePoint.y },
-            { x: midX, y: targetPoint.y },
-            targetPoint,
-          ],
-      opts.gridSize,
-    );
+    const candidate = vertical
+      ? [sourcePoint, { x: sourcePoint.x, y: midY }, { x: targetPoint.x, y: midY }, targetPoint]
+      : [sourcePoint, { x: midX, y: sourcePoint.y }, { x: midX, y: targetPoint.y }, targetPoint];
+
+    const blockedPaths = new Map([...sequenceFlowWaypoints, ...messageFlowWaypoints]);
+    const repaired = repairSegmentCollisions(candidate, collaborationLayout, flow, blockedPaths, routingPolicy);
+    const finalRoute = validateConnectionPoints(repaired, source, target) ? repaired : candidate;
+    const points = snapRouteWaypoints(finalRoute, opts.gridSize);
+    messageFlowWaypoints.set(flow.id, points);
+
     const edgeAttrs: any = {
       id: `${flow.id}_di`,
       bpmnElement: flow,
-      waypoint: points.map((p) => moddle.create("dc:Point", p)),
+      waypoint: points.map((p) =>
+        moddle.create("dc:Point", { x: Math.round(p.x), y: Math.round(p.y) }),
+      ),
     };
     if (flow.name) {
-      edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
-        bounds: moddle.create("dc:Bounds", {
-          x: (sourcePoint.x + targetPoint.x) / 2 - 45,
-          y: vertical ? midY - 20 : (sourcePoint.y + targetPoint.y) / 2 - 10,
-          width: 90,
-          height: 20,
-        }),
-      });
+      // Route through the same candidate-enumeration/collision-rejection
+      // pipeline sequence-flow labels use, instead of an unchecked fixed
+      // box that never entered placedLabels and so was invisible to every
+      // other label's own collision check (#18). A message flow spans two
+      // pools by definition, so it has no single owning container to
+      // constrain the label to.
+      const blockedEdgesForLabel = new Map([...sequenceFlowWaypoints, ...messageFlowWaypoints]);
+      const labelBounds = computeEdgeLabelBounds(
+        flow,
+        points,
+        blockedEdgesForLabel,
+        [...collaborationLabels, ...messageFlowLabels],
+        collaborationNodes,
+        undefined,
+        warnings,
+      );
+      if (labelBounds) {
+        messageFlowLabels.push(labelBounds);
+        edgeAttrs.label = moddle.create("bpmndi:BPMNLabel", {
+          bounds: moddle.create("dc:Bounds", labelBounds),
+        });
+      }
     }
     planeElements.push(moddle.create("bpmndi:BPMNEdge", edgeAttrs));
   }
@@ -338,6 +354,16 @@ export function createCollaborationDi(
  * Lane shapes are NOT generated here — they are emitted by the caller
  * (createProcessDi for standalone processes, createCollaborationDi for pools).
  */
+interface ProcessShapesAndEdges {
+  elements: any[];
+  /** Shifted (plane-absolute) node geometry, keyed by element id. */
+  nodes: Map<string, NodeLayout>;
+  /** Final sequence-flow waypoints, keyed by flow id, in plane-absolute coordinates. */
+  edgeWaypoints: Map<string, Array<{ x: number; y: number }>>;
+  /** Every label bounds emitted for this process's nodes and edges. */
+  placedLabels: LabelBounds[];
+}
+
 function buildProcessShapesAndEdges(
   moddle: any,
   process: any,
@@ -345,13 +371,31 @@ function buildProcessShapesAndEdges(
   opts: ResolvedLayoutOptions,
   dx = 0,
   dy = 0,
-): any[] {
+  containerObstacles: NodeLayout[] = [],
+  laneBoundsByNodeId: Map<string, LabelBounds> = new Map(),
+  participantBounds?: LabelBounds,
+  warnings?: LayoutWarning[],
+): ProcessShapesAndEdges {
   const elements: any[] = [];
   const routingPolicy = resolveRoutingPolicy(opts.routing);
   const namedLabel = (x: number, y: number, width = 90, height = 20) =>
     moddle.create("bpmndi:BPMNLabel", {
       bounds: moddle.create("dc:Bounds", { x, y, width, height }),
     });
+
+  /**
+   * The tightest applicable label-containment bound for `node`: its own
+   * subprocess if it is a child, else its lane, else its participant pool,
+   * else no constraint (a standalone process with no lanes) (#15).
+   */
+  const containerBoundsFor = (node: NodeLayout | undefined): LabelBounds | undefined => {
+    if (!node) return undefined;
+    if (node.isSubProcessChild && node.containerId) {
+      const container = shiftedNodes.get(node.containerId);
+      if (container) return { x: container.x, y: container.y, width: container.width, height: container.height };
+    }
+    return laneBoundsByNodeId.get(node.id) ?? participantBounds;
+  };
 
   // Build a shifted view of the layout nodes so waypoint computation uses
   // the offset coordinates (edge-routing relies on NodeLayout .x/.y).
@@ -366,208 +410,20 @@ function buildProcessShapesAndEdges(
     });
   }
   // Build a layout view that uses shifted nodes but keeps everything else.
+  // containerObstacles (pool borders, the pool caption gutter, lane
+  // dividers) are already in plane-absolute coordinates, matching the
+  // dx/dy-shifted node coordinates used for routing (see #11).
   const shiftedLayout: ProcessLayoutResult = {
     ...layout,
     nodes: shiftedNodes,
+    containerObstacles,
   };
 
-  // 1. Pre-compute edge waypoints (two passes: record → resolve channel lanes)
-  const edgeWaypoints = new Map<string, Array<{ x: number; y: number }>>();
-  const { recorder, resolve } = planChannels(shiftedLayout.nodes);
-  for (const pass of [recorder, null]) {
-    shiftedLayout.channels = pass ?? resolve();
-    edgeWaypoints.clear();
-    for (const flow of shiftedLayout.allFlows) {
-      const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
-      const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-      if (!src || !tgt) continue;
-      edgeWaypoints.set(
-        flow.id,
-        repairSegmentCollisions(
-          computeWaypoints(src, tgt, shiftedLayout, opts, flow),
-          shiftedLayout,
-          flow,
-          new Map(),
-          routingPolicy,
-        ),
-      );
-    }
-  }
-
-  fanOutAttachPoints(edgeWaypoints, shiftedLayout);
-  for (const flow of shiftedLayout.allFlows) {
-    const points = edgeWaypoints.get(flow.id);
-    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
-    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-    if (points && src && tgt && !validateConnectionPoints(points, src, tgt)) {
-      edgeWaypoints.set(
-        flow.id,
-        repairSegmentCollisions(points, shiftedLayout, flow, edgeWaypoints, routingPolicy),
-      );
-    }
-  }
-
-  // Post-repair: re-route lower-track merge flows and re-apply collision repair
-  for (const flow of shiftedLayout.allFlows) {
-    const existing = edgeWaypoints.get(flow.id);
-    if (!existing) continue;
-    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
-    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-    const isLowerMerge =
-      src &&
-      tgt &&
-      src.track > tgt.track &&
-      tgt.element?.$type?.endsWith("Gateway") &&
-      !src.element?.$type?.endsWith("Gateway");
-    if (isLowerMerge) {
-      edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, shiftedLayout, opts, flow));
-      continue;
-    }
-    edgeWaypoints.set(
-      flow.id,
-      repairSegmentCollisions(existing, shiftedLayout, flow, edgeWaypoints, routingPolicy),
-    );
-  }
-
-  // Restore upper-channel bypasses for non-exclusive gateways with an upper-track branch
-  for (const flow of shiftedLayout.allFlows) {
-    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
-    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-    const hasUpperBranch =
-      src &&
-      tgt &&
-      src.track === tgt.track &&
-      src.element.$type.endsWith("Gateway") &&
-      Array.from(shiftedLayout.nodes.values()).some(
-        (node) =>
-          node.id !== src.id &&
-          node.id !== tgt.id &&
-          !node.isSubProcessChild &&
-          node.track === src.track &&
-          node.x < tgt.x &&
-          node.x + node.width > src.x + src.width &&
-          node.y < src.centerY &&
-          node.y + node.height > src.centerY,
-      ) &&
-      shiftedLayout.allFlows.some((candidate) => {
-        if (candidate.id === flow.id || candidate.sourceRef?.id !== src.id) return false;
-        const target = shiftedLayout.nodes.get(candidate.targetRef?.id);
-        return target && target.track < src.track;
-      });
-    if (hasUpperBranch && src && tgt) {
-      const upper = channelY(shiftedLayout, flow, "above", src.centerX, tgt.centerX);
-      const restored = [
-        { x: src.centerX, y: src.y },
-        { x: src.centerX, y: upper },
-        { x: tgt.centerX, y: upper },
-        { x: tgt.centerX, y: tgt.y },
-      ];
-      if (validateConnectionPoints(restored, src, tgt)) {
-        edgeWaypoints.set(flow.id, restored);
-      }
-    }
-  }
-
-  for (const [flowId, points] of edgeWaypoints) {
-    const flow = shiftedLayout.allFlows.find((candidate) => candidate.id === flowId);
-    const source = flow ? shiftedLayout.nodes.get(flow.sourceRef?.id) : undefined;
-    const target = flow ? shiftedLayout.nodes.get(flow.targetRef?.id) : undefined;
-    const orthogonal = ensureOrthogonalWaypoints(points);
-    if (!validateConnectionPoints(orthogonal, source, target)) {
-      const fallback =
-        source && target && source.centerX < target.x
-          ? [
-              { x: source.x + source.width, y: source.centerY },
-              { x: target.x - 30, y: source.centerY },
-              { x: target.x - 30, y: target.centerY },
-              { x: target.x, y: target.centerY },
-            ]
-          : source && target && source.centerX > target.x + target.width
-            ? [
-                { x: source.x, y: source.centerY },
-                { x: target.x + target.width + 30, y: source.centerY },
-                { x: target.x + target.width + 30, y: target.centerY },
-                { x: target.x + target.width, y: target.centerY },
-              ]
-            : source && target && source.centerY < target.y
-              ? [
-                  { x: source.centerX, y: source.y + source.height },
-                  { x: source.centerX, y: target.y - 30 },
-                  { x: target.centerX, y: target.y - 30 },
-                  { x: target.centerX, y: target.y },
-                ]
-              : source && target
-                ? [
-                    { x: source.centerX, y: source.y },
-                    { x: source.centerX, y: target.y + target.height + 30 },
-                    { x: target.centerX, y: target.y + target.height + 30 },
-                    { x: target.centerX, y: target.y + target.height },
-                  ]
-                : undefined;
-      if (fallback && validateConnectionPoints(fallback, source, target)) {
-        const repairedFallback = repairSegmentCollisions(
-          fallback,
-          shiftedLayout,
-          flow,
-          edgeWaypoints,
-          routingPolicy,
-        );
-        if (validateConnectionPoints(repairedFallback, source, target)) {
-          edgeWaypoints.set(flowId, repairedFallback);
-          continue;
-        }
-        edgeWaypoints.set(flowId, fallback);
-        continue;
-      }
-      throw new Error(
-        `invalid connection points for sequence flow ${flowId}`,
-      );
-    }
-    edgeWaypoints.set(
-      flowId,
-      snapRouteWaypoints(orthogonal, opts.gridSize),
-    );
-  }
-
-  // Reassert only gateway channel routes. Non-gateway routes have already
-  // passed collision repair and validation above; replacing them here would
-  // bypass both checks and can route through boundary events or subprocesses.
-  for (const flow of shiftedLayout.allFlows) {
-    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
-    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
-    if (
-      !src ||
-      !tgt ||
-      src.track !== tgt.track ||
-      !src.element?.$type.endsWith("Gateway") ||
-      tgt.x <= src.x + src.width
-    )
-      continue;
-    const branches = shiftedLayout.allFlows
-      .filter((candidate) => candidate.id !== flow.id && candidate.sourceRef?.id === src.id)
-      .map((candidate) => shiftedLayout.nodes.get(candidate.targetRef?.id))
-      .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
-    if (branches.length === 0) continue;
-    const side = "below" as const;
-    const channel = channelY(shiftedLayout, flow, side, src.centerX, tgt.centerX);
-    const candidate = [
-      { x: src.x + src.width, y: src.centerY },
-      { x: src.x + src.width, y: channel },
-      { x: tgt.x, y: channel },
-      { x: tgt.x, y: tgt.centerY },
-    ];
-    if (validateConnectionPoints(candidate, src, tgt)) {
-      edgeWaypoints.set(flow.id, candidate);
-      continue;
-    }
-    // The channel route can run through a boundary event or subprocess;
-    // repair it like every other route, and if it still does not validate,
-    // keep the previous (already validated) route rather than ship it.
-    const repaired = repairSegmentCollisions(candidate, shiftedLayout, flow, edgeWaypoints, routingPolicy);
-    if (validateConnectionPoints(repaired, src, tgt)) {
-      edgeWaypoints.set(flow.id, repaired);
-    }
-  }
+  // 1. Route every sequence flow (channel planning, 7-case waypoint
+  // computation, collision repair, orthogonalization) -- extracted to
+  // process-routing.ts so it is testable as a pure geometry computation,
+  // independent of DI serialization (#31).
+  const edgeWaypoints = routeProcessFlows(shiftedLayout, opts, warnings);
 
   // 1.5 Pre-compute edge labels (before node labels, to reserve space)
   const placedLabels: LabelBounds[] = [];
@@ -575,12 +431,25 @@ function buildProcessShapesAndEdges(
   for (const flow of shiftedLayout.allFlows) {
     const waypoints = edgeWaypoints.get(flow.id);
     if (!waypoints) continue;
-    const edgeLabel = computeEdgeLabelBounds(flow, waypoints, edgeWaypoints, placedLabels, shiftedLayout.nodes);
+    const edgeLabel = computeEdgeLabelBounds(
+      flow,
+      waypoints,
+      edgeWaypoints,
+      placedLabels,
+      shiftedLayout.nodes,
+      containerBoundsFor(shiftedLayout.nodes.get(flow.sourceRef?.id)),
+      warnings,
+    );
     if (edgeLabel) {
       edgeLabelBounds.set(flow.id, edgeLabel);
       placedLabels.push(edgeLabel);
     }
   }
+
+  // Keyed by node id, so the post-label re-repair pass below can exclude a
+  // flow's own endpoint labels without needing every LabelBounds to carry
+  // an owner reference.
+  const nodeLabelBounds = new Map<string, LabelBounds>();
 
   // 2. Shape DI for each node with collision-free labels
   for (const [id, node] of shiftedNodes.entries()) {
@@ -606,8 +475,16 @@ function buildProcessShapesAndEdges(
       (node.element.$type.endsWith("Event") || node.element.$type.endsWith("Gateway")) && hasName;
 
     if (needsLabel) {
-      const labelBounds = solveLabelPlacement(node, edgeWaypoints, shiftedNodes, placedLabels);
+      const labelBounds = solveLabelPlacement(
+        node,
+        edgeWaypoints,
+        shiftedNodes,
+        placedLabels,
+        containerBoundsFor(node),
+        warnings,
+      );
       placedLabels.push(labelBounds);
+      nodeLabelBounds.set(id, labelBounds);
       shapeAttrs.label = namedLabel(
         labelBounds.x,
         labelBounds.y,
@@ -619,10 +496,77 @@ function buildProcessShapesAndEdges(
       (node.element.$type === "bpmn:DataObjectReference" ||
         node.element.$type === "bpmn:DataStoreReference")
     ) {
-      shapeAttrs.label = namedLabel(node.x + node.width / 2 - 45, node.y + node.height + 8);
+      // Route through the same candidate-enumeration/collision-rejection
+      // pipeline as event/gateway labels, instead of an unchecked fixed box
+      // that never entered placedLabels and so was invisible to every other
+      // label's own collision check (#18).
+      const labelBounds = solveLabelPlacement(
+        node,
+        edgeWaypoints,
+        shiftedNodes,
+        placedLabels,
+        containerBoundsFor(node),
+        warnings,
+      );
+      placedLabels.push(labelBounds);
+      nodeLabelBounds.set(id, labelBounds);
+      shapeAttrs.label = namedLabel(labelBounds.x, labelBounds.y, labelBounds.width, labelBounds.height);
     }
 
     elements.push(moddle.create("bpmndi:BPMNShape", shapeAttrs));
+  }
+
+  // Re-repair any route that ended up crossing a label placed after it was
+  // routed (§2: paths shall avoid labels). Routes are chosen before labels
+  // exist, so this is deliberately reactive rather than reserving
+  // speculative label space up front for every route search -- that
+  // alternative was tried and rejected: it perturbed routes that were
+  // already correct, including one case that started cutting through an
+  // expanded subprocess it had previously avoided cleanly (see #30).
+  for (const flow of shiftedLayout.allFlows) {
+    const waypoints = edgeWaypoints.get(flow.id);
+    if (!waypoints) continue;
+    const excluded = new Set<LabelBounds>();
+    const ownEdgeLabel = edgeLabelBounds.get(flow.id);
+    if (ownEdgeLabel) excluded.add(ownEdgeLabel);
+    const srcLabel = nodeLabelBounds.get(flow.sourceRef?.id);
+    if (srcLabel) excluded.add(srcLabel);
+    const tgtLabel = nodeLabelBounds.get(flow.targetRef?.id);
+    if (tgtLabel) excluded.add(tgtLabel);
+    const otherLabels = placedLabels.filter((label) => !excluded.has(label));
+    if (otherLabels.length === 0) continue;
+
+    const labelObstacles: NodeLayout[] = otherLabels.map((label, index) => ({
+      id: `label-avoid-${flow.id}-${index}`,
+      element: { $type: "bpmn:LabelObstacle" },
+      col: 0,
+      track: 0,
+      ...label,
+      centerX: label.x + label.width / 2,
+      centerY: label.y + label.height / 2,
+    }));
+    const layoutWithLabels: ProcessLayoutResult = {
+      ...shiftedLayout,
+      containerObstacles: [...(shiftedLayout.containerObstacles ?? []), ...labelObstacles],
+    };
+    const beforeWithLabels = countRouteHits(waypoints, layoutWithLabels, flow, edgeWaypoints);
+    if (beforeWithLabels === 0) continue;
+
+    // A route may never be adopted here just for crossing fewer labels while
+    // crossing more shapes/edges than before -- §8 ranks no-overlap above
+    // label placement, so this pass may only trade a label crossing for
+    // nothing worse, never for a new or additional shape/edge crossing.
+    const beforeShapeHits = countRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
+    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
+    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
+    const repaired = repairSegmentCollisions(waypoints, layoutWithLabels, flow, edgeWaypoints, routingPolicy);
+    if (
+      validateConnectionPoints(repaired, src, tgt) &&
+      countRouteHits(repaired, layoutWithLabels, flow, edgeWaypoints) < beforeWithLabels &&
+      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits
+    ) {
+      edgeWaypoints.set(flow.id, snapRouteWaypoints(ensureOrthogonalWaypoints(repaired), opts.gridSize));
+    }
   }
 
   // 3. Edge DI for each sequence flow
@@ -656,7 +600,7 @@ function buildProcessShapesAndEdges(
     elements.push(moddle.create("bpmndi:BPMNEdge", edgeDiAttrs));
   }
 
-  return elements;
+  return { elements, nodes: shiftedNodes, edgeWaypoints, placedLabels };
 }
 
 export function createProcessDi(
@@ -665,8 +609,11 @@ export function createProcessDi(
   process: any,
   layout: ProcessLayoutResult,
   opts: ResolvedLayoutOptions,
+  warnings?: LayoutWarning[],
 ): void {
   const planeElements: any[] = [];
+  let containerObstacles: NodeLayout[] = [];
+  let laneBoundsByNodeId = new Map<string, LabelBounds>();
 
   // Lane DI: partition every lane (including nested childLaneSet lanes and
   // lanes with no member nodes) into contiguous, non-overlapping bands
@@ -681,6 +628,8 @@ export function createProcessDi(
       const xSpan = { x: minX - 30, width: maxX - minX + 60 };
       const ySpan = { y: minY - 30, height: maxY - minY + 60 };
       const bands = computeLaneBands(process.laneSets, layout.nodes, xSpan, ySpan);
+      containerObstacles = laneDividerObstacles(bands);
+      laneBoundsByNodeId = leafLaneBoundsByNodeId(bands);
       for (const band of bands) {
         const bounds = { x: band.x, y: band.y, width: band.width, height: band.height };
         const shapeAttrs: any = {
@@ -700,7 +649,9 @@ export function createProcessDi(
 
   // Generate node shapes and edge DI using the shared helper (no offset for
   // standalone processes — dx=0, dy=0).
-  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts)) {
+  for (const el of buildProcessShapesAndEdges(
+    moddle, process, layout, opts, 0, 0, containerObstacles, laneBoundsByNodeId, undefined, warnings,
+  ).elements) {
     planeElements.push(el);
   }
 

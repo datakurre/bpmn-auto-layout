@@ -5,7 +5,8 @@
  * - Primary horizontal spine centered at Y=70.
  * - Modular 120px semantic column grid: col 0 at centerX=75, col 1 at 195, …
  * - Final node centers and safe route bends quantized to the 10px diagram-js grid.
- * - Multi-track vertical lanes (Track 0 at Y=70, Track 1 at Y=180, Track 2 at Y=430).
+ * - Multi-track vertical lanes on a single rhythm: track t sits at
+ *   spineY + t * trackGap, both above and below the spine (track 0).
  * - Planar, zero-crossing orthogonal routing with dedicated return/bypass channels.
  * - Full support for expanded SubProcesses and their internal elements.
  * - Automatic generation of BPMNLabel bounds for all named events and gateways.
@@ -17,6 +18,8 @@
  *   channel-planning    — 2-pass channel lane assignment
  *   edge-routing        — 7-case orthogonal waypoint computation
  *   collision-repair    — visibility-graph re-route and segment nudging
+ *   process-routing     — full per-process routing pipeline as a pure
+ *                         function of (layout, opts), independent of DI
  *   label-placement     — candidate-enumeration label placement
  *   di-creation         — bpmndi BPMNShape / BPMNEdge serialization
  */
@@ -25,10 +28,22 @@ import { assertNoCrossProcessFlows } from "./graph-analysis";
 import { computeProcessLayout } from "./node-placement";
 import { createProcessDi, createCollaborationDi, getCollaborationProcessIds } from "./di-creation";
 import { DEFAULT_OPTIONS, type AutoLayoutOptions, type ResolvedLayoutOptions } from "./element-dimensions";
+import type { LayoutWarning } from "./layout-warnings";
 
 export type { AutoLayoutOptions };
+export type { LayoutWarning, LayoutWarningCode } from "./layout-warnings";
 
-export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
+export interface LayoutResult {
+  xml: string;
+  /**
+   * Constraints the engine could not fully satisfy, degrading to the best
+   * available geometry instead (#32's decision: the engine always produces
+   * a renderable diagram). Empty when nothing was compromised.
+   */
+  warnings: LayoutWarning[];
+}
+
+async function runLayout(xml: string, options: AutoLayoutOptions, warnings?: LayoutWarning[]): Promise<string> {
   const opts: ResolvedLayoutOptions = { ...DEFAULT_OPTIONS, ...options };
   const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
@@ -54,11 +69,31 @@ export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}
     // Only create a standalone process diagram for processes that are NOT
     // part of a collaboration (pool/participant).
     if (!collaborationProcessIds.has(process.id)) {
-      createProcessDi(moddle, root, process, layout, opts);
+      createProcessDi(moddle, root, process, layout, opts, warnings);
     }
   }
-  createCollaborationDi(moddle, root, layouts, opts);
+  createCollaborationDi(moddle, root, layouts, opts, warnings);
 
   const { xml: outputXml } = await moddle.toXML(rootElement, { format: true });
   return outputXml;
+}
+
+export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
+  return runLayout(xml, options);
+}
+
+/**
+ * Same layout as layoutProcess, but also returns the structured warnings for
+ * any constraint the engine could not fully satisfy (see LayoutResult).
+ * layoutProcess itself keeps its existing string-returning signature and
+ * discards these; use this companion when the caller wants to know what, if
+ * anything, was compromised (#32).
+ */
+export async function layoutProcessWithDiagnostics(
+  xml: string,
+  options: AutoLayoutOptions = {},
+): Promise<LayoutResult> {
+  const warnings: LayoutWarning[] = [];
+  const outputXml = await runLayout(xml, options, warnings);
+  return { xml: outputXml, warnings };
 }

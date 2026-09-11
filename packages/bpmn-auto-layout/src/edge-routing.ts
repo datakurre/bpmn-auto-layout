@@ -120,21 +120,25 @@ export function shouldUseUpsideRoute(
 // Waypoint computation — seven routing cases
 // ---------------------------------------------------------------------------
 
+/**
+ * Whether `node` can legitimately obstruct a route whose endpoint lives in
+ * the same immediate container as `reference` -- the top-level diagram, or
+ * one expanded subprocess's own children. Subprocess-internal flows now run
+ * through the same seven routing cases as top-level ones (see #26), so the
+ * cases that already excluded subprocess children from their blocker scan
+ * need that exclusion to become container-aware instead of unconditional.
+ */
+function inSameContainer(node: NodeLayout, reference: NodeLayout): boolean {
+  if (!reference.isSubProcessChild) return !node.isSubProcessChild;
+  return Boolean(node.isSubProcessChild && node.containerId === reference.containerId);
+}
+
 export function computeWaypoints(
   src: NodeLayout,
   tgt: NodeLayout,
   layout: ProcessLayoutResult,
-  opts: { track1Y: number },
   flow?: any,
 ): Array<{ x: number; y: number }> {
-  // Case 1: SubProcess child internal flow — direct horizontal stub
-  if (src.isSubProcessChild && tgt.isSubProcessChild) {
-    return [
-      { x: src.x + src.width, y: src.centerY },
-      { x: tgt.x, y: tgt.centerY },
-    ];
-  }
-
   // Boundary events must leave their host on the attached side instead of
   // routing through the host's body as ordinary flow nodes would.
   if (src.element?.$type === "bpmn:BoundaryEvent") {
@@ -158,7 +162,7 @@ export function computeWaypoints(
       (node) =>
         node.id !== src.id &&
         node.id !== tgt.id &&
-        !node.isSubProcessChild &&
+        inSameContainer(node, src) &&
         node.y < src.centerY &&
         node.y + node.height > src.centerY,
     );
@@ -223,7 +227,7 @@ export function computeWaypoints(
         n.id !== src.id &&
         n.id !== tgt.id &&
         n.track === src.track &&
-        !n.isSubProcessChild &&
+        inSameContainer(n, src) &&
         n.x < tgt.x &&
         n.x + n.width > src.x + src.width &&
         n.y < src.centerY &&
@@ -341,7 +345,7 @@ export function computeWaypoints(
       ];
       const blockers = Array.from(layout.nodes.values()).filter(
         (n) =>
-          n.id !== src.id && n.id !== tgt.id && !n.isSubProcessChild && n.element?.$type !== "bpmn:SubProcess",
+          n.id !== src.id && n.id !== tgt.id && inSameContainer(n, src) && n.element?.$type !== "bpmn:SubProcess",
       );
       const directHits = direct
         .slice(0, -1)

@@ -9,12 +9,7 @@ export interface AutoLayoutOptions {
   colWidth?: number;
   gridSize?: number;
   spineY?: number;
-  track1Y?: number;
-  track2Y?: number;
   trackGap?: number;
-  channel1Y?: number;
-  channel2Y?: number;
-  channel3Y?: number;
   routing?: Partial<import("./layout-policy").RoutingPolicy>;
 }
 
@@ -22,12 +17,7 @@ export interface ResolvedLayoutOptions {
   colWidth: number;
   gridSize: number;
   spineY: number;
-  track1Y: number;
-  track2Y: number;
   trackGap: number;
-  channel1Y: number;
-  channel2Y: number;
-  channel3Y: number;
   routing: Partial<import("./layout-policy").RoutingPolicy>;
 }
 
@@ -35,12 +25,7 @@ export const DEFAULT_OPTIONS: ResolvedLayoutOptions = {
   colWidth: 120,
   gridSize: 10,
   spineY: 70,
-  track1Y: 180,
-  track2Y: 430,
   trackGap: 140,
-  channel1Y: 140,
-  channel2Y: 280,
-  channel3Y: 560,
   routing: {},
 };
 
@@ -78,5 +63,25 @@ export const ROUTE_DEPARTURE_GAP = 40;
 /** Bend penalty used in the visibility-graph Dijkstra to prefer fewer turns. */
 export const ROUTE_BEND_PENALTY = 10_000;
 
-/** How far an edge label may slide past the ends of its own segment. */
-export const LABEL_SLIDE_SLACK = 45;
+/**
+ * How far an edge label's center may slide past the ends of its own
+ * segment. Was 45 -- more than the length of the shortest eligible segment
+ * (30 px) -- letting a label's center land entirely outside the segment
+ * it's supposedly "on" (see #16). Sharply reduced so §2's "center of a
+ * sufficiently long segment" is actually enforced.
+ */
+export const LABEL_SLIDE_SLACK = 15;
+
+/**
+ * Default gaps used across label placement, consolidated here so "labels
+ * shall use consistent default gaps" (§4) is one place to check, not four
+ * separately-declared local constants (see #18).
+ */
+/** Gap between a plain node/event label and its shape. */
+export const NODE_LABEL_GAP = 8;
+/** Gap for a label placed snug against a gateway's corner. */
+export const SNUG_LABEL_GAP = 6;
+/** Gap between a gateway's primary/alternate label position and its shape. */
+export const GATEWAY_LABEL_GAP = 6;
+/** Gap between an edge label and the segment it sits on. */
+export const EDGE_LABEL_GAP = 2;

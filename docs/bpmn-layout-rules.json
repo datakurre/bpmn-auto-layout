@@ -83,8 +83,8 @@
     {
       "id": "layout.collaboration-and-lane-di",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:44-57", "packages/bpmn-auto-layout/src/di-creation.ts:28-37", "packages/bpmn-auto-layout/src/di-creation.ts:40-230"],
-      "rule": "When a bpmn:Collaboration exists, processes referenced by participants are excluded from standalone per-process BPMNDiagram generation. createCollaborationDi emits a single BPMNDiagram containing: participant pool shapes with isHorizontal=true sized from content bounding box plus PAD_LEFT=60, PAD_RIGHT=30, PAD_TOP=30, PAD_BOTTOM=30 (participants stacked with 40 px gaps); lane shapes with isHorizontal=true; all flow-node shapes and sequence-flow edges from each participant process (shifted to absolute coordinates via dx/dy); and named message-flow edges. Standalone processes (not in any collaboration) receive per-process BPMNDiagram with lane shapes derived from member node bounds."
+      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:44-57", "packages/bpmn-auto-layout/src/di-creation.ts:28-37", "packages/bpmn-auto-layout/src/di-creation.ts:40-380"],
+      "rule": "When a bpmn:Collaboration exists, processes referenced by participants are excluded from standalone per-process BPMNDiagram generation. createCollaborationDi emits a single BPMNDiagram containing: participant pool shapes with isHorizontal=true sized from content bounding box plus PAD_LEFT=60, PAD_RIGHT=30, PAD_TOP=30, PAD_BOTTOM=30 (participants stacked with 40 px gaps); lane shapes with isHorizontal=true; all flow-node shapes and sequence-flow edges from each participant process (shifted to absolute coordinates via dx/dy); and named message-flow edges. Message flows are routed through the same repairSegmentCollisions pipeline sequence flows use: a candidate 4-point mid-line route is repaired against a collaboration-wide obstacle set (every participant's flow nodes, merged container boundary strips, and every already-placed sequence- and message-flow route), then validated, falling back to the unrepaired candidate if repair does not validate. Standalone processes (not in any collaboration) receive per-process BPMNDiagram with lane shapes derived from member node bounds."
     },
     {
       "id": "layout.components.pack-independent",
@@ -101,8 +101,8 @@
     {
       "id": "routing.channel-planning",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/channel-planning.ts:14-63", "packages/bpmn-auto-layout/src/edge-routing.ts:188-201"],
-      "rule": "Loop-back and bypass channels are derived from the occupied node band with 30 px clearance. Overlapping channel spans are assigned separate 30 px lanes using a two-pass greedy plan before final waypoints are emitted. Same-track gateway bypasses with an upper-track branch use an upper channel so they do not cross that branch; other same-track bypasses use the lower channel."
+      "source_lines": ["packages/bpmn-auto-layout/src/channel-planning.ts:14-119", "packages/bpmn-auto-layout/src/edge-routing.ts:196-209"],
+      "rule": "Loop-back and bypass channels are derived from the occupied node band with 30 px clearance. Channel planning is container-scoped (planContainerScopedChannels): nodes are grouped by their immediate container -- the top-level diagram, or one expanded subprocess's own children -- and each group's band and lane assignment is computed independently, so a subprocess-internal channel is bounded by that subprocess's own content, never by the outer diagram's. Overlapping channel spans within a container are assigned separate 30 px lanes using a two-pass greedy plan before final waypoints are emitted. Same-track gateway bypasses with an upper-track branch use an upper channel so they do not cross that branch; other same-track bypasses use the lower channel."
     },
     {
       "id": "routing.objective-policy",
@@ -113,14 +113,34 @@
     {
       "id": "routing.waypoint-cases",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/edge-routing.ts:126-390"],
-      "rule": "Waypoint routing handles subprocess-internal flows, gateway-to-gateway upside bypasses, loop-backs, same-track forward flows, gateway branches up/down, same-track gateway bypasses through dedicated channels, downward exception routes around intervening subprocess content, upper-track exits to end events, merges into gateways, and a final orthogonal fallback."
+      "source_lines": ["packages/bpmn-auto-layout/src/edge-routing.ts:123-460"],
+      "rule": "Waypoint routing handles boundary-event departures, gateway-to-gateway upside bypasses, loop-backs, same-track forward flows, gateway branches up/down, same-track gateway bypasses through dedicated channels, downward exception routes around intervening content, upper-track exits to end events, merges into gateways, and a final orthogonal fallback. These same cases route subprocess-internal (child-to-child) flows too, not a separate stub -- obstacle scans that exclude subprocess children (the short-circuit direct check, the same-track forward-flow check, and the downward gateway-branch check) are container-scoped via inSameContainer, so an internal flow is only obstructed by its own container's siblings and an external flow is unaffected."
     },
     {
       "id": "routing.repair-and-fanout",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:430-550", "packages/bpmn-auto-layout/src/di-creation.ts:327-462", "packages/bpmn-auto-layout/src/di-creation.ts:464-491"],
-      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes and protected central portions of every existing path as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
+      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:432-558", "packages/bpmn-auto-layout/src/process-routing.ts:61-247", "packages/bpmn-auto-layout/src/lane-layout.ts:159-222"],
+      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes, protected central portions of every existing path, and pool/lane container boundary obstacles as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Container boundary obstacles are thin strips -- pool top/bottom/right borders, the pool name-label gutter (solid), and lane dividers -- computed from lane/participant band geometry once known and passed into repairSegmentCollisions as `layout.containerObstacles`; the lane/pool interior itself is not an obstacle. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
+    },
+    {
+      "id": "routing.deterministic-order",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/process-routing.ts:31-53", "packages/bpmn-auto-layout/src/process-routing.ts:61-121"],
+      "rule": "Both the channel-span-recording pass and the post-repair edge-vs-edge avoidance pass iterate flows in orderFlowsForRouting's order -- ascending structural span (column + track distance between endpoints), then source id, then target id -- instead of source-document order, so inserting an unrelated sequence flow earlier in the XML cannot renumber or re-route flows that were already fine. The post-repair pass also skips re-running repair on a route that already has zero obstacle hits (countRouteHits) and passes validateConnectionPoints, so a route is never perturbed by an obstacle set that changed after it was already correct."
+    },
+    {
+      "id": "architecture.routing-extracted-from-di",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/process-routing.ts:1-266", "packages/bpmn-auto-layout/src/di-creation.ts:415-424"],
+      "rule": "routeProcessFlows (process-routing.ts) is the complete sequence-flow routing pipeline -- channel planning, seven-case waypoint computation, collision repair, orthogonalization, and the deterministic ordering above -- as a pure function from a ProcessLayoutResult to a Map of finished waypoints, with no dependency on moddle or DI shape construction. di-creation.ts's buildProcessShapesAndEdges calls it once per process/participant and translates the result into bpmndi:BPMNEdge elements; it no longer computes routes itself.",
+      "note": "This is a deliberately scoped extraction, not the full architectural split proposed in #31: label placement (edge and node labels) and DI-shape construction still live in di-creation.ts, ProcessLayoutResult does not yet carry finished label bounds or per-flow waypoints as part of computeProcessLayout's own return value, and a collaboration's per-participant waypoints are still computed once per participant in already-shifted coordinates rather than computed once and translated. Routing was extracted first because it was the largest, most self-contained, and least XML-dependent piece, and because #10/#26/#30's fixes already made it a well-isolated function of (layout, opts) alone."
+    },
+    {
+      "id": "routing.avoids-labels",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:772-826"],
+      "rule": "After every node and edge label is placed, each sequence flow's final route is re-checked against every *other* placed label (excluding its own edge label and its own source/target node labels) using the same obstacle/hit-counting machinery repairSegmentCollisions already uses. A route that crosses one is re-repaired with those labels added as one-off obstacles, but the repaired route is adopted only if it both reduces label hits and does not increase shape/edge hits against the original (label-free) obstacle set -- §8 ranks no-overlap above label avoidance, so this pass may trade a label crossing for nothing worse, never for a new or larger shape/edge crossing.",
+      "note": "This is deliberately reactive (fix confirmed crossings after labels exist) rather than reserving speculative label space before every route is chosen. The speculative-reservation approach was implemented and rejected during development: it perturbed the candidate route search broadly enough that a route which had cleanly detoured around an expanded subprocess started cutting through it and one of its children instead, in a fixture with no label anywhere near that detour. The current pass is more conservative and only found no candidate for a handful of already-crowded label/edge crossings, which the label-search-widening and hard-constraint work (#16) also could not resolve for the same crowded positions."
     },
     {
       "id": "feedback.geometry-diagnostics",
@@ -129,22 +149,62 @@
       "rule": "The feedback report records the exact edge pairs, edge/shape pairs, edge/subprocess-container pairs, and invalid endpoint attachments responsible for geometry defects. It also records invalid label bounds. The quality gate fails on any such defect while preserving details in metrics.json and command output so routing regressions can be traced to named BPMN elements."
     },
     {
+      "id": "api.best-effort-with-warnings",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/layout-warnings.ts:1-32", "packages/bpmn-auto-layout/src/auto-layout.ts:1-80", "packages/bpmn-auto-layout/src/process-routing.ts:169-260", "packages/bpmn-auto-layout/src/label-placement.ts:259-340", "packages/bpmn-auto-layout/src/label-placement.ts:501-690"],
+      "rule": "The engine always produces a renderable diagram rather than throwing on unsatisfiable geometry (#32's decision). routeProcessFlows no longer throws when no candidate route validates even after every fallback; it emits the best available geometry and a ROUTE_INVALID_CONNECTION_POINTS warning. Three previously-silent degradation sites now report structured LayoutWarning objects (code, optional elementId, message) instead of degrading unnoticed: repairSegmentCollisions' best-effort result is checked once, after routing, for remaining obstacle hits (ROUTE_INTERSECTS_OBSTACLE); pickLabel's combined-score fallback (ROUTE crossing an edge, or overlapping a shape/label with no clean candidate) (LABEL_OVERLAPS_ELEMENT); and solveLabelPlacement's edge-collision-relaxed, containment-relaxed, and unchecked-default tiers (LABEL_OVERLAPS_ELEMENT / LABEL_ESCAPES_CONTAINER). layoutProcessWithDiagnostics (auto-layout.ts, exported from index.ts) returns `{xml, warnings}`; layoutProcess keeps its original string-only signature and simply does not collect them -- both call the same internal runLayout, verified to produce byte-identical XML.",
+      "note": "bpmn_feedback.py's `check` command does not yet consume these warnings (the issue's fourth suggested step) -- that requires the layout-command CLI defined in flake.nix to surface them in a machine-readable form (e.g. a sidecar file), which is outside packages/bpmn-auto-layout and was left as a follow-up."
+    },
+    {
+      "id": "architecture.priority-model",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/layout-policy.ts:1-52", "tools/bpmn_feedback.py:1949-2020"],
+      "rule": "The §8 priority model is represented as LAYOUT_PRIORITY_LEVELS (layout-policy.ts), an ordered, named, documented list of the seven levels, plus comparePriorityViolations, a lexicographic comparison primitive: a violation at a lower-numbered level always outranks any number of violations at higher-numbered levels. `bpmn-feedback check` tags every failure line with the priority level (METRIC_PRIORITY_LEVEL) its metric is evidence for and sorts output by level, so a failing run surfaces its most important defects first instead of in metric-declaration order. choosePreferredRoute (routing.objective-policy) is the one existing candidate-selection pass documented as encoding two of the seven levels (3 and 6).",
+      "note": "This is infrastructure and reporting only, not the full retrofit the issue describes: no candidate-producing pass other than choosePreferredRoute has been rewritten to report its violations against the ladder and let comparePriorityViolations choose, and packIndependentComponents' aspect-ratio compactness scoring (§8 level 7) can still decide component placement ahead of left-to-right structural concerns (level 4) -- the issue itself asks for a design discussion before that retrofit, which this change does not attempt to resolve unilaterally."
+    },
+    {
       "id": "labels.node-placement",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:430-530", "packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
-      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; single-line primary gateway labels align their top edge with a 4 px gap, while multi-line primary labels shift upward so their bottom edge aligns with the single-line label row. Snug candidates keep a 6 px horizontal clearance. When a selected gateway candidate needs multiple lines to avoid path or element collisions, the formatted line break is serialized into the element name so renderers display the intended rows. Candidates that collide with lanes, elements, or previously placed labels are rejected before fallback."
+      "rule": "Named events and gateways receive external BPMNLabel bounds. Candidate label positions vary by flow attachment directions, gateway shape, preferred top/bottom side, text width, and line count; single-line primary gateway labels align their top edge with a 4 px gap, while multi-line primary labels shift upward so their bottom edge aligns with the single-line label row. Snug candidates keep a 6 px horizontal clearance. When a selected gateway candidate needs multiple lines to avoid path or element collisions, the formatted line break is serialized into the element name so renderers display the intended rows. Candidates are rejected, in order of decreasing priority, for: escaping the node's own container, colliding with a routed edge, colliding with an element, or colliding with a previously placed label; each constraint is relaxed only if no candidate satisfies it and every stricter constraint before it."
     },
     {
       "id": "labels.node-gap-by-element-class",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:460-475"],
-      "rule": "The label solver uses an 8 px primary/alternate vertical gap for named events and a 6 px primary/alternate vertical gap for gateways; collision-free candidate selection can choose a different side or offset. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
+      "source_lines": ["packages/bpmn-auto-layout/src/element-dimensions.ts:66-79", "packages/bpmn-auto-layout/src/label-placement.ts:460-475"],
+      "rule": "The label solver uses an 8 px primary/alternate vertical gap for named events (NODE_LABEL_GAP) and a 6 px primary/alternate vertical gap for gateways (GATEWAY_LABEL_GAP), with a 6 px snug-corner gap (SNUG_LABEL_GAP) and a 2 px edge-label gap (EDGE_LABEL_GAP); collision-free candidate selection can choose a different side or offset. These four gaps are named constants in element-dimensions.ts rather than repeated local literals, so \"labels shall use consistent default gaps\" (§4) is checkable. This is a generalized parameterized heuristic, but the desired gateway-above versus gateway-below preference is not yet a complete formal rule."
     },
     {
       "id": "labels.edge-placement",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:283-425"],
-      "rule": "Named sequence flows receive labels on a preferred horizontal segment of at least 30 px, or otherwise a vertical segment of at least 20 px. Horizontal labels are centered on the segment midpoint with a 2 px above-segment clearance when that side is selected. Edge labels are placed before node labels so node-label placement can avoid them."
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:339-450"],
+      "rule": "Named sequence flows receive labels from candidates generated over every eligible horizontal segment (>= 30 px) on the route, longest first, or otherwise a single vertical segment (>= 20 px) if no horizontal segment qualifies. Horizontal labels are centered on each segment's own midpoint with a 2 px above/below clearance depending on whether another route runs close above. A label's center may slide at most LABEL_SLIDE_SLACK (15 px) past either end of the segment it's centered on. Edge labels are placed before node labels so node-label placement can avoid them."
+    },
+    {
+      "id": "labels.edge-crossing-priority",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:252-330"],
+      "rule": "pickLabel treats crossing another route as a harder constraint than shape/label overlap: among the crossing-free candidates (if any exist), it picks the one with the least shape/label overlap, returning immediately on zero overlap. Only when every candidate crosses some route does it fall back to minimizing a single combined score (shape/label overlap area plus 120 per crossing), so the result is still the least-bad option rather than an arbitrary one.",
+      "note": "In fixtures where every reachable candidate across every eligible segment already crosses something (dense gateway/loop areas), this still degrades to the combined-score fallback -- the constraint is enforced, but a genuinely saturated diagram has no crossing-free position to find."
+    },
+    {
+      "id": "labels.subprocess-obstacles",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:93-121", "packages/bpmn-auto-layout/src/label-placement.ts:268-278", "packages/bpmn-auto-layout/src/label-placement.ts:365-373"],
+      "rule": "Every label-collision predicate (labelCollidesWithElements, pickLabel's overlap scoring, computeEdgeLabelBounds' straddled-segment scan) treats expanded-subprocess children as ordinary collision obstacles. The subprocess container itself is skipped as an obstacle only via isOwnContainer -- when the label's own owner (the node, or the flow's source node) is a child of that specific subprocess -- so a label may sit near or inside the container that legitimately owns it, but a label belonging to an unrelated node must still avoid the container's box and everything inside it."
+    },
+    {
+      "id": "labels.container-containment",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:151-163", "packages/bpmn-auto-layout/src/label-placement.ts:563-599", "packages/bpmn-auto-layout/src/di-creation.ts:416-428", "packages/bpmn-auto-layout/src/lane-layout.ts:159-174"],
+      "rule": "solveLabelPlacement and computeEdgeLabelBounds reject any candidate not fully contained (containedIn) by the label's own owning container -- di-creation.ts's containerBoundsFor resolves this per node as its subprocess if it is a child, else its leaf lane band (leafLaneBoundsByNodeId), else its participant pool, else no constraint for a standalone process with no lanes. Containment is enforced ahead of edge-collision avoidance and is relaxed only as a last resort, after every candidate fails it, so a label degrades to escaping its container rather than failing to render. The `cand.x < 10 || cand.y < 0` canvas-origin clamp still applies underneath this as a final absolute floor.",
+      "note": "A label's owning node can itself be drawn outside its declared lane band by a separate, pre-existing node-placement bug (see node_containment_violations); when that happens no candidate near the node can satisfy lane containment either, and the fallback tier is used."
+    },
+    {
+      "id": "labels.message-flow-and-data-reference",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:344-372", "packages/bpmn-auto-layout/src/di-creation.ts:728-742"],
+      "rule": "Message-flow labels are computed by computeEdgeLabelBounds against the collaboration-wide node map and every already-placed sequence-flow, message-flow, and (for a message flow) other message-flow label, with no container-containment constraint since a message flow spans two pools by definition. Data-object/data-store reference labels are computed by solveLabelPlacement the same way an event/gateway label is, including the node's own container containment. Every label from both paths is pushed into the relevant placedLabels list so later labels see it too -- neither path emits an unchecked fixed box any more."
     },
     {
       "id": "labels.ensure-default-di",
@@ -178,7 +238,7 @@
     {
       "id": "metric.routing.quality",
       "producer": "tools/bpmn_feedback.py report",
-      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, external-route intersections with expanded subprocess containers, invalid source/target boundary attachments, total bends, Manhattan length, and non-orthogonal segments."
+      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, route intersections with expanded subprocess, lane, and participant containers that neither endpoint belongs to, invalid source/target boundary attachments, total bends, Manhattan length, and non-orthogonal segments."
     },
     {
       "id": "metric.routing.lattice",

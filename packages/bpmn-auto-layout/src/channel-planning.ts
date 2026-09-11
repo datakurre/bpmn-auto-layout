@@ -12,12 +12,18 @@
 import type { ChannelPlan, NodeLayout } from "./layout-types";
 import { CHANNEL_CLEARANCE, CHANNEL_LANE_GAP } from "./element-dimensions";
 
+/**
+ * Plan channels from the band occupied by exactly the nodes passed in.
+ * Callers scope `nodes` to one container (the top-level diagram, or one
+ * expanded subprocess's own children) -- see planContainerScopedChannels,
+ * which is what routing actually uses. A bare call with a mixed node set
+ * would band across containers, which is the bug #26 describes.
+ */
 export function planChannels(nodes: Map<string, NodeLayout>): {
   recorder: ChannelPlan;
   resolve: () => ChannelPlan;
 } {
-  const tops: NodeLayout[] = [];
-  for (const n of nodes.values()) if (!n.isSubProcessChild) tops.push(n);
+  const tops = Array.from(nodes.values());
   const bandTop = tops.length ? Math.min(...tops.map((n) => n.y)) : 0;
   const bandBottom = tops.length ? Math.max(...tops.map((n) => n.y + n.height)) : 0;
 
@@ -60,6 +66,53 @@ export function planChannels(nodes: Map<string, NodeLayout>): {
     return {
       channelY(flowId, side) {
         return laneY(side, assigned.get(flowId) ?? 0);
+      },
+    };
+  };
+
+  return { recorder, resolve };
+}
+
+/**
+ * Container-scoped channel planning: groups `nodes` by their immediate
+ * container (the top-level diagram, or one expanded subprocess), plans
+ * channels independently within each group, and returns one combined
+ * ChannelPlan that dispatches each flow to its own container's plan. A
+ * subprocess-internal loop-back or bypass channel is then bounded by that
+ * subprocess's own content band, never by the outer diagram's (#26).
+ */
+export function planContainerScopedChannels(
+  nodes: Map<string, NodeLayout>,
+  flows: any[],
+): { recorder: ChannelPlan; resolve: () => ChannelPlan } {
+  const groups = new Map<string | undefined, Map<string, NodeLayout>>();
+  for (const [id, node] of nodes) {
+    const key = node.isSubProcessChild ? node.containerId : undefined;
+    (groups.get(key) ?? groups.set(key, new Map()).get(key)!).set(id, node);
+  }
+  const perContainer = new Map<string | undefined, ReturnType<typeof planChannels>>();
+  for (const [key, groupNodes] of groups) perContainer.set(key, planChannels(groupNodes));
+
+  const flowContainer = new Map<string, string | undefined>();
+  for (const flow of flows) {
+    const src = nodes.get(flow.sourceRef?.id);
+    if (src) flowContainer.set(flow.id, src.isSubProcessChild ? src.containerId : undefined);
+  }
+
+  const recorder: ChannelPlan = {
+    channelY(flowId, side, x1, x2) {
+      const plan = perContainer.get(flowContainer.get(flowId)) ?? perContainer.get(undefined);
+      return plan ? plan.recorder.channelY(flowId, side, x1, x2) : 0;
+    },
+  };
+
+  const resolve = (): ChannelPlan => {
+    const resolved = new Map<string | undefined, ChannelPlan>();
+    for (const [key, plan] of perContainer) resolved.set(key, plan.resolve());
+    return {
+      channelY(flowId, side, x1, x2) {
+        const plan = resolved.get(flowContainer.get(flowId)) ?? resolved.get(undefined);
+        return plan ? plan.channelY(flowId, side, x1, x2) : 0;
       },
     };
   };

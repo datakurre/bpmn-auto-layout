@@ -219,6 +219,32 @@ function detectBackEdges(
   return backEdges;
 }
 
+/**
+ * Nodes reachable forward from `nodeId` (inclusive), following only
+ * non-back-edge outgoing flows. Removing back edges leaves a DAG, so this is
+ * a plain memoized DFS with no cycle guard needed.
+ */
+function computeForwardReachability(
+  nodeId: string,
+  outgoingFlows: Map<string, any[]>,
+  backEdges: Set<string>,
+  memo: Map<string, Set<string>>,
+): Set<string> {
+  const cached = memo.get(nodeId);
+  if (cached) return cached;
+  const visited = new Set<string>([nodeId]);
+  for (const flow of outgoingFlows.get(nodeId) || []) {
+    if (backEdges.has(flow.id)) continue;
+    const targetId = flow.targetRef?.id;
+    if (!targetId) continue;
+    for (const id of computeForwardReachability(targetId, outgoingFlows, backEdges, memo)) {
+      visited.add(id);
+    }
+  }
+  memo.set(nodeId, visited);
+  return visited;
+}
+
 function selectSpine(
   startNode: any,
   outgoingFlows: Map<string, any[]>,
@@ -227,17 +253,19 @@ function selectSpine(
 ): { spineNodeIds: string[]; spineSet: Set<string> } {
   const spineNodeIds: string[] = [];
   const spineSet = new Set<string>();
+  const reachabilityMemo = new Map<string, Set<string>>();
 
+  // Prefer the branch with the most work ahead of it -- the number of nodes
+  // still reachable going forward -- over one that names its intent. A
+  // branch that terminates immediately (an EndEvent target) scores lowest,
+  // which is what we want without needing to know it was called "reject".
+  // Ties (e.g. two branches that both merge into the same join) keep flow
+  // document order via a stable sort, exactly as before.
   const flowSpineScore = (flow: any): number => {
     const targetNode = nodesById.get(flow.targetRef?.id);
-    if (!targetNode) return -100;
-    if (targetNode.$type === "bpmn:SubProcess") return -50;
-    if (flow.name === "no" || flow.name === "reject" || flow.name === "give up") return -50;
-    if (flow.name?.toLowerCase().includes("error") || flow.name?.toLowerCase().includes("fail"))
-      return -50;
-    if (targetNode.$type.endsWith("EndEvent")) return 100;
-    const hasBackEdge = (outgoingFlows.get(targetNode.id) || []).some((f) => backEdges.has(f.id));
-    return hasBackEdge ? 10 : 50;
+    if (!targetNode) return -1;
+    return computeForwardReachability(targetNode.id, outgoingFlows, backEdges, reachabilityMemo)
+      .size;
   };
 
   let curr: string | undefined = startNode?.id;
@@ -255,6 +283,31 @@ function selectSpine(
   }
 
   return { spineNodeIds, spineSet };
+}
+
+/**
+ * Whether `flow` represents an exception/alternative branch, using only
+ * signals the modeller actually asserted about the graph: leaving a boundary
+ * event, ending in an error/escalation, or being a gateway's non-default
+ * branch. Never inspects `flow.name` -- a locale-bound label a modeller can
+ * rename without changing the process at all is not a structural signal
+ * (see #12).
+ */
+function isStructuralExceptionBranch(flow: any, sourceNode: any, targetNode: any): boolean {
+  if (sourceNode?.$type === "bpmn:BoundaryEvent") return true;
+  if (targetNode?.$type?.endsWith("EndEvent")) {
+    const eventDefinitions = targetNode.eventDefinitions || [];
+    if (
+      eventDefinitions.some((def: any) =>
+        ["bpmn:ErrorEventDefinition", "bpmn:EscalationEventDefinition"].includes(def.$type),
+      )
+    )
+      return true;
+  }
+  if (sourceNode?.$type?.endsWith("Gateway") && sourceNode.default) {
+    return flow.id !== sourceNode.default.id;
+  }
+  return false;
 }
 
 function buildTrackColMapsWithDim(
@@ -340,9 +393,13 @@ function buildTrackColMapsWithDim(
 
       if (!nodeTrack.has(targetId)) {
         let targetTrack = preferredTracks.get(targetId) ?? parentTrack;
-        const isExceptionBranch = /reject|invalid|error|fail/i.test(flow.name || "");
-        const isTerminalExceptionBranch =
-          isExceptionBranch && nodesById.get(targetId)?.$type === "bpmn:EndEvent";
+        const targetNode = nodesById.get(targetId);
+        const isExceptionBranch = isStructuralExceptionBranch(
+          flow,
+          nodesById.get(parentId),
+          targetNode,
+        );
+        const isTerminalExceptionBranch = isExceptionBranch && targetNode?.$type === "bpmn:EndEvent";
         const isUpwardExceptionBranch = isExceptionBranch && !isTerminalExceptionBranch;
         if (spineSet.has(parentId) && !spineSet.has(targetId)) {
           const isSpannedByBackEdge = Array.from(backEdges).some((bId) => {
@@ -461,24 +518,15 @@ function buildTrackColMapsWithDim(
   return { nodeTrack, nodeCol };
 }
 
-function computeTrackY(
-  t: number,
-  minTrack: number,
-  opts: ResolvedLayoutOptions,
-  extraClearance: number,
-): number {
-  let centerY = opts.spineY;
-  if (minTrack === -1) {
-    if (t === -1) centerY = opts.spineY;
-    else if (t === 0) centerY = opts.spineY + opts.trackGap;
-    else if (t === 1) centerY = opts.spineY + 2 * opts.trackGap;
-    else if (t > 1) centerY = opts.spineY + (t + 1) * opts.trackGap;
-  } else {
-    if (t === 1) centerY = opts.track1Y;
-    else if (t === 2) centerY = opts.track2Y;
-    else if (t > 2) centerY = opts.track2Y + (t - 2) * opts.trackGap;
-  }
-  return centerY + extraClearance;
+/**
+ * Every track sits `trackGap` px from the next, in both directions from the
+ * spine (track 0). This is the only rhythm in the diagram: there is no
+ * separate spacing for the first branch track vs. later ones, so adding a
+ * node that happens to land on a new track never re-spaces the rest of the
+ * diagram (see #33).
+ */
+function computeTrackY(t: number, opts: ResolvedLayoutOptions, extraClearance: number): number {
+  return opts.spineY + t * opts.trackGap + extraClearance;
 }
 
 /** Padding inside a subprocess/embedded container (left/right, top/bottom). */
@@ -545,13 +593,28 @@ function layoutSubProcessChildrenRecursive(
       centerY: childNode.centerY + offsetY,
       track,
       isSubProcessChild: true,
+      containerId: childNode.containerId ?? node.id,
     });
   }
 
   return { width: containerW, height: containerH };
 }
 
-function repairDirectFlowGaps(
+/**
+ * Re-establish the exact DEFAULT_FLOW_GAP edge-to-edge gap for simple
+ * same-row chains (single incoming, no node in between) after grid
+ * snapping. `snapNodesToGrid` rounds each node's center to the 10 px grid
+ * independently, which can perturb the gap the column math already computed
+ * by up to 10 px in either direction -- this pass removes that drift instead
+ * of leaving it to chance (see #8). It must run *after* snapping: fixing the
+ * gap first (as this used to) only for it to be re-perturbed by the later
+ * independent rounding defeats the purpose.
+ *
+ * Flows are processed in ascending source-x order so a correction to one
+ * node is what the next one down the same chain measures its own gap
+ * against, i.e. a genuine left-to-right pass rather than a per-pair patch.
+ */
+function enforceFlowGaps(
   layoutNodes: Map<string, NodeLayout>,
   topNodes: any[],
   topFlows: any[],
@@ -562,17 +625,21 @@ function repairDirectFlowGaps(
     if (targetId) incomingCount.set(targetId, (incomingCount.get(targetId) ?? 0) + 1);
   }
 
-  for (const flow of topFlows) {
+  const orderedFlows = [...topFlows].sort(
+    (a, b) => (layoutNodes.get(a.sourceRef?.id)?.x ?? 0) - (layoutNodes.get(b.sourceRef?.id)?.x ?? 0),
+  );
+
+  for (const flow of orderedFlows) {
     const source = layoutNodes.get(flow.sourceRef?.id);
     const target = layoutNodes.get(flow.targetRef?.id);
     if (
       !source ||
       !target ||
       incomingCount.get(target.id) !== 1 ||
-      Math.abs(source.centerY - target.centerY) >= 0.5
+      Math.abs(source.centerY - target.centerY) >= 0.5 ||
+      target.x < source.x + source.width
     )
       continue;
-    if (target.x <= source.x + source.width + DEFAULT_FLOW_GAP) continue;
     const hasIntermediate = topNodes.some((node: any) => {
       const candidate = layoutNodes.get(node.id);
       return (
@@ -584,25 +651,23 @@ function repairDirectFlowGaps(
         candidate.x + candidate.width <= target.x
       );
     });
-    if (!hasIntermediate) {
-      const nextX = source.x + source.width + DEFAULT_FLOW_GAP;
-      const dx = nextX - target.x;
-      if (dx !== 0) {
-        const movedIds = new Set<string>();
-        const collect = (element: any): void => {
-          if (element?.id) movedIds.add(element.id);
-          for (const child of element?.flowElements || []) {
-            if (child.$type !== "bpmn:SequenceFlow") collect(child);
-          }
-        };
-        collect(target.element);
-        for (const node of layoutNodes.values()) {
-          if (!movedIds.has(node.id)) continue;
-          node.x += dx;
-          node.centerX += dx;
-        }
-      }
+    if (hasIntermediate) continue;
 
+    const desiredX = source.x + source.width + DEFAULT_FLOW_GAP;
+    const dx = desiredX - target.x;
+    if (Math.abs(dx) < 0.5) continue;
+    const movedIds = new Set<string>();
+    const collect = (element: any): void => {
+      if (element?.id) movedIds.add(element.id);
+      for (const child of element?.flowElements || []) {
+        if (child.$type !== "bpmn:SequenceFlow") collect(child);
+      }
+    };
+    collect(target.element);
+    for (const node of layoutNodes.values()) {
+      if (!movedIds.has(node.id)) continue;
+      node.x += dx;
+      node.centerX += dx;
     }
   }
 }
@@ -819,7 +884,7 @@ export function computeProcessLayout(
     const t = nodeTrack.get(node.id)!;
     const dim = effectiveDim(node);
     const centerX = 75 + c * opts.colWidth;
-    const centerY = computeTrackY(t, minTrack, opts, extraClearanceForTrack.get(t) ?? 0);
+    const centerY = computeTrackY(t, opts, extraClearanceForTrack.get(t) ?? 0);
     const x = centerX - dim.width / 2;
     const y = centerY - dim.height / 2;
 
@@ -838,8 +903,8 @@ export function computeProcessLayout(
   }
 
   packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
-  repairDirectFlowGaps(layoutNodes, topNodes, topFlows);
   snapNodesToGrid(layoutNodes, opts.colWidth, opts.gridSize);
+  enforceFlowGaps(layoutNodes, topNodes, topFlows);
   placeBoundaryBranchesAbove(layoutNodes, topNodes, topFlows, opts.trackGap);
   attachBoundaryEvents(layoutNodes, topNodes, topFlows);
 

@@ -144,6 +144,24 @@ export function leafLaneOrderIndex(laneSets: any[]): Map<string, number> {
   return result;
 }
 
+/**
+ * Maps every flow node id to the bounds of the leaf lane band that owns it
+ * (a node belongs to exactly one leaf lane, per BPMN's flowNodeRef).  Used
+ * to constrain label placement to the node's own lane (see #15).
+ */
+export function leafLaneBoundsByNodeId(
+  bands: LaneBand[],
+): Map<string, { x: number; y: number; width: number; height: number }> {
+  const result = new Map<string, { x: number; y: number; width: number; height: number }>();
+  for (const band of bands) {
+    if ((band.lane.childLaneSet?.lanes?.length ?? 0) > 0) continue;
+    for (const ref of band.lane.flowNodeRef || []) {
+      result.set(ref.id, { x: band.x, y: band.y, width: band.width, height: band.height });
+    }
+  }
+  return result;
+}
+
 /** The bottom-most Y reached by any band, or ySpan's bottom if there are none. */
 export function laneBandsBottom(bands: LaneBand[], fallback: number): number {
   return bands.length === 0 ? fallback : Math.max(...bands.map((band) => band.y + band.height));
@@ -153,4 +171,70 @@ export function laneBandsBottom(bands: LaneBand[], fallback: number): number {
  * same convention bpmn-js/Camunda Modeler use for a rotated lane title. */
 export function laneLabelBounds(band: LaneBand): { x: number; y: number; width: number; height: number } {
   return { x: band.x + 3, y: band.y + band.height / 2 - 10, width: 20, height: Math.max(20, band.height - 20) };
+}
+
+/** Thickness of a lane-divider / pool-border obstacle strip. */
+const BOUNDARY_STRIP_THICKNESS = 6;
+
+function boundaryObstacle(id: string, x: number, y: number, width: number, height: number): NodeLayout {
+  return {
+    id,
+    element: { $type: "bpmn:ContainerBoundary" },
+    col: 0,
+    track: 0,
+    x,
+    y,
+    width,
+    height,
+    centerX: x + width / 2,
+    centerY: y + height / 2,
+  };
+}
+
+/**
+ * Routing obstacles for a set of lane bands: a thin strip along the top and
+ * bottom edge of every band (i.e. every lane divider, including the
+ * outermost edges). The lane interior is deliberately not an obstacle --
+ * flow nodes live there and routes must be free to move through it (#11).
+ */
+export function laneDividerObstacles(bands: LaneBand[]): NodeLayout[] {
+  const obstacles: NodeLayout[] = [];
+  bands.forEach((band, index) => {
+    obstacles.push(
+      boundaryObstacle(
+        `lane-divider-${index}-top`,
+        band.x,
+        band.y - BOUNDARY_STRIP_THICKNESS / 2,
+        band.width,
+        BOUNDARY_STRIP_THICKNESS,
+      ),
+      boundaryObstacle(
+        `lane-divider-${index}-bottom`,
+        band.x,
+        band.y + band.height - BOUNDARY_STRIP_THICKNESS / 2,
+        band.width,
+        BOUNDARY_STRIP_THICKNESS,
+      ),
+    );
+  });
+  return obstacles;
+}
+
+/**
+ * Routing obstacles for a participant (pool) box: thin strips along the top,
+ * bottom, and right border, and a solid block over the left-edge name-label
+ * gutter (`gutterWidth`). The interior is not an obstacle (#11).
+ */
+export function participantBoundaryObstacles(
+  bounds: { x: number; y: number; width: number; height: number },
+  gutterWidth: number,
+): NodeLayout[] {
+  const { x, y, width, height } = bounds;
+  const t = BOUNDARY_STRIP_THICKNESS;
+  return [
+    boundaryObstacle("pool-top", x, y - t / 2, width, t),
+    boundaryObstacle("pool-bottom", x, y + height - t / 2, width, t),
+    boundaryObstacle("pool-right", x + width - t / 2, y, t, height),
+    boundaryObstacle("pool-caption", x, y, gutterWidth, height),
+  ];
 }
