@@ -920,6 +920,16 @@ def segment_intersects_box(a: tuple[float, float], b: tuple[float, float], box: 
     return False
 
 
+def point_within(point: tuple[float, float], box: dict[str, float], tolerance: float = 0.5) -> bool:
+    x, y = point
+    return (
+        x >= box["x"] - tolerance
+        and y >= box["y"] - tolerance
+        and x <= box["x"] + box["width"] + tolerance
+        and y <= box["y"] + box["height"] + tolerance
+    )
+
+
 def point_on_boundary(point: tuple[float, float], box: dict[str, float]) -> bool:
     x, y = point
     x0, y0 = box["x"], box["y"]
@@ -1388,7 +1398,24 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 container_id = str(container["bpmnElement"])
                 if container_id in endpoints:
                     continue
-                if any(element_parents.get(endpoint) == container_id for endpoint in endpoints if endpoint):
+                owned = [element_parents.get(endpoint) == container_id for endpoint in endpoints if endpoint]
+                if owned and all(owned):
+                    # Wholly internal to this container: every waypoint must
+                    # still stay inside it -- a route between two of its own
+                    # children leaving the container's box is a real defect,
+                    # not something a blanket exemption should hide (#26).
+                    if not point_within(a, container["bounds"]) or not point_within(  # type: ignore[arg-type]
+                        b, container["bounds"]  # type: ignore[arg-type]
+                    ):
+                        edge_container_intersections += 1
+                        edge_container_intersection_details.append(
+                            {"edge": str(edge["bpmnElement"]), "container": container_id}
+                        )
+                    continue
+                if any(owned):
+                    # One endpoint belongs to this container (e.g. a boundary
+                    # event's own outgoing flow attaches on its border) --
+                    # crossing the boundary here is expected, not a defect.
                     continue
                 if segment_intersects_box(a, b, container["bounds"]):  # type: ignore[arg-type]
                     edge_container_intersections += 1

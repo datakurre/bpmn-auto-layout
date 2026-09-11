@@ -9,7 +9,7 @@
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import { resolveRoutingPolicy } from "./layout-policy";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
-import { planChannels } from "./channel-planning";
+import { planContainerScopedChannels } from "./channel-planning";
 import {
   computeLaneBands,
   laneBandsBottom,
@@ -388,7 +388,7 @@ function buildProcessShapesAndEdges(
 
   // 1. Pre-compute edge waypoints (two passes: record → resolve channel lanes)
   const edgeWaypoints = new Map<string, Array<{ x: number; y: number }>>();
-  const { recorder, resolve } = planChannels(shiftedLayout.nodes);
+  const { recorder, resolve } = planContainerScopedChannels(shiftedLayout.nodes, shiftedLayout.allFlows);
   for (const pass of [recorder, null]) {
     shiftedLayout.channels = pass ?? resolve();
     edgeWaypoints.clear();

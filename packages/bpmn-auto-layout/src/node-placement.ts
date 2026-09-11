@@ -593,6 +593,7 @@ function layoutSubProcessChildrenRecursive(
       centerY: childNode.centerY + offsetY,
       track,
       isSubProcessChild: true,
+      containerId: childNode.containerId ?? node.id,
     });
   }
 

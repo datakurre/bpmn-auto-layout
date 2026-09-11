@@ -438,12 +438,21 @@ export function repairSegmentCollisions(
 ): Array<{ x: number; y: number }> {
   if (waypoints.length < 2) return waypoints;
   const endpoints = new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
+  const srcNodeForScope = layout.nodes.get(flow?.sourceRef?.id);
   const internalSubProcessFlow =
-    layout.nodes.get(flow?.sourceRef?.id)?.isSubProcessChild &&
-    layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
+    srcNodeForScope?.isSubProcessChild && layout.nodes.get(flow?.targetRef?.id)?.isSubProcessChild;
   const obstacles = Array.from(layout.nodes.values()).filter((n) => {
     if (endpoints.has(n.id)) return false;
-    if (internalSubProcessFlow) return n.element?.$type !== "bpmn:SubProcess";
+    if (internalSubProcessFlow) {
+      // An internal flow is only obstructed by its own container's other
+      // children -- a top-level node or a sibling subprocess's content
+      // lives in a different, non-overlapping coordinate area (#26).
+      return (
+        n.element?.$type !== "bpmn:SubProcess" &&
+        Boolean(n.isSubProcessChild) &&
+        n.containerId === srcNodeForScope!.containerId
+      );
+    }
 
     // External routes must go around an expanded subprocess as one opaque
     // boundary. Its children are not independently routable in this space.
