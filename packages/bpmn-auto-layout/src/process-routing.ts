@@ -433,6 +433,16 @@ export function routeProcessFlows(
       }
       return false;
     };
+    // A boundary event is required by BPMN to straddle its host activity's
+    // border, so that overlap is correct geometry, not a defect -- exactly
+    // the exemption #20 gave the Python metric (tools/bpmn_feedback.py),
+    // ported here so the engine's own terminal check stops reintroducing
+    // that false positive (#49).
+    const isBoundaryHostPair = (a: NodeLayout, b: NodeLayout): boolean => {
+      const aHost = a.element?.$type === "bpmn:BoundaryEvent" ? a.element.attachedToRef?.id : undefined;
+      const bHost = b.element?.$type === "bpmn:BoundaryEvent" ? b.element.attachedToRef?.id : undefined;
+      return aHost === b.id || bHost === a.id;
+    };
     const boxOverlapArea = (a: NodeLayout, b: NodeLayout): number => {
       const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
       const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
@@ -444,6 +454,7 @@ export function routeProcessFlows(
         const a = nodes[i]!;
         const b = nodes[j]!;
         if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
+        if (isBoundaryHostPair(a, b)) continue;
         if (boxOverlapArea(a, b) > 0) {
           warn(warnings, "SHAPE_OVERLAPS_SHAPE", a.id, `shape ${a.id} overlaps shape ${b.id}`);
         }

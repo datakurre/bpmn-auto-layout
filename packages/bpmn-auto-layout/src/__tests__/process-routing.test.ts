@@ -132,3 +132,53 @@ test("routeProcessFlows does not warn about a subprocess containing its own chil
     `a subprocess containing its own child is not an overlap: ${JSON.stringify(warnings)}`,
   );
 });
+
+// #49: a boundary event is required by BPMN to straddle its host activity's
+// border -- #20 exempted that legitimate overlap from the Python metric
+// (tools/bpmn_feedback.py), but the engine's own terminal check reintroduced
+// it as a false positive because it had no equivalent exemption.
+test("routeProcessFlows does not warn about a boundary event overlapping its own host", () => {
+  const host = node({ id: "Host", type: "bpmn:Task", x: 0, y: 0, w: 100, h: 80, track: 0, col: 0 });
+  const boundary: NodeLayout = {
+    ...node({ id: "Boundary", type: "bpmn:BoundaryEvent", x: 82, y: 62, w: 36, h: 36, track: 0, col: 0 }),
+    element: { $type: "bpmn:BoundaryEvent", id: "Boundary", incoming: [], outgoing: [], attachedToRef: { id: "Host" } },
+  };
+  const nodes = new Map<string, NodeLayout>([
+    [host.id, host],
+    [boundary.id, boundary],
+  ]);
+  const layout: ProcessLayoutResult = { nodes, allFlows: [] };
+
+  const warnings: LayoutWarning[] = [];
+  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+
+  assert.ok(
+    !warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE"),
+    `a boundary event straddling its host's border is not an overlap: ${JSON.stringify(warnings)}`,
+  );
+});
+
+test("routeProcessFlows still warns when a boundary event overlaps a shape that is not its host", () => {
+  const host = node({ id: "Host", type: "bpmn:Task", x: 0, y: 0, w: 100, h: 80, track: 0, col: 0 });
+  // Positioned to overlap the boundary event but not the host itself, so the
+  // only expected SHAPE_OVERLAPS_SHAPE warning is Boundary/Bystander.
+  const bystander = node({ id: "Bystander", type: "bpmn:Task", x: 100, y: 62, w: 100, h: 80, track: 0, col: 1 });
+  const boundary: NodeLayout = {
+    ...node({ id: "Boundary", type: "bpmn:BoundaryEvent", x: 82, y: 62, w: 36, h: 36, track: 0, col: 0 }),
+    element: { $type: "bpmn:BoundaryEvent", id: "Boundary", incoming: [], outgoing: [], attachedToRef: { id: "Host" } },
+  };
+  const nodes = new Map<string, NodeLayout>([
+    [host.id, host],
+    [bystander.id, bystander],
+    [boundary.id, boundary],
+  ]);
+  const layout: ProcessLayoutResult = { nodes, allFlows: [] };
+
+  const warnings: LayoutWarning[] = [];
+  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+
+  assert.ok(
+    warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE" && w.message.includes("Boundary") && w.message.includes("Bystander")),
+    `expected a SHAPE_OVERLAPS_SHAPE warning for the boundary/bystander overlap, got ${JSON.stringify(warnings)}`,
+  );
+});

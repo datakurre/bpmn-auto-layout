@@ -233,15 +233,37 @@ def participant_owners(root: ET.Element) -> dict[str, str]:
     return owners
 
 
-def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple[float, float], b2: tuple[float, float]) -> bool:
+# Matches collision-repair.ts's SEGMENT_CLEARANCE: the engine treats a route
+# passing within this distance of an obstacle as a near-miss, not clearance.
+# Reused here as the radius within which a crossing at a shared endpoint's
+# attach point is the expected "routes converge at this node" geometry
+# rather than a real mid-route crossing (#48).
+SHARED_ENDPOINT_CROSSING_EPSILON = 8.0
+
+
+def orthogonal_crossing_point(
+    a1: tuple[float, float], a2: tuple[float, float], b1: tuple[float, float], b2: tuple[float, float]
+) -> tuple[float, float] | None:
+    """Where two orthogonal segments cross, or None if they don't (parallel,
+    or intersecting only at/beyond an endpoint)."""
     a_horizontal = abs(a1[1] - a2[1]) < 0.5
     b_horizontal = abs(b1[1] - b2[1]) < 0.5
     if a_horizontal == b_horizontal:
-        return False
+        return None
     h1, h2, v1, v2 = (a1, a2, b1, b2) if a_horizontal else (b1, b2, a1, a2)
     x = v1[0]
     y = h1[1]
-    return min(h1[0], h2[0]) < x < max(h1[0], h2[0]) and min(v1[1], v2[1]) < y < max(v1[1], v2[1])
+    if min(h1[0], h2[0]) < x < max(h1[0], h2[0]) and min(v1[1], v2[1]) < y < max(v1[1], v2[1]):
+        return (x, y)
+    return None
+
+
+def near_box(point: tuple[float, float], box: dict[str, float], epsilon: float) -> bool:
+    x, y = point
+    return (
+        box["x"] - epsilon <= x <= box["x"] + box["width"] + epsilon
+        and box["y"] - epsilon <= y <= box["y"] + box["height"] + epsilon
+    )
 
 
 def collect_metrics(path: Path) -> dict[str, object]:
@@ -649,23 +671,37 @@ def collect_metrics(path: Path) -> dict[str, object]:
     excess_turn_details.sort(key=lambda detail: -int(detail["excess_turns"]))  # type: ignore[arg-type]
     for i, first in enumerate(edges):
         first_points = first["points"]  # type: ignore[assignment]
-        first_endpoints = set(flow_endpoints.get(first["bpmnElement"], (None, None)))  # type: ignore[arg-type]
+        first_endpoints = {value for value in flow_endpoints.get(first["bpmnElement"], (None, None)) if value}  # type: ignore[arg-type]
         for second in edges[i + 1 :]:
             if first["plane"] != second["plane"]:
                 continue
-            if first_endpoints.intersection(set(flow_endpoints.get(second["bpmnElement"], (None, None)))):  # type: ignore[arg-type]
-                continue
+            second_endpoints = {value for value in flow_endpoints.get(second["bpmnElement"], (None, None)) if value}  # type: ignore[arg-type]
+            # Two flows sharing a source or target legitimately meet at that
+            # node -- but sharing an endpoint says nothing about what the
+            # routes do in between, so only a crossing that actually falls
+            # near the shared node's own shape is the expected "routes
+            # converge here" geometry (#48); a crossing anywhere else along
+            # either route is a real readability defect.
+            shared_bounds = [
+                shapes_by_plane_id[(first["plane"], shared_id)]["bounds"]  # type: ignore[index]
+                for shared_id in first_endpoints & second_endpoints
+                if (first["plane"], shared_id) in shapes_by_plane_id
+            ]
             second_points = second["points"]  # type: ignore[assignment]
             for a1, a2 in zip(first_points, first_points[1:]):
                 for b1, b2 in zip(second_points, second_points[1:]):
-                    if orthogonal_cross(a1, a2, b1, b2):
-                        edge_crossings += 1
-                        edge_crossing_details.append(
-                            {
-                                "first": str(first["bpmnElement"]),
-                                "second": str(second["bpmnElement"]),
-                            }
-                        )
+                    crossing = orthogonal_crossing_point(a1, a2, b1, b2)
+                    if crossing is None:
+                        continue
+                    if any(near_box(crossing, bounds, SHARED_ENDPOINT_CROSSING_EPSILON) for bounds in shared_bounds):  # type: ignore[arg-type]
+                        continue
+                    edge_crossings += 1
+                    edge_crossing_details.append(
+                        {
+                            "first": str(first["bpmnElement"]),
+                            "second": str(second["bpmnElement"]),
+                        }
+                    )
 
     grid_deviations: list[float] = []
     for shape in shapes:
