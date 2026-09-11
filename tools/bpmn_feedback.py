@@ -773,6 +773,86 @@ def split_command(value: str) -> list[str]:
     return parts
 
 
+def repo_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def resolve_dist_index() -> Path | None:
+    """The built layout engine, importable directly by `node` -- no CLI, no
+    nix. Exists once `npm run build` has run inside packages/bpmn-auto-layout;
+    None when the package has not been built here."""
+    candidate = repo_root() / "packages" / "bpmn-auto-layout" / "dist" / "index.js"
+    return candidate if candidate.is_file() else None
+
+
+def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
+    """Lay out every file in `targets` in place by importing layoutProcess
+    from the built package directly, bypassing the bpmn-auto-layout CLI
+    wrapper flake.nix defines. Works in any environment with the package
+    already built -- a plain CI runner, a container, an agent working
+    directly in the repo -- not only inside `nix develop` (#43)."""
+    node = shutil.which("node")
+    if not node:
+        raise SystemExit("node not found on PATH; cannot run the layout engine directly")
+    script = (
+        'import { readFile, writeFile } from "node:fs/promises";\n'
+        f"import {{ layoutProcess }} from {json.dumps(dist_index.resolve().as_posix())};\n"
+        "for (const file of process.argv.slice(2)) {\n"
+        '  const xml = await readFile(file, "utf8");\n'
+        "  await writeFile(file, await layoutProcess(xml));\n"
+        "}\n"
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False, encoding="utf8") as handle:
+        handle.write(script)
+        script_path = Path(handle.name)
+    try:
+        completed = subprocess.run(
+            [node, str(script_path), *[str(target) for target in targets]],
+            text=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    finally:
+        script_path.unlink(missing_ok=True)
+    if completed.returncode != 0:
+        raise SystemExit(
+            f"layout engine (node against {dist_index}) failed with exit code {completed.returncode}:\n"
+            f"stdout:\n{completed.stdout}\n"
+            f"stderr:\n{completed.stderr}"
+        )
+
+
+def layout_fixtures(targets: list[Path], layout_command: list[str], structure_only: bool, purpose: str) -> bool:
+    """Lay out every file in `targets` in place, preferring (in order) the
+    configured --layout-command if it is on PATH, then the built engine run
+    directly through node, then -- only when the caller explicitly opted
+    into a degraded check via --structure-only -- doing nothing and letting
+    the caller validate persisted DI as-is. Any other case where no engine
+    could be found is a hard failure: a check that cannot run its main
+    assertion has not passed (#43), so it must not exit 0.
+
+    Returns whether the layout engine actually ran (freshly generated
+    output) as opposed to being skipped."""
+    executable = shutil.which(layout_command[0]) if layout_command else None
+    if executable:
+        for target in targets:
+            run_command(layout_command + [str(target)], f"{purpose} {target.name}")
+        return True
+    dist_index = resolve_dist_index()
+    if dist_index:
+        layout_via_node(dist_index, targets)
+        return True
+    if structure_only:
+        return False
+    raise SystemExit(
+        f"{purpose}: no layout engine available -- {shlex.join(layout_command)!r} is not on PATH and "
+        f"{repo_root() / 'packages' / 'bpmn-auto-layout' / 'dist' / 'index.js'} does not exist "
+        "(run `npm run build` in packages/bpmn-auto-layout, or enter `nix develop`). "
+        "Pass --structure-only to validate persisted DI as-is instead."
+    )
+
+
 def clear_reports(output_dir: str) -> None:
     root = Path(output_dir)
     if not root.exists():
@@ -1054,30 +1134,28 @@ def stability(base_input: Path, variant_input: Path, layout_command: list[str]) 
     return stability_report(base_target, variant_target)
 
 
-def selftest(layout_command: list[str] | None = None) -> None:
+def selftest(layout_command: list[str] | None = None, structure_only: bool = False) -> None:
     first = persisted_fixtures()
     second = persisted_fixtures()
     if first != second:
         raise SystemExit("persisted fixture set changed while being read")
-    aggregate: dict[str, int] = {}
-    engine_ran = False
+    scratch = Path(".bpmn-feedback") / "selftest"
+    scratch.mkdir(parents=True, exist_ok=True)
+    targets: dict[str, Path] = {}
     for filename, xml in first.items():
-        scratch = Path(".bpmn-feedback") / "selftest"
-        scratch.mkdir(parents=True, exist_ok=True)
         target = scratch / filename
         target.write_text(xml, encoding="utf8")
-        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
-            engine_ran = True
+        targets[filename] = target
+    engine_ran = False
+    if layout_command:
+        engine_ran = layout_fixtures(list(targets.values()), layout_command, structure_only, "selftest")
+    aggregate: dict[str, int] = {}
+    for filename, target in targets.items():
         metrics = collect_metrics(target)
         if metrics["layout"]["diagrams"] < 1:  # type: ignore[index]
             raise SystemExit(f"fixture lacks BPMN DI diagram: {filename}")
         for name, count in metrics["semantic"]["element_counts"].items():  # type: ignore[index]
             aggregate[name] = aggregate.get(name, 0) + count
-    if layout_command and not engine_ran:
-        print(
-            f"selftest warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
-            "validating persisted DI as-is instead of freshly generated layout output",
-        )
     required = [
         "startEvent",
         "endEvent",
@@ -1115,8 +1193,20 @@ def selftest(layout_command: list[str] | None = None) -> None:
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
-    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
-    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types ({suffix})")
+    if engine_ran:
+        print(
+            f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types "
+            "(with fresh layout-engine output)",
+        )
+        return
+    # structure_only is the only way engine_ran can be False here without
+    # layout_fixtures having already raised (#43) -- an explicit, printed
+    # degradation rather than a silent one dressed up as OK.
+    print(
+        f"selftest SKIPPED the layout-engine check: {len(first)} persisted fixtures cover "
+        f"{len(required)} required element types, but only structure was validated "
+        "(--structure-only was passed)",
+    )
 
 
 def regression_fixtures() -> dict[str, str]:
@@ -1256,7 +1346,7 @@ REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
 }
 
 
-def regression(layout_command: list[str] | None = None) -> None:
+def regression(layout_command: list[str] | None = None, structure_only: bool = False) -> None:
     """Lay out each fixture under fixtures/regression/ and assert the one
     invariant it exists to pin -- not image comparison, so a fix elsewhere
     never requires re-blessing a golden file. Add a fixture and an entry in
@@ -1268,25 +1358,28 @@ def regression(layout_command: list[str] | None = None) -> None:
         raise SystemExit(f"regression fixtures with no invariant check registered: {', '.join(unchecked)}")
     scratch = Path(".bpmn-feedback") / "regression"
     scratch.mkdir(parents=True, exist_ok=True)
-    engine_ran = False
-    failures: list[str] = []
+    targets: dict[str, Path] = {}
     for filename, xml in fixtures.items():
         target = scratch / filename
         target.write_text(xml, encoding="utf8")
-        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
-            engine_ran = True
+        targets[filename] = target
+    engine_ran = False
+    if layout_command:
+        engine_ran = layout_fixtures(list(targets.values()), layout_command, structure_only, "regression")
+    failures: list[str] = []
+    for filename, target in targets.items():
         root = parse_xml(target)
         problems = REGRESSION_CHECKS[filename](root)
         failures.extend(f"{filename}: {problem}" for problem in problems)
-    if layout_command and not engine_ran:
-        print(
-            f"regression warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
-            "checking persisted DI as-is instead of freshly generated layout output",
-        )
     if failures:
         raise SystemExit("regression checks failed:\n" + "\n".join(f"  {failure}" for failure in failures))
-    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
-    print(f"regression OK: {len(fixtures)} fixtures each satisfy their pinned invariant ({suffix})")
+    if engine_ran:
+        print(f"regression OK: {len(fixtures)} fixtures each satisfy their pinned invariant (with fresh layout-engine output)")
+        return
+    print(
+        f"regression SKIPPED the layout-engine check: {len(fixtures)} fixtures each satisfy their pinned "
+        "invariant against persisted DI (--structure-only was passed)",
+    )
 
 
 def latest_report(output_dir: str) -> Path:
@@ -1409,22 +1502,34 @@ def build_parser() -> argparse.ArgumentParser:
 
     selftest_parser = subparsers.add_parser(
         "selftest",
-        help="validate persisted fixtures and, when the layout command is available, re-verify them against current layout output",
+        help="re-verify persisted fixtures against fresh layout-engine output (fails if no engine is available)",
     )
     selftest_parser.add_argument(
         "--layout-command",
         default="bpmn-auto-layout",
-        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+        help="layout command, shell-style string; tried before falling back to running the built engine via node",
+    )
+    selftest_parser.add_argument(
+        "--structure-only",
+        action="store_true",
+        help="skip the layout-engine check entirely and validate persisted DI as-is; without this flag, "
+        "selftest exits non-zero when no engine (CLI or built dist/) is available",
     )
 
     regression_parser = subparsers.add_parser(
         "regression",
-        help="lay out fixtures/regression/*.bpmn and assert each one's pinned invariant",
+        help="lay out fixtures/regression/*.bpmn and assert each one's pinned invariant (fails if no engine is available)",
     )
     regression_parser.add_argument(
         "--layout-command",
         default="bpmn-auto-layout",
-        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+        help="layout command, shell-style string; tried before falling back to running the built engine via node",
+    )
+    regression_parser.add_argument(
+        "--structure-only",
+        action="store_true",
+        help="skip the layout-engine check entirely and check persisted DI as-is; without this flag, "
+        "regression exits non-zero when no engine (CLI or built dist/) is available",
     )
 
     stability_parser = subparsers.add_parser(
@@ -1450,9 +1555,9 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "check":
         check_report(args)
     elif args.command == "selftest":
-        selftest(split_command(args.layout_command))
+        selftest(split_command(args.layout_command), args.structure_only)
     elif args.command == "regression":
-        regression(split_command(args.layout_command))
+        regression(split_command(args.layout_command), args.structure_only)
     elif args.command == "stability":
         result = stability(Path(args.base), Path(args.variant), split_command(args.layout_command))
         print(json.dumps(result, indent=2, sort_keys=True))
