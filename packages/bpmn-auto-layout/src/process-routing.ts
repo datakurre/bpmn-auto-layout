@@ -319,6 +319,34 @@ export function routeProcessFlows(
       .map((candidate) => layout.nodes.get(candidate.targetRef?.id))
       .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
     if (branches.length === 0) continue;
+    // Only reassert a channel route when the already-validated route this
+    // flow carries out of the main loop above actually collides with
+    // something. Reasserting unconditionally forced every co-track flow out
+    // of a gateway with an off-track branch into a 4-6 point channel detour
+    // even when a clear, unobstructed straight line was already in place --
+    // the mere existence of an unrelated branch to a different track should
+    // never affect a route that doesn't touch it (#59).
+    const existing = edgeWaypoints.get(flow.id);
+    if (existing) {
+      if (countRouteHits(existing, layout, flow, edgeWaypoints) === 0) {
+        continue;
+      }
+      // The route clears every real shape but still runs afoul of another
+      // flow's already-placed path -- try a local repair (nudge) before
+      // reaching for a full channel detour, so two co-track flows that
+      // merely run close and parallel for a few pixels don't get the same
+      // heavy-handed treatment as one that actually needs to bypass a shape.
+      if (countShapeRouteHits(existing, layout, flow, edgeWaypoints) === 0) {
+        const repairedExisting = repairSegmentCollisions(existing, layout, flow, edgeWaypoints, routingPolicy);
+        if (
+          countRouteHits(repairedExisting, layout, flow, edgeWaypoints) === 0 &&
+          validateConnectionPoints(repairedExisting, src, tgt)
+        ) {
+          edgeWaypoints.set(flow.id, dedupeConsecutivePoints(repairedExisting));
+          continue;
+        }
+      }
+    }
     // Depart the gateway's right edge and arrive at the target's left edge
     // horizontally before turning toward the channel -- turning immediately
     // at the boundary reads as sliding along the shape's own edge rather

@@ -1418,12 +1418,39 @@ def check_gateway_loop_bypasses_sibling_without_degenerate_waypoints(root: ET.El
     return check_gateway_bypass_avoids_sibling(root) + check_no_degenerate_waypoints(root)
 
 
+def check_gateway_straight_continuation_is_direct(root: ET.Element) -> list[str]:
+    """Pins #59: a gateway's outgoing flow to a same-track target with a
+    clear corridor between them must stay a direct 2-point route, whatever
+    the gateway's *other* branches do. The "Reassert only gateway channel
+    routes" pass used to overwrite this flow unconditionally whenever the
+    gateway had any other branch to a different track, forcing a 4+ point
+    channel detour around nothing -- the mere existence of an unrelated
+    branch should never affect a route that doesn't touch it."""
+    flow_id = "Flow_Continue_Next"
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            if edge.get("bpmnElement") != flow_id:
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            if len(points) != 2:
+                return [f"{flow_id} expected a direct 2-point route, got {len(points)} points: {points}"]
+            (x0, y0), (x1, y1) = points
+            if abs(y0 - y1) > 0.5:
+                return [f"{flow_id} expected a horizontal straight route, got {points}"]
+            return []
+    return [f"{flow_id} has no BPMNEdge in the laid-out diagram"]
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
+    "gateway-straight-continuation.bpmn": check_gateway_straight_continuation_is_direct,
 }
 
 

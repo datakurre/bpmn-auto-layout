@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_GatewayStraightContinuation" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:process id="Process_GatewayStraightContinuation" name="Gateway's straight continuation stays direct despite an off-track branch" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Gateway</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:exclusiveGateway id="Gateway_Continue" name="Needs escalation?">
+      <bpmn:incoming>Flow_Start_Gateway</bpmn:incoming>
+      <bpmn:outgoing>Flow_Continue_Next</bpmn:outgoing>
+      <bpmn:outgoing>Flow_Continue_Escalate</bpmn:outgoing>
+    </bpmn:exclusiveGateway>
+    <bpmn:task id="Task_Next" name="Next">
+      <bpmn:incoming>Flow_Continue_Next</bpmn:incoming>
+      <bpmn:outgoing>Flow_Next_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:task id="Task_Escalate" name="Escalate">
+      <bpmn:incoming>Flow_Continue_Escalate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Escalate_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_1" name="Done">
+      <bpmn:incoming>Flow_Next_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Escalated" name="Escalated">
+      <bpmn:incoming>Flow_Escalate_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Gateway" sourceRef="Start_1" targetRef="Gateway_Continue" />
+    <bpmn:sequenceFlow id="Flow_Continue_Next" name="continue" sourceRef="Gateway_Continue" targetRef="Task_Next" />
+    <bpmn:sequenceFlow id="Flow_Continue_Escalate" name="escalate" sourceRef="Gateway_Continue" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_Next_End" sourceRef="Task_Next" targetRef="End_1" />
+    <bpmn:sequenceFlow id="Flow_Escalate_End" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_GatewayStraightContinuation">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_GatewayStraightContinuation" bpmnElement="Process_GatewayStraightContinuation">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="82" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="126" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Continue_di" bpmnElement="Gateway_Continue" isMarkerVisible="true">
+        <dc:Bounds x="148" y="75" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="140" y="45" width="66" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Next_di" bpmnElement="Task_Next">
+        <dc:Bounds x="248" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Escalate_di" bpmnElement="Task_Escalate">
+        <dc:Bounds x="248" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="398" y="82" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="371" y="126" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Escalated_di" bpmnElement="End_Escalated">
+        <dc:Bounds x="398" y="282" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="371" y="326" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Gateway_di" bpmnElement="Flow_Start_Gateway">
+        <di:waypoint x="98" y="100" />
+        <di:waypoint x="148" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Continue_Next_di" bpmnElement="Flow_Continue_Next">
+        <di:waypoint x="198" y="100" />
+        <di:waypoint x="248" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Continue_Escalate_di" bpmnElement="Flow_Continue_Escalate">
+        <di:waypoint x="173" y="125" />
+        <di:waypoint x="173" y="300" />
+        <di:waypoint x="248" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Next_End_di" bpmnElement="Flow_Next_End">
+        <di:waypoint x="348" y="100" />
+        <di:waypoint x="398" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Escalate_End_di" bpmnElement="Flow_Escalate_End">
+        <di:waypoint x="348" y="300" />
+        <di:waypoint x="398" y="300" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

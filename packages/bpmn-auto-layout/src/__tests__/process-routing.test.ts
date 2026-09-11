@@ -92,6 +92,39 @@ test("routeProcessFlows returns a direct two-point route when nothing obstructs 
   );
 });
 
+// #59: a gateway's *other* outgoing flow -- staying on the same track, with a
+// clear corridor ahead -- used to be forced into a 4-bend channel detour for
+// no reason other than the gateway having a second branch to a different
+// track. The reassert-channel-routes pass rewrote every co-track gateway
+// flow unconditionally; it never checked whether the route it was replacing
+// already cleared every obstacle. Two elements on the same track with a
+// clear corridor between them must be connected by a 2-point route, whatever
+// the source's other branches do.
+test("routeProcessFlows keeps a straight route out of a gateway even when it has an off-track branch", () => {
+  const gateway = node({ id: "Gateway", type: "bpmn:ExclusiveGateway", x: 148, y: 55, w: 50, h: 50, track: 0, col: 0 });
+  const tgt = node({ id: "Tgt", x: 248, y: 40, w: 100, h: 80, track: 0, col: 1 });
+  const branchTarget = node({ id: "Branch", x: 248, y: 300, w: 100, h: 80, track: 1, col: 1 });
+  const nodes = new Map<string, NodeLayout>([
+    [gateway.id, gateway],
+    [tgt.id, tgt],
+    [branchTarget.id, branchTarget],
+  ]);
+  const straightFlow = { id: "Flow_Straight", sourceRef: { id: "Gateway" }, targetRef: { id: "Tgt" } };
+  const branchFlow = { id: "Flow_Branch", sourceRef: { id: "Gateway" }, targetRef: { id: "Branch" } };
+  const layout: ProcessLayoutResult = { nodes, allFlows: [straightFlow, branchFlow] };
+
+  const waypoints = routeProcessFlows(layout, DEFAULT_OPTIONS);
+  const route = waypoints.get("Flow_Straight");
+  assert.deepEqual(
+    route,
+    [
+      { x: 198, y: 80 },
+      { x: 248, y: 80 },
+    ],
+    `expected the unobstructed straight route to survive the gateway's off-track branch, got ${JSON.stringify(route)}`,
+  );
+});
+
 // The terminal invariant pass (#42) re-checks the *finished* layout as a
 // whole rather than trusting that whichever pass produced a piece of
 // geometry got it right -- the #41 regression was exactly a route that was
