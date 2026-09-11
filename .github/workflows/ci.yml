@@ -66,3 +66,74 @@ jobs:
             report fixtures/*.bpmn \
             --engine upstream="node tools/upstream-baseline/run.mjs"
           nix develop --command python3 tools/bpmn_feedback.py check
+
+  # Publishes the N-way comparison report as the project's public quality
+  # record and demo (#58). Deliberately last in the series: the N-way report
+  # (#53), the pinned baseline (#54), the validity/aesthetics scorecard split
+  # (#55), and the metric validation (#56) all land before anything here is
+  # publicly visible -- publishing raw or misleading numbers under the
+  # project's name would be worse than not publishing at all.
+  publish-report:
+    name: Publish comparison report
+    runs-on: ubuntu-latest
+    needs: [unit-tests, flake-check]
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - name: Install pinned upstream baseline
+        run: nix develop --command npm ci --prefix tools/upstream-baseline
+      - name: Render comparison report
+        run: |
+          nix develop --command python3 tools/bpmn_feedback.py \
+            report fixtures/*.bpmn --clear-output --output-dir ./pages-report \
+            --engine upstream="node tools/upstream-baseline/run.mjs"
+      # The page is a static artifact of the report generator (#58's "no
+      # second renderer to maintain"): whatever `report` writes is exactly
+      # what gets published, engine names, resolved versions, commit, and
+      # the validity/aesthetics bias statement included.
+      - name: Assemble Pages site from the rendered report
+        run: |
+          report_index=$(nix develop --command python3 tools/bpmn_feedback.py latest --output-dir ./pages-report)
+          mkdir -p ./_site
+          cp -r "$(dirname "$report_index")"/. ./_site/
+      # On a pull request, show the report's layout effect as a downloadable
+      # workflow artifact -- never publish a PR's output as the project's
+      # public claim (#58 scope item 2).
+      - name: Upload PR preview artifact
+        if: ${{ !(github.ref == 'refs/heads/main' && github.event_name == 'push') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report
+          path: ./_site
+      - name: Upload Pages artifact
+        if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./_site
+
+  # Publish on pushes to main only (#58 scope item 2). Requires GitHub Pages
+  # enabled for this repository with source "GitHub Actions" (Settings ->
+  # Pages) -- a one-time repository setting this workflow cannot configure
+  # itself.
+  deploy-pages:
+    name: Deploy comparison report to GitHub Pages
+    if: ${{ github.ref == 'refs/heads/main' && github.event_name == 'push' }}
+    needs: publish-report
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

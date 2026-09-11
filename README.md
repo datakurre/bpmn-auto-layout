@@ -88,6 +88,21 @@ or is missing degrades to an empty column with the error recorded; `check`
 still gates only `ours`, so a baseline's numbers are information, never a
 build failure.
 
+## Published comparison report
+
+Every push to `main` renders the N-way comparison report over the curated
+fixture corpus (source vs. our own engine vs. the pinned upstream baseline)
+and publishes it to GitHub Pages -- the project's demo, its public quality
+record, and a regression signal that does not drift when we change our own
+metrics. A pull request renders the same report but uploads it as a
+downloadable workflow artifact instead of publishing it, so a PR's layout
+effect is visible without becoming the project's public claim. The page
+shows the measured commit and timestamp, each engine's resolved version, and
+the validity/aesthetics bias statement -- it is a static artifact of
+`tools/bpmn_feedback.py report` with no second renderer to maintain.
+Publishing requires GitHub Pages enabled for this repository with source set
+to "GitHub Actions" (a one-time repository setting under Settings -> Pages).
+
 ## Generated benchmark corpus
 
 Three fixture directories, three owners: `fixtures/*.bpmn` are the curated,

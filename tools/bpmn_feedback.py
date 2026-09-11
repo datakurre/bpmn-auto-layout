@@ -14,6 +14,7 @@ import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -990,6 +991,25 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def resolve_commit_sha() -> str:
+    """Best-effort git commit SHA for the checkout this report was rendered
+    from. A published comparison must show the measurement date and commit
+    so a reader can check whether a favourable trend coincided with a
+    metric edit (#58) -- "unknown" (never a stale or fabricated value) when
+    git is unavailable or this isn't a checkout at all."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    return "unknown"
+
+
 def resolve_dist_index() -> Path | None:
     """The built layout engine, importable directly by `node` -- no CLI, no
     nix. Exists once `npm run build` has run inside packages/bpmn-auto-layout;
@@ -1250,6 +1270,8 @@ def render_report(args: argparse.Namespace) -> Path:
 
         metrics_doc = {
             "schema": "bpmn-layout-report/v2",
+            "commit": resolve_commit_sha(),
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
             "engines": [
                 {"name": name, "command": shlex.join(raw_engine_commands[name]), "version": engine_versions[name]}
                 for name in raw_engine_commands
@@ -1391,6 +1413,8 @@ def report_html(metrics_doc: dict[str, object]) -> str:
     entries = metrics_doc["entries"]  # type: ignore[index]
     engines = metrics_doc.get("engines", [])  # type: ignore[union-attr]
     engine_names = [engine["name"] for engine in engines]  # type: ignore[index]
+    commit = html.escape(str(metrics_doc.get("commit", "unknown")))
+    generated_at = html.escape(str(metrics_doc.get("generated_at", "unknown")))
     sections: list[str] = []
     for entry in entries:  # type: ignore[assignment]
         title = html.escape(entry["title"])
@@ -1492,6 +1516,9 @@ pre {{ overflow: auto; background: #f6f8fa; padding: 1rem; }}
   in this report.
 </div>
 <h2>Engines</h2>
+<p>Measured at commit <code>{commit}</code>, generated {generated_at}. A reader who wants to check whether
+a favourable trend coincided with a metric edit (rather than a layout edit) should diff this report's
+commit against <code>tools/bpmn_feedback.py</code>'s history (#58).</p>
 <ul>{engine_meta}</ul>
 {''.join(sections)}
 </body>
