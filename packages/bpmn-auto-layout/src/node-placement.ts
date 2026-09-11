@@ -599,7 +599,21 @@ function layoutSubProcessChildrenRecursive(
   return { width: containerW, height: containerH };
 }
 
-function repairDirectFlowGaps(
+/**
+ * Re-establish the exact DEFAULT_FLOW_GAP edge-to-edge gap for simple
+ * same-row chains (single incoming, no node in between) after grid
+ * snapping. `snapNodesToGrid` rounds each node's center to the 10 px grid
+ * independently, which can perturb the gap the column math already computed
+ * by up to 10 px in either direction -- this pass removes that drift instead
+ * of leaving it to chance (see #8). It must run *after* snapping: fixing the
+ * gap first (as this used to) only for it to be re-perturbed by the later
+ * independent rounding defeats the purpose.
+ *
+ * Flows are processed in ascending source-x order so a correction to one
+ * node is what the next one down the same chain measures its own gap
+ * against, i.e. a genuine left-to-right pass rather than a per-pair patch.
+ */
+function enforceFlowGaps(
   layoutNodes: Map<string, NodeLayout>,
   topNodes: any[],
   topFlows: any[],
@@ -610,17 +624,21 @@ function repairDirectFlowGaps(
     if (targetId) incomingCount.set(targetId, (incomingCount.get(targetId) ?? 0) + 1);
   }
 
-  for (const flow of topFlows) {
+  const orderedFlows = [...topFlows].sort(
+    (a, b) => (layoutNodes.get(a.sourceRef?.id)?.x ?? 0) - (layoutNodes.get(b.sourceRef?.id)?.x ?? 0),
+  );
+
+  for (const flow of orderedFlows) {
     const source = layoutNodes.get(flow.sourceRef?.id);
     const target = layoutNodes.get(flow.targetRef?.id);
     if (
       !source ||
       !target ||
       incomingCount.get(target.id) !== 1 ||
-      Math.abs(source.centerY - target.centerY) >= 0.5
+      Math.abs(source.centerY - target.centerY) >= 0.5 ||
+      target.x < source.x + source.width
     )
       continue;
-    if (target.x <= source.x + source.width + DEFAULT_FLOW_GAP) continue;
     const hasIntermediate = topNodes.some((node: any) => {
       const candidate = layoutNodes.get(node.id);
       return (
@@ -632,25 +650,23 @@ function repairDirectFlowGaps(
         candidate.x + candidate.width <= target.x
       );
     });
-    if (!hasIntermediate) {
-      const nextX = source.x + source.width + DEFAULT_FLOW_GAP;
-      const dx = nextX - target.x;
-      if (dx !== 0) {
-        const movedIds = new Set<string>();
-        const collect = (element: any): void => {
-          if (element?.id) movedIds.add(element.id);
-          for (const child of element?.flowElements || []) {
-            if (child.$type !== "bpmn:SequenceFlow") collect(child);
-          }
-        };
-        collect(target.element);
-        for (const node of layoutNodes.values()) {
-          if (!movedIds.has(node.id)) continue;
-          node.x += dx;
-          node.centerX += dx;
-        }
-      }
+    if (hasIntermediate) continue;
 
+    const desiredX = source.x + source.width + DEFAULT_FLOW_GAP;
+    const dx = desiredX - target.x;
+    if (Math.abs(dx) < 0.5) continue;
+    const movedIds = new Set<string>();
+    const collect = (element: any): void => {
+      if (element?.id) movedIds.add(element.id);
+      for (const child of element?.flowElements || []) {
+        if (child.$type !== "bpmn:SequenceFlow") collect(child);
+      }
+    };
+    collect(target.element);
+    for (const node of layoutNodes.values()) {
+      if (!movedIds.has(node.id)) continue;
+      node.x += dx;
+      node.centerX += dx;
     }
   }
 }
@@ -886,8 +902,8 @@ export function computeProcessLayout(
   }
 
   packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
-  repairDirectFlowGaps(layoutNodes, topNodes, topFlows);
   snapNodesToGrid(layoutNodes, opts.colWidth, opts.gridSize);
+  enforceFlowGaps(layoutNodes, topNodes, topFlows);
   placeBoundaryBranchesAbove(layoutNodes, topNodes, topFlows, opts.trackGap);
   attachBoundaryEvents(layoutNodes, topNodes, topFlows);
 
