@@ -1946,6 +1946,30 @@ def latest_report(output_dir: str) -> Path:
     return max(reports, key=lambda path: path.stat().st_mtime)
 
 
+# Maps each quality-gate metric to the §8 priority level (docs/bpmn-layout-rules.json
+# LAYOUT_PRIORITY_LEVELS / packages/bpmn-auto-layout/src/layout-policy.ts) it is
+# evidence for, so a failing check reports not just *what* is wrong but *how
+# important* the requirement it violates is. This is purely a reporting-order
+# change: pass/fail behavior (exit non-zero if any failure exists) is unchanged
+# (see #29).
+METRIC_PRIORITY_LEVEL: dict[str, int] = {
+    "node_containment_violations": 1,
+    "label_containment_violations": 1,
+    "invalid_edge_attachments": 1,
+    "invalid_label_bounds": 1,
+    "edge_container_intersections": 1,
+    "edge_crossings": 2,
+    "edge_shape_intersections": 2,
+    "shape_overlaps": 2,
+    "label_overlaps": 2,
+    "label_shape_intersections": 2,
+    "label_edge_intersections": 2,
+    "non_orthogonal_segments": 3,
+    "missing_named_labels": 5,
+    "excess_turns": 6,
+}
+
+
 def check_report(args: argparse.Namespace) -> None:
     report = resolve_report_reference(args.report, args.output_dir) if args.report else latest_report(args.output_dir)
     if report.is_dir():
@@ -1954,7 +1978,11 @@ def check_report(args: argparse.Namespace) -> None:
     if not metrics_path.is_file():
         raise SystemExit(f"report metrics do not exist: {metrics_path}")
     document = json.loads(metrics_path.read_text(encoding="utf8"))
-    failures: list[str] = []
+    failures: list[tuple[int, str]] = []
+
+    def add(metric: str, text: str) -> None:
+        failures.append((METRIC_PRIORITY_LEVEL.get(metric, 99), text))
+
     for entry in document.get("entries", []):
         title = entry.get("title", entry.get("source", "diagram"))
         layout = entry["transformed_metrics"]["layout"]
@@ -1975,34 +2003,38 @@ def check_report(args: argparse.Namespace) -> None:
         ):
             value = layout[metric]
             if value > 0:
-                failures.append(f"{title}: {metric}={value}")
+                add(metric, f"{title}: {metric}={value}")
         for detail in layout.get("excess_turn_details", []):
-            failures.append(f"{title}: {detail['edge']} has {detail['excess_turns']} excess turn(s)")
+            add("excess_turns", f"{title}: {detail['edge']} has {detail['excess_turns']} excess turn(s)")
         for detail in layout.get("node_containment_violation_details", []):
-            failures.append(
-                f"{title}: {detail['node']} escapes its {detail['container_type']} {detail['container']}"
+            add(
+                "node_containment_violations",
+                f"{title}: {detail['node']} escapes its {detail['container_type']} {detail['container']}",
             )
         for detail in layout.get("label_containment_violation_details", []):
-            failures.append(
-                f"{title}: label {detail['label']} escapes its {detail['container_type']} {detail['container']}"
+            add(
+                "label_containment_violations",
+                f"{title}: label {detail['label']} escapes its {detail['container_type']} {detail['container']}",
             )
         for detail in layout.get("edge_crossing_details", []):
-            failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
+            add("edge_crossings", f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
-            failures.append(f"{title}: {detail['edge']} intersects {detail['shape']}")
+            add("edge_shape_intersections", f"{title}: {detail['edge']} intersects {detail['shape']}")
         for detail in layout.get("edge_container_intersection_details", []):
-            failures.append(f"{title}: {detail['edge']} intersects container {detail['container']}")
+            add("edge_container_intersections", f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):
-            failures.append(f"{title}: {detail['edge']} has invalid {detail['end']} attachment")
+            add("invalid_edge_attachments", f"{title}: {detail['edge']} has invalid {detail['end']} attachment")
         for detail in layout.get("label_shape_intersection_details", []):
-            failures.append(f"{title}: label {detail['label']} intersects {detail['shape']}")
+            add("label_shape_intersections", f"{title}: label {detail['label']} intersects {detail['shape']}")
         for detail in layout.get("label_edge_intersection_details", []):
-            failures.append(f"{title}: label {detail['label']} intersects edge {detail['edge']}")
+            add("label_edge_intersections", f"{title}: label {detail['label']} intersects edge {detail['edge']}")
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
-            failures.append(f"{title}: missing_named_labels={missing}")
+            add("missing_named_labels", f"{title}: missing_named_labels={missing}")
     if failures:
-        raise SystemExit("layout checks failed:\n" + "\n".join(f"  {failure}" for failure in failures))
+        failures.sort(key=lambda item: item[0])
+        lines = [f"  [L{level}] {text}" if level != 99 else f"  {text}" for level, text in failures]
+        raise SystemExit("layout checks failed (ordered by §8 priority level, most important first):\n" + "\n".join(lines))
     print(f"layout checks passed: {report}")
 
 
