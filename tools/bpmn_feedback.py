@@ -739,6 +739,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "edges": len(edges),
             "labels": len(labels),
             "canvas": canvas,
+            "canvas_area": round(canvas["width"] * canvas["height"], 2),
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
             "node_containment_violations": node_containment_violations,
@@ -783,6 +784,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 "min": min(horizontal_flow_gaps) if horizontal_flow_gaps else None,
                 "max": max(horizontal_flow_gaps) if horizontal_flow_gaps else None,
                 "avg": round(sum(horizontal_flow_gaps) / len(horizontal_flow_gaps), 2) if horizontal_flow_gaps else None,
+                # How much horizontal spacing between tracks varies within one
+                # diagram (max - min); an aesthetic preference (#55), not a
+                # validity concern -- 0 means every gap is identical.
+                "consistency": round(max(horizontal_flow_gaps) - min(horizontal_flow_gaps), 2)
+                if horizontal_flow_gaps
+                else None,
             },
             "grid_center_x_deviation_avg": round(sum(grid_deviations) / len(grid_deviations), 2) if grid_deviations else 0,
             "grid_center_x_deviation_max": round(max(grid_deviations), 2) if grid_deviations else 0,
@@ -1118,39 +1125,73 @@ def render_report(args: argparse.Namespace) -> Path:
             path.unlink(missing_ok=True)
 
 
-METRIC_ROW_PATHS: list[tuple[str, tuple[str, ...]]] = [
-        ("diagrams", ("layout", "diagrams")),
-        ("shapes", ("layout", "shapes")),
-        ("edges", ("layout", "edges")),
-        ("labels", ("layout", "labels")),
-        ("shape overlaps", ("layout", "shape_overlaps")),
-        ("label overlaps", ("layout", "label_overlaps")),
-        ("edge crossings", ("layout", "edge_crossings")),
-        ("edge/shape intersections", ("layout", "edge_shape_intersections")),
-        ("node containment violations", ("layout", "node_containment_violations")),
-        ("label containment violations", ("layout", "label_containment_violations")),
-        ("total bends", ("layout", "total_bends")),
-        ("degenerate waypoints", ("layout", "degenerate_waypoints")),
-        ("excess turns", ("layout", "excess_turns")),
-        ("detour ratio average", ("layout", "detour_ratio", "avg")),
-        ("detour ratio maximum", ("layout", "detour_ratio", "max")),
-        ("total Manhattan length", ("layout", "total_manhattan_length")),
-        ("non-50px route segments", ("layout", "route_lattice", "non_multiple_segments")),
-        ("maximum route lattice remainder", ("layout", "route_lattice", "max_remainder")),
-        ("grid center-x avg deviation", ("layout", "grid_center_x_deviation_avg")),
-        ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
-        ("gateway label gap average", ("layout", "node_label_gap", "gateway", "avg")),
-        ("event label gap minimum", ("layout", "node_label_gap", "event", "min")),
-        ("gateway label gap minimum", ("layout", "node_label_gap", "gateway", "min")),
-        ("horizontal flow gap average", ("layout", "horizontal_flow_gap", "avg")),
-        ("horizontal flow gap minimum", ("layout", "horizontal_flow_gap", "min")),
-        ("horizontal flow gap maximum", ("layout", "horizontal_flow_gap", "max")),
-        ("missing named labels", ("layout", "named_label_coverage", "missing")),
-        ("sequence flows", ("semantic", "sequence_flows")),
-        ("message flows", ("semantic", "message_flows")),
-        ("lanes", ("semantic", "lanes")),
-        ("data references", ("semantic", "data_references")),
+# #55: a public comparison that scores another engine on metrics derived
+# from our own failure modes is not credible unless it is honest about what
+# it is doing. Two tables, never one blended score:
+#
+# VALIDITY is spec-grounded and fair to any engine -- geometry any BPMN
+# renderer should get right, no house style involved.
+VALIDITY_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("shape overlaps", ("layout", "shape_overlaps")),
+    ("edge/shape intersections", ("layout", "edge_shape_intersections")),
+    ("edge/container intersections", ("layout", "edge_container_intersections")),
+    ("edge crossings", ("layout", "edge_crossings")),
+    ("non-orthogonal segments", ("layout", "non_orthogonal_segments")),
+    ("invalid edge attachments", ("layout", "invalid_edge_attachments")),
+    ("degenerate waypoints", ("layout", "degenerate_waypoints")),
+    ("node containment violations", ("layout", "node_containment_violations")),
+    ("label containment violations", ("layout", "label_containment_violations")),
+    ("missing named labels", ("layout", "named_label_coverage", "missing")),
 ]
+
+# AESTHETICS is our own §8 routing-priority preferences, explicitly labelled
+# as such -- an engine that makes different trade-offs (e.g. more bends to
+# avoid ever cutting through a shape) is not thereby wrong.
+AESTHETIC_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("total bends", ("layout", "total_bends")),
+    ("excess turns", ("layout", "excess_turns")),
+    ("total Manhattan length", ("layout", "total_manhattan_length")),
+    ("horizontal flow gap consistency (max-min)", ("layout", "horizontal_flow_gap", "consistency")),
+    ("canvas area", ("layout", "canvas_area")),
+]
+
+# Descriptive counts: not a judgment either way, just context for the tables
+# above. Implementation-specific conventions (route_lattice, grid deviation,
+# detour ratio, node/label gap) are deliberately excluded from both headline
+# tables -- they describe our own 50px-grid routing convention, which a
+# different engine has no reason to share, so scoring another engine against
+# them would not be a comparison, just a restatement of "it isn't us" (#55).
+OTHER_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("diagrams", ("layout", "diagrams")),
+    ("shapes", ("layout", "shapes")),
+    ("edges", ("layout", "edges")),
+    ("labels", ("layout", "labels")),
+    ("label overlaps", ("layout", "label_overlaps")),
+    ("label/shape intersections", ("layout", "label_shape_intersections")),
+    ("label/edge intersections", ("layout", "label_edge_intersections")),
+    ("detour ratio average", ("layout", "detour_ratio", "avg")),
+    ("detour ratio maximum", ("layout", "detour_ratio", "max")),
+    ("non-50px route segments (our grid convention)", ("layout", "route_lattice", "non_multiple_segments")),
+    ("grid center-x avg deviation (our grid convention)", ("layout", "grid_center_x_deviation_avg")),
+    ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
+    ("gateway label gap average", ("layout", "node_label_gap", "gateway", "avg")),
+    ("horizontal flow gap average", ("layout", "horizontal_flow_gap", "avg")),
+    ("sequence flows", ("semantic", "sequence_flows")),
+    ("message flows", ("semantic", "message_flows")),
+    ("lanes", ("semantic", "lanes")),
+    ("data references", ("semantic", "data_references")),
+]
+
+# Every label-collision metric reads as a vacuous 0 for an engine that emits
+# no BPMNLabel elements at all -- you cannot overlap a label you did not
+# draw. Rendered as n/a instead of 0 wherever one of these paths appears, in
+# any table (#55's central honesty fix: suppressing vacuous zeros).
+LABEL_DEPENDENT_METRIC_PATHS: set[tuple[str, ...]] = {
+    ("layout", "label_overlaps"),
+    ("layout", "label_shape_intersections"),
+    ("layout", "label_edge_intersections"),
+    ("layout", "label_containment_violations"),
+}
 
 
 def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
@@ -1166,9 +1207,12 @@ def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
     return current
 
 
-def format_metric_cell(value: object, error: str | None) -> str:
+def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None, error: str | None) -> str:
     if error is not None:
         return "error"
+    if path in LABEL_DEPENDENT_METRIC_PATHS and not get_metric(metrics, ("layout", "labels")):
+        return "n/a (emits no labels)"
+    value = get_metric(metrics, path)
     if value is None:
         return "n/a"
     return str(value)
@@ -1177,15 +1221,15 @@ def format_metric_cell(value: object, error: str | None) -> str:
 ReportColumn = tuple[str, dict[str, object] | None, str | None]
 
 
-def metric_rows(columns: list[ReportColumn]) -> str:
-    """Render one row per tracked metric across N named (name, metrics,
+def metric_rows(paths: list[tuple[str, tuple[str, ...]]], columns: list[ReportColumn]) -> str:
+    """Render one row per metric in `paths` across N named (name, metrics,
     error) columns -- generalized from the original fixed (original,
-    transformed) pair so a report can compare any number of engines (#53)."""
+    transformed) pair so a report can compare any number of engines (#53),
+    and reused across the validity/aesthetics/other tables (#55)."""
     rows = []
-    for label, path in METRIC_ROW_PATHS:
+    for label, path in paths:
         cells = "".join(
-            f"<td>{html.escape(format_metric_cell(get_metric(metrics, path), error))}</td>"
-            for _name, metrics, error in columns
+            f"<td>{html.escape(format_metric_cell(path, metrics, error))}</td>" for _name, metrics, error in columns
         )
         rows.append(f"<tr><th>{html.escape(label)}</th>{cells}</tr>")
     return "\n".join(rows)
@@ -1235,10 +1279,20 @@ def report_html(metrics_doc: dict[str, object]) -> str:
   <div class="images" style="grid-template-columns: repeat({max(len(figures), 1)}, minmax(0, 1fr));">
     {''.join(figures)}
   </div>
-  <h3>Deterministic metrics</h3>
+  <h3>Validity <span class="table-note">(spec-grounded, fair to any engine)</span></h3>
   <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
-    {metric_rows(columns)}
+    {metric_rows(VALIDITY_METRIC_PATHS, columns)}
   </tbody></table>
+  <h3>Aesthetics <span class="table-note">(our own §8 routing priorities -- see bias note above)</span></h3>
+  <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+    {metric_rows(AESTHETIC_METRIC_PATHS, columns)}
+  </tbody></table>
+  <details>
+    <summary>Other metrics (descriptive counts and our own grid-convention internals, excluded from comparison)</summary>
+    <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+      {metric_rows(OTHER_METRIC_PATHS, columns)}
+    </tbody></table>
+  </details>
   {details}
 </section>
 """
@@ -1256,6 +1310,8 @@ def report_html(metrics_doc: dict[str, object]) -> str:
 <style>
 body {{ font-family: sans-serif; margin: 2rem; color: #1f2328; }}
 .part {{ border-top: 1px solid #d0d7de; padding-top: 1.5rem; margin-top: 1.5rem; }}
+.bias-note {{ background: #fff8c5; border: 1px solid #d4a72c; padding: 1rem; margin: 1rem 0; }}
+.table-note {{ font-weight: normal; color: #57606a; font-size: 0.85em; }}
 .images {{ display: grid; gap: 1rem; }}
 figure {{ margin: 0; border: 1px solid #d0d7de; padding: .75rem; overflow: auto; }}
 figcaption {{ font-weight: 600; margin-bottom: .5rem; }}
@@ -1270,6 +1326,19 @@ pre {{ overflow: auto; background: #f6f8fa; padding: 1rem; }}
 <body>
 <h1>BPMN layout feedback report</h1>
 <p>This report is ephemeral and workspace-local. Metrics are also available in <a href="metrics.json">metrics.json</a>.</p>
+<div class="bias-note">
+  <strong>On comparing engines with these metrics:</strong> every metric here was developed
+  against this engine's own failure modes, so a raw score is not a fair engine-vs-engine ranking
+  on its own (#55). Each diagram below is scored in two separate tables instead of one number:
+  <strong>Validity</strong> is spec-grounded and should hold for any correct BPMN renderer;
+  <strong>Aesthetics</strong> encodes this project's own routing-priority preferences (§8) and is
+  labelled as such -- an engine that trades more bends for never cutting through a shape is not
+  thereby wrong. A metric an engine cannot meaningfully score (e.g. every label-collision metric,
+  for an engine that emits no label DI at all) reads as <code>n/a</code>, never a vacuous
+  <code>0</code>. Metrics describing only this engine's own 50px-grid routing convention are
+  excluded from both tables as not comparable. No combined score or ranking is computed anywhere
+  in this report.
+</div>
 <h2>Engines</h2>
 <ul>{engine_meta}</ul>
 {''.join(sections)}
