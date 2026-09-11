@@ -550,12 +550,23 @@ function buildProcessShapesAndEdges(
     if (branches.length === 0) continue;
     const side = "below" as const;
     const channel = channelY(shiftedLayout, flow, side, src.centerX, tgt.centerX);
-    edgeWaypoints.set(flow.id, [
+    const candidate = [
       { x: src.x + src.width, y: src.centerY },
       { x: src.x + src.width, y: channel },
       { x: tgt.x, y: channel },
       { x: tgt.x, y: tgt.centerY },
-    ]);
+    ];
+    if (validateConnectionPoints(candidate, src, tgt)) {
+      edgeWaypoints.set(flow.id, candidate);
+      continue;
+    }
+    // The channel route can run through a boundary event or subprocess;
+    // repair it like every other route, and if it still does not validate,
+    // keep the previous (already validated) route rather than ship it.
+    const repaired = repairSegmentCollisions(candidate, shiftedLayout, flow, edgeWaypoints, routingPolicy);
+    if (validateConnectionPoints(repaired, src, tgt)) {
+      edgeWaypoints.set(flow.id, repaired);
+    }
   }
 
   // 1.5 Pre-compute edge labels (before node labels, to reserve space)
