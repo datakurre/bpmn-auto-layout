@@ -149,6 +149,13 @@
       "rule": "The feedback report records the exact edge pairs, edge/shape pairs, edge/subprocess-container pairs, and invalid endpoint attachments responsible for geometry defects. It also records invalid label bounds. The quality gate fails on any such defect while preserving details in metrics.json and command output so routing regressions can be traced to named BPMN elements."
     },
     {
+      "id": "api.best-effort-with-warnings",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/layout-warnings.ts:1-32", "packages/bpmn-auto-layout/src/auto-layout.ts:1-80", "packages/bpmn-auto-layout/src/process-routing.ts:169-260", "packages/bpmn-auto-layout/src/label-placement.ts:259-340", "packages/bpmn-auto-layout/src/label-placement.ts:501-690"],
+      "rule": "The engine always produces a renderable diagram rather than throwing on unsatisfiable geometry (#32's decision). routeProcessFlows no longer throws when no candidate route validates even after every fallback; it emits the best available geometry and a ROUTE_INVALID_CONNECTION_POINTS warning. Three previously-silent degradation sites now report structured LayoutWarning objects (code, optional elementId, message) instead of degrading unnoticed: repairSegmentCollisions' best-effort result is checked once, after routing, for remaining obstacle hits (ROUTE_INTERSECTS_OBSTACLE); pickLabel's combined-score fallback (ROUTE crossing an edge, or overlapping a shape/label with no clean candidate) (LABEL_OVERLAPS_ELEMENT); and solveLabelPlacement's edge-collision-relaxed, containment-relaxed, and unchecked-default tiers (LABEL_OVERLAPS_ELEMENT / LABEL_ESCAPES_CONTAINER). layoutProcessWithDiagnostics (auto-layout.ts, exported from index.ts) returns `{xml, warnings}`; layoutProcess keeps its original string-only signature and simply does not collect them -- both call the same internal runLayout, verified to produce byte-identical XML.",
+      "note": "bpmn_feedback.py's `check` command does not yet consume these warnings (the issue's fourth suggested step) -- that requires the layout-command CLI defined in flake.nix to surface them in a machine-readable form (e.g. a sidecar file), which is outside packages/bpmn-auto-layout and was left as a follow-up."
+    },
+    {
       "id": "architecture.priority-model",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/layout-policy.ts:1-52", "tools/bpmn_feedback.py:1949-2020"],

@@ -19,6 +19,7 @@ import {
 } from "./lane-layout";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
 import { routeProcessFlows, snapRouteWaypoints } from "./process-routing";
+import type { LayoutWarning } from "./layout-warnings";
 import {
   ensureOrthogonalWaypoints,
   solveLabelPlacement,
@@ -102,6 +103,7 @@ export function createCollaborationDi(
   root: any,
   layouts: Map<string, ProcessLayoutResult>,
   opts: ResolvedLayoutOptions,
+  warnings?: LayoutWarning[],
 ): void {
   const collaboration = (root.rootElements || []).find(
     (element: any) => element.$type === "bpmn:Collaboration",
@@ -242,7 +244,7 @@ export function createCollaborationDi(
     ];
     const built = buildProcessShapesAndEdges(
       moddle, process, layout, opts, dx, dy, containerObstacles,
-      leafLaneBoundsByNodeId(laneBands), participantBounds,
+      leafLaneBoundsByNodeId(laneBands), participantBounds, warnings,
     );
     for (const el of built.elements) planeElements.push(el);
     allContainerObstacles.push(...containerObstacles);
@@ -313,6 +315,8 @@ export function createCollaborationDi(
         blockedEdgesForLabel,
         [...collaborationLabels, ...messageFlowLabels],
         collaborationNodes,
+        undefined,
+        warnings,
       );
       if (labelBounds) {
         messageFlowLabels.push(labelBounds);
@@ -370,6 +374,7 @@ function buildProcessShapesAndEdges(
   containerObstacles: NodeLayout[] = [],
   laneBoundsByNodeId: Map<string, LabelBounds> = new Map(),
   participantBounds?: LabelBounds,
+  warnings?: LayoutWarning[],
 ): ProcessShapesAndEdges {
   const elements: any[] = [];
   const routingPolicy = resolveRoutingPolicy(opts.routing);
@@ -418,7 +423,7 @@ function buildProcessShapesAndEdges(
   // computation, collision repair, orthogonalization) -- extracted to
   // process-routing.ts so it is testable as a pure geometry computation,
   // independent of DI serialization (#31).
-  const edgeWaypoints = routeProcessFlows(shiftedLayout, opts);
+  const edgeWaypoints = routeProcessFlows(shiftedLayout, opts, warnings);
 
   // 1.5 Pre-compute edge labels (before node labels, to reserve space)
   const placedLabels: LabelBounds[] = [];
@@ -433,6 +438,7 @@ function buildProcessShapesAndEdges(
       placedLabels,
       shiftedLayout.nodes,
       containerBoundsFor(shiftedLayout.nodes.get(flow.sourceRef?.id)),
+      warnings,
     );
     if (edgeLabel) {
       edgeLabelBounds.set(flow.id, edgeLabel);
@@ -475,6 +481,7 @@ function buildProcessShapesAndEdges(
         shiftedNodes,
         placedLabels,
         containerBoundsFor(node),
+        warnings,
       );
       placedLabels.push(labelBounds);
       nodeLabelBounds.set(id, labelBounds);
@@ -499,6 +506,7 @@ function buildProcessShapesAndEdges(
         shiftedNodes,
         placedLabels,
         containerBoundsFor(node),
+        warnings,
       );
       placedLabels.push(labelBounds);
       nodeLabelBounds.set(id, labelBounds);
@@ -601,6 +609,7 @@ export function createProcessDi(
   process: any,
   layout: ProcessLayoutResult,
   opts: ResolvedLayoutOptions,
+  warnings?: LayoutWarning[],
 ): void {
   const planeElements: any[] = [];
   let containerObstacles: NodeLayout[] = [];
@@ -641,7 +650,7 @@ export function createProcessDi(
   // Generate node shapes and edge DI using the shared helper (no offset for
   // standalone processes — dx=0, dy=0).
   for (const el of buildProcessShapesAndEdges(
-    moddle, process, layout, opts, 0, 0, containerObstacles, laneBoundsByNodeId,
+    moddle, process, layout, opts, 0, 0, containerObstacles, laneBoundsByNodeId, undefined, warnings,
   ).elements) {
     planeElements.push(el);
   }

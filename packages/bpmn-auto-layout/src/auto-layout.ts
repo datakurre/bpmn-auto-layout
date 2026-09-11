@@ -28,10 +28,22 @@ import { assertNoCrossProcessFlows } from "./graph-analysis";
 import { computeProcessLayout } from "./node-placement";
 import { createProcessDi, createCollaborationDi, getCollaborationProcessIds } from "./di-creation";
 import { DEFAULT_OPTIONS, type AutoLayoutOptions, type ResolvedLayoutOptions } from "./element-dimensions";
+import type { LayoutWarning } from "./layout-warnings";
 
 export type { AutoLayoutOptions };
+export type { LayoutWarning, LayoutWarningCode } from "./layout-warnings";
 
-export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
+export interface LayoutResult {
+  xml: string;
+  /**
+   * Constraints the engine could not fully satisfy, degrading to the best
+   * available geometry instead (#32's decision: the engine always produces
+   * a renderable diagram). Empty when nothing was compromised.
+   */
+  warnings: LayoutWarning[];
+}
+
+async function runLayout(xml: string, options: AutoLayoutOptions, warnings?: LayoutWarning[]): Promise<string> {
   const opts: ResolvedLayoutOptions = { ...DEFAULT_OPTIONS, ...options };
   const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
@@ -57,11 +69,31 @@ export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}
     // Only create a standalone process diagram for processes that are NOT
     // part of a collaboration (pool/participant).
     if (!collaborationProcessIds.has(process.id)) {
-      createProcessDi(moddle, root, process, layout, opts);
+      createProcessDi(moddle, root, process, layout, opts, warnings);
     }
   }
-  createCollaborationDi(moddle, root, layouts, opts);
+  createCollaborationDi(moddle, root, layouts, opts, warnings);
 
   const { xml: outputXml } = await moddle.toXML(rootElement, { format: true });
   return outputXml;
+}
+
+export async function layoutProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
+  return runLayout(xml, options);
+}
+
+/**
+ * Same layout as layoutProcess, but also returns the structured warnings for
+ * any constraint the engine could not fully satisfy (see LayoutResult).
+ * layoutProcess itself keeps its existing string-returning signature and
+ * discards these; use this companion when the caller wants to know what, if
+ * anything, was compromised (#32).
+ */
+export async function layoutProcessWithDiagnostics(
+  xml: string,
+  options: AutoLayoutOptions = {},
+): Promise<LayoutResult> {
+  const warnings: LayoutWarning[] = [];
+  const outputXml = await runLayout(xml, options, warnings);
+  return { xml: outputXml, warnings };
 }

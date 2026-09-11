@@ -21,6 +21,7 @@ import {
   GATEWAY_LABEL_GAP,
   EDGE_LABEL_GAP,
 } from "./element-dimensions";
+import { warn, type LayoutWarning } from "./layout-warnings";
 
 export interface LabelBounds {
   x: number;
@@ -262,6 +263,7 @@ function pickLabel(
   placedLabels: LabelBounds[],
   nodes: Map<string, NodeLayout>,
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>> = new Map(),
+  warnings?: LayoutWarning[],
 ): LabelBounds {
   const crossedByEdge = (bounds: LabelBounds): number => {
     let crossings = 0;
@@ -323,6 +325,12 @@ function pickLabel(
         bestArea = area;
       }
     }
+    warn(
+      warnings,
+      "LABEL_OVERLAPS_ELEMENT",
+      flow?.id,
+      `edge label for ${flow?.id} overlaps a shape or another label; every candidate free of edge crossings still overlapped something`,
+    );
     return best;
   }
 
@@ -335,6 +343,12 @@ function pickLabel(
       bestScore = score;
     }
   }
+  warn(
+    warnings,
+    "LABEL_OVERLAPS_ELEMENT",
+    flow?.id,
+    `edge label for ${flow?.id} crosses another routed edge; no candidate avoided every edge crossing`,
+  );
   return best;
 }
 
@@ -349,6 +363,7 @@ export function computeEdgeLabelBounds(
   placedLabels: LabelBounds[] = [],
   nodes: Map<string, NodeLayout> = new Map(),
   containerBounds?: LabelBounds,
+  warnings?: LayoutWarning[],
 ): LabelBounds | null {
   if (!flow.name || typeof flow.name !== "string" || flow.name.trim().length === 0) return null;
   const text = flow.name.trim();
@@ -440,6 +455,9 @@ export function computeEdgeLabelBounds(
       }
     });
     const containedCandidates = allCandidates.filter((c) => containedIn(c, containerBounds));
+    if (containerBounds && containedCandidates.length === 0) {
+      warn(warnings, "LABEL_ESCAPES_CONTAINER", flow?.id, `edge label for ${flow?.id} could not be placed inside its owning container`);
+    }
     return pickLabel(
       containedCandidates.length > 0 ? containedCandidates : allCandidates,
       fallback,
@@ -447,6 +465,7 @@ export function computeEdgeLabelBounds(
       placedLabels,
       nodes,
       edgeWaypoints,
+      warnings,
     );
   }
 
@@ -463,6 +482,9 @@ export function computeEdgeLabelBounds(
     candidates.push({ x: leftX, y: y + dy, width, height });
   }
   const containedCandidates = candidates.filter((c) => containedIn(c, containerBounds));
+  if (containerBounds && containedCandidates.length === 0) {
+    warn(warnings, "LABEL_ESCAPES_CONTAINER", flow?.id, `edge label for ${flow?.id} could not be placed inside its owning container`);
+  }
   return pickLabel(
     containedCandidates.length > 0 ? containedCandidates : candidates,
     { x: rightX, y, width, height },
@@ -470,6 +492,7 @@ export function computeEdgeLabelBounds(
     placedLabels,
     nodes,
     edgeWaypoints,
+    warnings,
   );
 }
 
@@ -504,6 +527,7 @@ export function solveLabelPlacement(
   nodes: Map<string, NodeLayout>,
   placedLabels: LabelBounds[],
   containerBounds?: LabelBounds,
+  warnings?: LayoutWarning[],
 ): LabelBounds {
   const name = node.element.name || "";
   const isGateway = node.element.$type.endsWith("Gateway");
@@ -659,6 +683,9 @@ export function solveLabelPlacement(
       chosen = cand;
       break;
     }
+    if (chosen) {
+      warn(warnings, "LABEL_OVERLAPS_ELEMENT", node.id, `label for ${node.id} crosses a routed edge; no candidate cleared both containment and edge avoidance`);
+    }
   }
   // Fallback: no candidate fits inside the container at all (e.g. a lane
   // too narrow for the text) -- accept the least-bad element/label-free
@@ -671,10 +698,14 @@ export function solveLabelPlacement(
       chosen = cand;
       break;
     }
+    if (chosen) {
+      warn(warnings, "LABEL_ESCAPES_CONTAINER", node.id, `label for ${node.id} could not be placed inside its owning container; no contained candidate was free of element/label collisions`);
+    }
   }
   if (!chosen) {
     const fallbackBounds = estimateDefaultLabelBounds(node, preferredTop);
     chosen = { ...fallbackBounds, lines: estimateTextLines(name, fallbackBounds.width) };
+    warn(warnings, "LABEL_OVERLAPS_ELEMENT", node.id, `label for ${node.id} fell back to its unchecked default position; no candidate was free of element/label collisions`);
   }
 
   return { x: chosen.x, y: chosen.y, width: chosen.width, height: chosen.height };

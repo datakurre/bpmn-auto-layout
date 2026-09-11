@@ -1,3 +1,3 @@
-export { layoutProcess } from "./auto-layout";
-export type { AutoLayoutOptions } from "./auto-layout";
+export { layoutProcess, layoutProcessWithDiagnostics } from "./auto-layout";
+export type { AutoLayoutOptions, LayoutResult, LayoutWarning, LayoutWarningCode } from "./auto-layout";
 export { ensureLabelDi, labelLayout } from "./label-layout";

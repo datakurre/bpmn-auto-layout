@@ -23,6 +23,7 @@ import { planContainerScopedChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
 import { fanOutAttachPoints, ensureOrthogonalWaypoints } from "./label-placement";
+import { warn, type LayoutWarning } from "./layout-warnings";
 
 export type RoutePoint = { x: number; y: number };
 
@@ -61,6 +62,7 @@ export function orderFlowsForRouting(layout: ProcessLayoutResult): any[] {
 export function routeProcessFlows(
   layout: ProcessLayoutResult,
   opts: ResolvedLayoutOptions,
+  warnings?: LayoutWarning[],
 ): Map<string, RoutePoint[]> {
   const routingPolicy = resolveRoutingPolicy(opts.routing);
   const edgeWaypoints = new Map<string, RoutePoint[]>();
@@ -204,7 +206,19 @@ export function routeProcessFlows(
         edgeWaypoints.set(flowId, fallback);
         continue;
       }
-      throw new Error(`invalid connection points for sequence flow ${flowId}`);
+      // No candidate validated even after every fallback. Per #32's
+      // decision the engine always produces a renderable diagram: ship the
+      // best geometry available (the fallback if one exists, else the
+      // orthogonalized route) with a warning, rather than throwing and
+      // leaving the caller with no diagram and no diagnostic at all.
+      warn(
+        warnings,
+        "ROUTE_INVALID_CONNECTION_POINTS",
+        flowId,
+        `sequence flow ${flowId} has no route whose endpoints validate against both node boundaries; emitted the best available geometry instead`,
+      );
+      edgeWaypoints.set(flowId, fallback ?? orthogonal);
+      continue;
     }
     edgeWaypoints.set(flowId, snapRouteWaypoints(orthogonal, opts.gridSize));
   }
@@ -240,6 +254,26 @@ export function routeProcessFlows(
     const repaired = repairSegmentCollisions(candidate, layout, flow, edgeWaypoints, routingPolicy);
     if (validateConnectionPoints(repaired, src, tgt)) {
       edgeWaypoints.set(flow.id, repaired);
+    }
+  }
+
+  // repairSegmentCollisions can return its best candidate even when that
+  // candidate still has obstacle hits (no repair strategy reached zero) --
+  // previously a silent degradation. Surface it: check every final route
+  // once against the same obstacle set repair uses, and warn on whatever
+  // still overlaps something (#32).
+  if (warnings) {
+    for (const flow of layout.allFlows) {
+      const points = edgeWaypoints.get(flow.id);
+      if (!points) continue;
+      if (countRouteHits(points, layout, flow, edgeWaypoints) > 0) {
+        warn(
+          warnings,
+          "ROUTE_INTERSECTS_OBSTACLE",
+          flow.id,
+          `sequence flow ${flow.id}'s final route still overlaps a node, container, or another route after every repair attempt`,
+        );
+      }
     }
   }
 
