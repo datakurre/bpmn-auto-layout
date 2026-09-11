@@ -90,14 +90,26 @@ function labelCollidesWithLanes(
   return false;
 }
 
+/**
+ * Whether `container` (an expanded subprocess) should be skipped as a
+ * collision obstacle for a label belonging to `ownerId`: only when the
+ * label's own owner lives inside that container. A label placed for a node
+ * elsewhere in the diagram must still avoid landing on top of the
+ * container's box (see #14); containment for a label whose owner *is*
+ * inside it is a separate constraint (see #15), not a collision exemption.
+ */
+function isOwnContainer(container: NodeLayout, ownerId: string, nodes: Map<string, NodeLayout>): boolean {
+  return container.element?.$type === "bpmn:SubProcess" && nodes.get(ownerId)?.containerId === container.id;
+}
+
 function labelCollidesWithElements(
   bounds: LabelBounds,
   targetId: string,
   nodes: Map<string, NodeLayout>,
 ): boolean {
   for (const node of nodes.values()) {
-    if (node.id === targetId || node.isSubProcessChild) continue;
-    if (node.element.$type === "bpmn:SubProcess") continue;
+    if (node.id === targetId) continue;
+    if (isOwnContainer(node, targetId, nodes)) continue;
     if (
       bounds.x < node.x + node.width &&
       node.x < bounds.x + bounds.width &&
@@ -256,9 +268,9 @@ function pickLabel(
   const overlapArea = (bounds: LabelBounds): number => {
     let area = 0;
     for (const node of nodes.values()) {
-      if (node.isSubProcessChild || node.element?.$type === "bpmn:SubProcess") continue;
       const isOwnEndpoint = node.id === flow?.sourceRef?.id || node.id === flow?.targetRef?.id;
       if (isOwnEndpoint) continue;
+      if (isOwnContainer(node, flow?.sourceRef?.id, nodes)) continue;
       area += boxOverlap(bounds, node);
     }
     for (const other of placedLabels) area += boxOverlap(bounds, other);
@@ -352,8 +364,7 @@ export function computeEdgeLabelBounds(
 
     const straddled = Array.from(nodes.values()).filter(
       (n) =>
-        !n.isSubProcessChild &&
-        n.element?.$type !== "bpmn:SubProcess" &&
+        !isOwnContainer(n, flow?.sourceRef?.id, nodes) &&
         n.x <= maxX + width / 2 &&
         minX - width / 2 <= n.x + n.width &&
         n.y < bestSeg!.p1.y + height &&

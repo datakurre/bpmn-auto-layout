@@ -153,6 +153,12 @@
       "rule": "Named sequence flows receive labels on a preferred horizontal segment of at least 30 px, or otherwise a vertical segment of at least 20 px. Horizontal labels are centered on the segment midpoint with a 2 px above-segment clearance when that side is selected. Edge labels are placed before node labels so node-label placement can avoid them."
     },
     {
+      "id": "labels.subprocess-obstacles",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/label-placement.ts:93-121", "packages/bpmn-auto-layout/src/label-placement.ts:268-278", "packages/bpmn-auto-layout/src/label-placement.ts:365-373"],
+      "rule": "Every label-collision predicate (labelCollidesWithElements, pickLabel's overlap scoring, computeEdgeLabelBounds' straddled-segment scan) treats expanded-subprocess children as ordinary collision obstacles. The subprocess container itself is skipped as an obstacle only via isOwnContainer -- when the label's own owner (the node, or the flow's source node) is a child of that specific subprocess -- so a label may sit near or inside the container that legitimately owns it, but a label belonging to an unrelated node must still avoid the container's box and everything inside it."
+    },
+    {
       "id": "labels.ensure-default-di",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/label-layout.ts:77-116"],
