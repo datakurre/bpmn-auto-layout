@@ -5,7 +5,8 @@
  * - Primary horizontal spine centered at Y=70.
  * - Modular 120px semantic column grid: col 0 at centerX=75, col 1 at 195, …
  * - Final node centers and safe route bends quantized to the 10px diagram-js grid.
- * - Multi-track vertical lanes (Track 0 at Y=70, Track 1 at Y=180, Track 2 at Y=430).
+ * - Multi-track vertical lanes on a single rhythm: track t sits at
+ *   spineY + t * trackGap, both above and below the spine (track 0).
  * - Planar, zero-crossing orthogonal routing with dedicated return/bypass channels.
  * - Full support for expanded SubProcesses and their internal elements.
  * - Automatic generation of BPMNLabel bounds for all named events and gateways.

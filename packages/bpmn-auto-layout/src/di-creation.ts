@@ -384,7 +384,7 @@ function buildProcessShapesAndEdges(
       edgeWaypoints.set(
         flow.id,
         repairSegmentCollisions(
-          computeWaypoints(src, tgt, shiftedLayout, opts, flow),
+          computeWaypoints(src, tgt, shiftedLayout, flow),
           shiftedLayout,
           flow,
           new Map(),
@@ -420,7 +420,7 @@ function buildProcessShapesAndEdges(
       tgt.element?.$type?.endsWith("Gateway") &&
       !src.element?.$type?.endsWith("Gateway");
     if (isLowerMerge) {
-      edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, shiftedLayout, opts, flow));
+      edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, shiftedLayout, flow));
       continue;
     }
     edgeWaypoints.set(

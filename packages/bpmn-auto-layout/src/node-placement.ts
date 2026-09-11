@@ -461,24 +461,15 @@ function buildTrackColMapsWithDim(
   return { nodeTrack, nodeCol };
 }
 
-function computeTrackY(
-  t: number,
-  minTrack: number,
-  opts: ResolvedLayoutOptions,
-  extraClearance: number,
-): number {
-  let centerY = opts.spineY;
-  if (minTrack === -1) {
-    if (t === -1) centerY = opts.spineY;
-    else if (t === 0) centerY = opts.spineY + opts.trackGap;
-    else if (t === 1) centerY = opts.spineY + 2 * opts.trackGap;
-    else if (t > 1) centerY = opts.spineY + (t + 1) * opts.trackGap;
-  } else {
-    if (t === 1) centerY = opts.track1Y;
-    else if (t === 2) centerY = opts.track2Y;
-    else if (t > 2) centerY = opts.track2Y + (t - 2) * opts.trackGap;
-  }
-  return centerY + extraClearance;
+/**
+ * Every track sits `trackGap` px from the next, in both directions from the
+ * spine (track 0). This is the only rhythm in the diagram: there is no
+ * separate spacing for the first branch track vs. later ones, so adding a
+ * node that happens to land on a new track never re-spaces the rest of the
+ * diagram (see #33).
+ */
+function computeTrackY(t: number, opts: ResolvedLayoutOptions, extraClearance: number): number {
+  return opts.spineY + t * opts.trackGap + extraClearance;
 }
 
 /** Padding inside a subprocess/embedded container (left/right, top/bottom). */
@@ -819,7 +810,7 @@ export function computeProcessLayout(
     const t = nodeTrack.get(node.id)!;
     const dim = effectiveDim(node);
     const centerX = 75 + c * opts.colWidth;
-    const centerY = computeTrackY(t, minTrack, opts, extraClearanceForTrack.get(t) ?? 0);
+    const centerY = computeTrackY(t, opts, extraClearanceForTrack.get(t) ?? 0);
     const x = centerX - dim.width / 2;
     const y = centerY - dim.height / 2;
 

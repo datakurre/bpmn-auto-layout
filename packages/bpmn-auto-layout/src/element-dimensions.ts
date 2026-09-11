@@ -9,12 +9,7 @@ export interface AutoLayoutOptions {
   colWidth?: number;
   gridSize?: number;
   spineY?: number;
-  track1Y?: number;
-  track2Y?: number;
   trackGap?: number;
-  channel1Y?: number;
-  channel2Y?: number;
-  channel3Y?: number;
   routing?: Partial<import("./layout-policy").RoutingPolicy>;
 }
 
@@ -22,12 +17,7 @@ export interface ResolvedLayoutOptions {
   colWidth: number;
   gridSize: number;
   spineY: number;
-  track1Y: number;
-  track2Y: number;
   trackGap: number;
-  channel1Y: number;
-  channel2Y: number;
-  channel3Y: number;
   routing: Partial<import("./layout-policy").RoutingPolicy>;
 }
 
@@ -35,12 +25,7 @@ export const DEFAULT_OPTIONS: ResolvedLayoutOptions = {
   colWidth: 120,
   gridSize: 10,
   spineY: 70,
-  track1Y: 180,
-  track2Y: 430,
   trackGap: 140,
-  channel1Y: 140,
-  channel2Y: 280,
-  channel3Y: 560,
   routing: {},
 };
 

@@ -124,7 +124,6 @@ export function computeWaypoints(
   src: NodeLayout,
   tgt: NodeLayout,
   layout: ProcessLayoutResult,
-  opts: { track1Y: number },
   flow?: any,
 ): Array<{ x: number; y: number }> {
   // Case 1: SubProcess child internal flow — direct horizontal stub
