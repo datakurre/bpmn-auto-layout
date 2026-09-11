@@ -1,4 +1,6 @@
 .bpmn-feedback/
+result
+result-*
 __pycache__/
 *.py[cod]
 node_modules/
