@@ -57,6 +57,77 @@ def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
+def referential_integrity_problems(root: ET.Element) -> list[str]:
+    """Structural, engine-agnostic sanity check on the BPMN *semantics*
+    (never the DI): no duplicate ids, no dangling sourceRef/targetRef/
+    attachedToRef/processRef/flowNodeRef, and every <incoming>/<outgoing>
+    declaration agrees with the flow it names. Cheap (pure XML parsing, no
+    layout engine) so it can run on every fixture, including the generated
+    corpus (#57's own success criterion: "no dangling refs, no duplicate
+    ids, no <incoming>/<outgoing> mismatches")."""
+    problems: list[str] = []
+    ids: dict[str, ET.Element] = {}
+    for element in root.iter():
+        if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+            continue
+        element_id = element.get("id")
+        if not element_id:
+            continue
+        if element_id in ids:
+            problems.append(f"duplicate id: {element_id}")
+        else:
+            ids[element_id] = element
+
+    def resolves(ref: str | None) -> bool:
+        return bool(ref) and ref in ids
+
+    for flow in list(root.iter(q("bpmn", "sequenceFlow"))) + list(root.iter(q("bpmn", "messageFlow"))) + list(
+        root.iter(q("bpmn", "association"))
+    ):
+        flow_id = flow.get("id", "<unnamed>")
+        source_id = flow.get("sourceRef")
+        target_id = flow.get("targetRef")
+        if not resolves(source_id):
+            problems.append(f"{flow_id}: sourceRef does not resolve ({source_id})")
+        if not resolves(target_id):
+            problems.append(f"{flow_id}: targetRef does not resolve ({target_id})")
+
+    for element in root.iter():
+        if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+            continue
+        element_id = element.get("id", "<unnamed>")
+        for incoming in element.findall(q("bpmn", "incoming")):
+            flow_id = (incoming.text or "").strip()
+            flow = ids.get(flow_id)
+            # `flow is None`, never `not flow`: an ET.Element with no
+            # subelements (every sequenceFlow here) is falsy under Python's
+            # bool() even when the lookup found it (ElementTree's __bool__
+            # is `len(children) > 0`, not "is this a real element") -- `not
+            # flow` would misreport every resolved flow as dangling.
+            if flow is None:
+                problems.append(f"{element_id}: <incoming> names unresolved flow {flow_id!r}")
+            elif flow.get("targetRef") != element.get("id"):
+                problems.append(f"{element_id}: <incoming> {flow_id} does not target this element")
+        for outgoing in element.findall(q("bpmn", "outgoing")):
+            flow_id = (outgoing.text or "").strip()
+            flow = ids.get(flow_id)
+            if flow is None:
+                problems.append(f"{element_id}: <outgoing> names unresolved flow {flow_id!r}")
+            elif flow.get("sourceRef") != element.get("id"):
+                problems.append(f"{element_id}: <outgoing> {flow_id} does not source from this element")
+        attached_to = element.get("attachedToRef")
+        if attached_to is not None and not resolves(attached_to):
+            problems.append(f"{element_id}: attachedToRef does not resolve ({attached_to})")
+        process_ref = element.get("processRef")
+        if process_ref is not None and not resolves(process_ref):
+            problems.append(f"{element_id}: processRef does not resolve ({process_ref})")
+        for flow_node_ref in element.findall(q("bpmn", "flowNodeRef")):
+            ref = (flow_node_ref.text or "").strip()
+            if not resolves(ref):
+                problems.append(f"{element_id}: flowNodeRef does not resolve ({ref!r})")
+    return problems
+
+
 def bounds_from(element: ET.Element) -> dict[str, float] | None:
     bounds = element.find(q("dc", "Bounds"))
     if bounds is None:
@@ -1607,6 +1678,25 @@ def selftest(layout_command: list[str] | None = None, structure_only: bool = Fal
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
+
+    # Referential integrity (#57): no dangling refs, no duplicate ids, no
+    # <incoming>/<outgoing> mismatch, across every fixture family --
+    # persisted, regression, and the generated corpus when it exists. Pure
+    # XML parsing, no layout engine, so it always runs regardless of
+    # --structure-only.
+    integrity_problems: list[str] = []
+    for family, fixtures in (
+        ("", first),
+        ("regression/", regression_fixtures()),
+        ("generated/", generated_fixtures()),
+    ):
+        for filename, xml in fixtures.items():
+            integrity_problems.extend(
+                f"{family}{filename}: {problem}" for problem in referential_integrity_problems(ET.fromstring(xml))
+            )
+    if integrity_problems:
+        raise SystemExit("referential integrity problems:\n" + "\n".join(f"  {p}" for p in integrity_problems))
+
     if engine_ran:
         print(
             f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types "
@@ -1629,6 +1719,18 @@ def regression_fixtures() -> dict[str, str]:
     if not fixtures:
         raise SystemExit(f"no regression fixtures found under {fixture_dir}")
     return {fixture.name: fixture.read_text(encoding="utf8") for fixture in fixtures}
+
+
+def generated_fixtures() -> dict[str, str]:
+    """The parametric benchmark corpus under fixtures/generated/ (#57) --
+    unlike regression_fixtures, an empty or absent directory is not an
+    error: the corpus is optional until tools/corpus-generator has been run
+    at least once, and selftest must still pass on a checkout that predates
+    it."""
+    fixture_dir = Path("fixtures") / "generated"
+    if not fixture_dir.is_dir():
+        return {}
+    return {fixture.name: fixture.read_text(encoding="utf8") for fixture in sorted(fixture_dir.glob("*.bpmn"))}
 
 
 def shape_bounds_by_element(root: ET.Element) -> dict[str, dict[str, float]]:
@@ -2032,6 +2134,34 @@ def metric_selftests() -> None:
         "format_metric_cell (an engine error always wins over a value)",
         format_metric_cell(("layout", "shape_overlaps"), has_labels, "boom"),
         "error",
+    )
+
+    # referential_integrity_problems (#57): pins both directions -- a real
+    # dangling ref/incoming mismatch is caught, and a resolved sequenceFlow
+    # (a leaf element with no children) is never misreported as dangling.
+    # ET.Element's __bool__ is `len(children) > 0`, not "was this found" --
+    # `if not element:` on a found-but-childless element is a live trap this
+    # test exists to catch (found live in this codebase during #57: a real
+    # regression fixture's every flow was misreported as unresolved).
+    clean_root = ET.fromstring(
+        '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D">'
+        '<bpmn:process id="P"><bpmn:startEvent id="S"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>'
+        '<bpmn:task id="T"><bpmn:incoming>F1</bpmn:incoming></bpmn:task>'
+        '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T" /></bpmn:process></bpmn:definitions>'
+    )
+    expect("referential_integrity_problems (a fully resolved diagram)", referential_integrity_problems(clean_root), [])
+    broken_root = ET.fromstring(
+        '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D">'
+        '<bpmn:process id="P"><bpmn:startEvent id="S"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>'
+        '<bpmn:task id="T"><bpmn:incoming>F_WRONG</bpmn:incoming></bpmn:task>'
+        '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="MISSING" /></bpmn:process></bpmn:definitions>'
+    )
+    broken_problems = referential_integrity_problems(broken_root)
+    expect("referential_integrity_problems (dangling targetRef is caught)", any("targetRef" in p for p in broken_problems), True)
+    expect(
+        "referential_integrity_problems (unresolved <incoming> is caught)",
+        any("F_WRONG" in p for p in broken_problems),
+        True,
     )
 
     if failures:

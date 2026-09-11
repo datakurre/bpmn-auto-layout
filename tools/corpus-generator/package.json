@@ -1,0 +1,9 @@
+{
+  "name": "bpmn-auto-layout-corpus-generator",
+  "private": true,
+  "description": "Parametric generator for a graduated benchmark corpus (#57). Generates valid BPMN semantics (no DI) deterministically from a seed, across topology-class/size/label-load axes. Never hand-edit files under fixtures/generated/ -- regenerate them with generate.mjs instead.",
+  "type": "module",
+  "dependencies": {
+    "bpmn-moddle": "10.2.0"
+  }
+}

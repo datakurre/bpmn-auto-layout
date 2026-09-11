@@ -88,6 +88,30 @@ or is missing degrades to an empty column with the error recorded; `check`
 still gates only `ours`, so a baseline's numbers are information, never a
 build failure.
 
+## Generated benchmark corpus
+
+Three fixture directories, three owners: `fixtures/*.bpmn` are the curated,
+hand-reviewed corpus; `fixtures/regression/*.bpmn` are minimal, hand-written,
+one pinned invariant each; `fixtures/generated/*.bpmn` are produced entirely
+by `tools/corpus-generator/generate.mjs` and are never hand-edited.
+
+```sh
+nix develop --command npm ci --prefix tools/corpus-generator
+nix develop --command node tools/corpus-generator/generate.mjs --seed 1
+```
+
+Generates the full topology-class x size x label-load matrix (9 topologies --
+linear, branch/merge, nested branches, a loop back-edge, boundary events, an
+expanded subprocess, nested subprocesses, disconnected components, and
+pool+lanes -- at small/medium/large node counts, each with no/short/long
+labels) deterministically from the seed: same seed, byte-identical BPMN.
+Every generated file records its topology, size, and seed in a
+`<bpmn:documentation>` element and in its filename, and is checked for
+referential integrity (no dangling refs, no duplicate ids, no
+`<incoming>`/`<outgoing>` mismatch) before it is ever written. `selftest`
+re-checks the same invariant on every run. Pass `--topology`, `--size`, or
+`--label-load` to regenerate a single combination; see `--help` for details.
+
 Run a stdlib-only validation with:
 
 ```sh

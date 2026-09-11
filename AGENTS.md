@@ -109,3 +109,12 @@ before changing code. Improve the first-version tool when a recurring review
 question cannot be represented, a metric is misleading, or a report makes
 comparison difficult; keep the feedback schema versioned and preserve
 backward-readable JSON where practical.
+
+### 4. Regenerate the parametric benchmark corpus
+
+`fixtures/generated/*.bpmn` is produced entirely by
+`tools/corpus-generator/generate.mjs` -- never hand-edit a file there;
+regenerate it instead (see README.md's "Generated benchmark corpus" section
+for the full topology/size/label-load matrix and invocation). `selftest`
+re-validates the generated corpus's referential integrity on every run
+alongside the curated and regression fixtures.
