@@ -450,6 +450,7 @@ export function repairSegmentCollisions(
     return !n.isSubProcessChild;
   });
   obstacles.push(...pathObstacles(blockedPaths, flow?.id));
+  obstacles.push(...(layout.containerObstacles ?? []));
 
   const hits = (pts: Array<{ x: number; y: number }>): number => {
     let n = 0;

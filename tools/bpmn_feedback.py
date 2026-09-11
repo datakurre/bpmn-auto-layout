@@ -1303,6 +1303,16 @@ def collect_metrics(path: Path) -> dict[str, object]:
         if shape["type"] not in CONTAINER_TYPES
     }
     subprocess_shapes = [shape for shape in shapes if shape["type"] == "subProcess"]
+    lane_participant_shapes = [shape for shape in shapes if shape["type"] in ("lane", "participant")]
+
+    def container_owns_endpoint(kind: str, container_id: str, endpoint: str | None) -> bool:
+        if not endpoint:
+            return False
+        if kind == "lane":
+            return element_lane.get(endpoint) == container_id
+        if kind == "participant":
+            return element_participant.get(endpoint) == container_id
+        return False
     for edge in edges:
         source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
         source = shapes_by_plane_target.get((edge["plane"], source_id))
@@ -1379,6 +1389,24 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 if container_id in endpoints:
                     continue
                 if any(element_parents.get(endpoint) == container_id for endpoint in endpoints if endpoint):
+                    continue
+                if segment_intersects_box(a, b, container["bounds"]):  # type: ignore[arg-type]
+                    edge_container_intersections += 1
+                    edge_container_intersection_details.append(
+                        {"edge": str(edge["bpmnElement"]), "container": container_id}
+                    )
+            # Pools and lanes: a route may legitimately pass through the
+            # participant/lane band it or its endpoints live in (that is the
+            # interior, not a boundary crossing) but not through one that
+            # neither endpoint belongs to (see #11).
+            for container in lane_participant_shapes:
+                if container["plane"] != edge["plane"]:
+                    continue
+                kind = str(container["type"])
+                container_id = str(container["bpmnElement"])
+                if container_id in endpoints:
+                    continue
+                if any(container_owns_endpoint(kind, container_id, endpoint) for endpoint in endpoints):
                     continue
                 if segment_intersects_box(a, b, container["bounds"]):  # type: ignore[arg-type]
                     edge_container_intersections += 1

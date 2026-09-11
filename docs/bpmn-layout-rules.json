@@ -119,8 +119,8 @@
     {
       "id": "routing.repair-and-fanout",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:430-550", "packages/bpmn-auto-layout/src/di-creation.ts:327-462", "packages/bpmn-auto-layout/src/di-creation.ts:464-491"],
-      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes and protected central portions of every existing path as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
+      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:432-558", "packages/bpmn-auto-layout/src/di-creation.ts:347-666", "packages/bpmn-auto-layout/src/lane-layout.ts:159-222"],
+      "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes, protected central portions of every existing path, and pool/lane container boundary obstacles as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Container boundary obstacles are thin strips -- pool top/bottom/right borders, the pool name-label gutter (solid), and lane dividers -- computed from lane/participant band geometry once known and passed into repairSegmentCollisions as `layout.containerObstacles`; the lane/pool interior itself is not an obstacle. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
     },
     {
       "id": "feedback.geometry-diagnostics",
@@ -178,7 +178,7 @@
     {
       "id": "metric.routing.quality",
       "producer": "tools/bpmn_feedback.py report",
-      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, external-route intersections with expanded subprocess containers, invalid source/target boundary attachments, total bends, Manhattan length, and non-orthogonal segments."
+      "definition": "Counts edge crossings, edge intersections with non-endpoint non-container shapes, route intersections with expanded subprocess, lane, and participant containers that neither endpoint belongs to, invalid source/target boundary attachments, total bends, Manhattan length, and non-orthogonal segments."
     },
     {
       "id": "metric.routing.lattice",

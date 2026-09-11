@@ -10,7 +10,13 @@ import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import { resolveRoutingPolicy } from "./layout-policy";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
 import { planChannels } from "./channel-planning";
-import { computeLaneBands, laneBandsBottom, laneLabelBounds } from "./lane-layout";
+import {
+  computeLaneBands,
+  laneBandsBottom,
+  laneLabelBounds,
+  laneDividerObstacles,
+  participantBoundaryObstacles,
+} from "./lane-layout";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, validateConnectionPoints } from "./collision-repair";
 import {
@@ -244,8 +250,12 @@ export function createCollaborationDi(
     // ── 3. Node (flow element) shapes for this participant ────────────────
     //    Use the full createProcessDi shape logic but emit into planeElements
     //    with translated coordinates.
+    const containerObstacles = [
+      ...participantBoundaryObstacles(participantBounds, LANE_GUTTER),
+      ...laneDividerObstacles(laneBands),
+    ];
     const processPlaneElements = buildProcessShapesAndEdges(
-      moddle, process, layout, opts, dx, dy,
+      moddle, process, layout, opts, dx, dy, containerObstacles,
     );
     for (const el of processPlaneElements) planeElements.push(el);
 
@@ -345,6 +355,7 @@ function buildProcessShapesAndEdges(
   opts: ResolvedLayoutOptions,
   dx = 0,
   dy = 0,
+  containerObstacles: NodeLayout[] = [],
 ): any[] {
   const elements: any[] = [];
   const routingPolicy = resolveRoutingPolicy(opts.routing);
@@ -366,9 +377,13 @@ function buildProcessShapesAndEdges(
     });
   }
   // Build a layout view that uses shifted nodes but keeps everything else.
+  // containerObstacles (pool borders, the pool caption gutter, lane
+  // dividers) are already in plane-absolute coordinates, matching the
+  // dx/dy-shifted node coordinates used for routing (see #11).
   const shiftedLayout: ProcessLayoutResult = {
     ...layout,
     nodes: shiftedNodes,
+    containerObstacles,
   };
 
   // 1. Pre-compute edge waypoints (two passes: record → resolve channel lanes)
@@ -667,6 +682,7 @@ export function createProcessDi(
   opts: ResolvedLayoutOptions,
 ): void {
   const planeElements: any[] = [];
+  let containerObstacles: NodeLayout[] = [];
 
   // Lane DI: partition every lane (including nested childLaneSet lanes and
   // lanes with no member nodes) into contiguous, non-overlapping bands
@@ -681,6 +697,7 @@ export function createProcessDi(
       const xSpan = { x: minX - 30, width: maxX - minX + 60 };
       const ySpan = { y: minY - 30, height: maxY - minY + 60 };
       const bands = computeLaneBands(process.laneSets, layout.nodes, xSpan, ySpan);
+      containerObstacles = laneDividerObstacles(bands);
       for (const band of bands) {
         const bounds = { x: band.x, y: band.y, width: band.width, height: band.height };
         const shapeAttrs: any = {
@@ -700,7 +717,7 @@ export function createProcessDi(
 
   // Generate node shapes and edge DI using the shared helper (no offset for
   // standalone processes — dx=0, dy=0).
-  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts)) {
+  for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts, 0, 0, containerObstacles)) {
     planeElements.push(el);
   }
 
