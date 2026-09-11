@@ -26,5 +26,12 @@ test("layoutProcessWithDiagnostics surfaces a structured warning instead of a si
   for (const warning of warnings) {
     assert.ok(warning.code, "every warning must carry a code");
     assert.ok(warning.message, "every warning must carry a human-readable message");
+    // Every warning code is evidence against one of the seven §8 priority
+    // levels (#42) -- the priority ladder has a real call site producing
+    // these, not just a structure that tests assert shape on.
+    assert.ok(
+      Number.isInteger(warning.priorityLevel) && warning.priorityLevel >= 1 && warning.priorityLevel <= 7,
+      `warning ${warning.code} has an invalid priorityLevel: ${warning.priorityLevel}`,
+    );
   }
 });

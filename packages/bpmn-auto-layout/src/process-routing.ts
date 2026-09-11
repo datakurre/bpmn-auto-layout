@@ -18,7 +18,7 @@
 
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
-import { resolveRoutingPolicy } from "./layout-policy";
+import { resolveRoutingPolicy, isOrthogonal } from "./layout-policy";
 import { planContainerScopedChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
@@ -306,6 +306,42 @@ export function routeProcessFlows(
           flow.id,
           `sequence flow ${flow.id}'s final route still overlaps a node, container, or another route after every repair attempt`,
         );
+      }
+      // Priority 3 (orthogonal-routing): every earlier pass already builds
+      // orthogonal polylines, but nothing re-checks the geometry that
+      // actually ships -- a later pass rewriting a route (the label
+      // re-repair pass, a fallback) could reintroduce a diagonal segment
+      // without anything noticing (#42).
+      if (!isOrthogonal(points)) {
+        warn(warnings, "ROUTE_NOT_ORTHOGONAL", flow.id, `sequence flow ${flow.id}'s final route has a non-orthogonal segment`);
+      }
+    }
+    // Priority 2 (no-overlaps): no two node shapes may overlap. A
+    // subprocess's own children sit inside its bounds by design, so a pair
+    // is only a violation when neither is an ancestor container of the
+    // other.
+    const isAncestor = (ancestorId: string, node: NodeLayout): boolean => {
+      let current: NodeLayout | undefined = node;
+      while (current?.containerId) {
+        if (current.containerId === ancestorId) return true;
+        current = layout.nodes.get(current.containerId);
+      }
+      return false;
+    };
+    const boxOverlapArea = (a: NodeLayout, b: NodeLayout): number => {
+      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      return w > 0 && h > 0 ? w * h : 0;
+    };
+    const nodes = [...layout.nodes.values()];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i]!;
+        const b = nodes[j]!;
+        if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
+        if (boxOverlapArea(a, b) > 0) {
+          warn(warnings, "SHAPE_OVERLAPS_SHAPE", a.id, `shape ${a.id} overlaps shape ${b.id}`);
+        }
       }
     }
   }
