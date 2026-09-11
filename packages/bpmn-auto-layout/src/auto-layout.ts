@@ -18,6 +18,8 @@
  *   channel-planning    — 2-pass channel lane assignment
  *   edge-routing        — 7-case orthogonal waypoint computation
  *   collision-repair    — visibility-graph re-route and segment nudging
+ *   process-routing     — full per-process routing pipeline as a pure
+ *                         function of (layout, opts), independent of DI
  *   label-placement     — candidate-enumeration label placement
  *   di-creation         — bpmndi BPMNShape / BPMNEdge serialization
  */

@@ -119,14 +119,21 @@
     {
       "id": "routing.repair-and-fanout",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:432-558", "packages/bpmn-auto-layout/src/di-creation.ts:347-666", "packages/bpmn-auto-layout/src/lane-layout.ts:159-222"],
+      "source_lines": ["packages/bpmn-auto-layout/src/collision-repair.ts:72-100", "packages/bpmn-auto-layout/src/collision-repair.ts:136-185", "packages/bpmn-auto-layout/src/collision-repair.ts:432-558", "packages/bpmn-auto-layout/src/process-routing.ts:61-247", "packages/bpmn-auto-layout/src/lane-layout.ts:159-222"],
       "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes, protected central portions of every existing path, and pool/lane container boundary obstacles as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Container boundary obstacles are thin strips -- pool top/bottom/right borders, the pool name-label gutter (solid), and lane dividers -- computed from lane/participant band geometry once known and passed into repairSegmentCollisions as `layout.containerObstacles`; the lane/pool interior itself is not an obstacle. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
     },
     {
       "id": "routing.deterministic-order",
       "label": "implementation-derived",
-      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:112-135", "packages/bpmn-auto-layout/src/di-creation.ts:455-490"],
+      "source_lines": ["packages/bpmn-auto-layout/src/process-routing.ts:31-53", "packages/bpmn-auto-layout/src/process-routing.ts:61-121"],
       "rule": "Both the channel-span-recording pass and the post-repair edge-vs-edge avoidance pass iterate flows in orderFlowsForRouting's order -- ascending structural span (column + track distance between endpoints), then source id, then target id -- instead of source-document order, so inserting an unrelated sequence flow earlier in the XML cannot renumber or re-route flows that were already fine. The post-repair pass also skips re-running repair on a route that already has zero obstacle hits (countRouteHits) and passes validateConnectionPoints, so a route is never perturbed by an obstacle set that changed after it was already correct."
+    },
+    {
+      "id": "architecture.routing-extracted-from-di",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/process-routing.ts:1-266", "packages/bpmn-auto-layout/src/di-creation.ts:415-424"],
+      "rule": "routeProcessFlows (process-routing.ts) is the complete sequence-flow routing pipeline -- channel planning, seven-case waypoint computation, collision repair, orthogonalization, and the deterministic ordering above -- as a pure function from a ProcessLayoutResult to a Map of finished waypoints, with no dependency on moddle or DI shape construction. di-creation.ts's buildProcessShapesAndEdges calls it once per process/participant and translates the result into bpmndi:BPMNEdge elements; it no longer computes routes itself.",
+      "note": "This is a deliberately scoped extraction, not the full architectural split proposed in #31: label placement (edge and node labels) and DI-shape construction still live in di-creation.ts, ProcessLayoutResult does not yet carry finished label bounds or per-flow waypoints as part of computeProcessLayout's own return value, and a collaboration's per-participant waypoints are still computed once per participant in already-shifted coordinates rather than computed once and translated. Routing was extracted first because it was the largest, most self-contained, and least XML-dependent piece, and because #10/#26/#30's fixes already made it a well-isolated function of (layout, opts) alone."
     },
     {
       "id": "routing.avoids-labels",
