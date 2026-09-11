@@ -1,0 +1,138 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_SubprocessInternalBranch" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:process id="Process_SubprocessInternalBranch" name="Subprocess with an internal branch" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Sub</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:subProcess id="SubProcess_Handle" name="Handle request">
+      <bpmn:incoming>Flow_Start_Sub</bpmn:incoming>
+      <bpmn:outgoing>Flow_Sub_End</bpmn:outgoing>
+      <bpmn:startEvent id="Sub_Start" name="Begin">
+        <bpmn:outgoing>Sub_Flow_Start_Gateway</bpmn:outgoing>
+      </bpmn:startEvent>
+      <bpmn:exclusiveGateway id="Sub_Gateway_Split" name="In stock?">
+        <bpmn:incoming>Sub_Flow_Start_Gateway</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Split_Fulfil</bpmn:outgoing>
+        <bpmn:outgoing>Sub_Flow_Split_Backorder</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:task id="Sub_Task_Fulfil" name="Fulfil from stock">
+        <bpmn:incoming>Sub_Flow_Split_Fulfil</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Fulfil_Join</bpmn:outgoing>
+      </bpmn:task>
+      <bpmn:task id="Sub_Task_Backorder" name="Place backorder">
+        <bpmn:incoming>Sub_Flow_Split_Backorder</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Backorder_Join</bpmn:outgoing>
+      </bpmn:task>
+      <bpmn:exclusiveGateway id="Sub_Gateway_Join" name="Ready">
+        <bpmn:incoming>Sub_Flow_Fulfil_Join</bpmn:incoming>
+        <bpmn:incoming>Sub_Flow_Backorder_Join</bpmn:incoming>
+        <bpmn:outgoing>Sub_Flow_Join_End</bpmn:outgoing>
+      </bpmn:exclusiveGateway>
+      <bpmn:endEvent id="Sub_End" name="Ready">
+        <bpmn:incoming>Sub_Flow_Join_End</bpmn:incoming>
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="Sub_Flow_Start_Gateway" sourceRef="Sub_Start" targetRef="Sub_Gateway_Split" />
+      <bpmn:sequenceFlow id="Sub_Flow_Split_Fulfil" name="in stock" sourceRef="Sub_Gateway_Split" targetRef="Sub_Task_Fulfil" />
+      <bpmn:sequenceFlow id="Sub_Flow_Split_Backorder" name="out of stock" sourceRef="Sub_Gateway_Split" targetRef="Sub_Task_Backorder" />
+      <bpmn:sequenceFlow id="Sub_Flow_Fulfil_Join" sourceRef="Sub_Task_Fulfil" targetRef="Sub_Gateway_Join" />
+      <bpmn:sequenceFlow id="Sub_Flow_Backorder_Join" sourceRef="Sub_Task_Backorder" targetRef="Sub_Gateway_Join" />
+      <bpmn:sequenceFlow id="Sub_Flow_Join_End" sourceRef="Sub_Gateway_Join" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End_1" name="Handled">
+      <bpmn:incoming>Flow_Sub_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Sub" sourceRef="Start_1" targetRef="SubProcess_Handle" />
+    <bpmn:sequenceFlow id="Flow_Sub_End" sourceRef="SubProcess_Handle" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_SubprocessInternalBranch">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_SubprocessInternalBranch" bpmnElement="Process_SubprocessInternalBranch">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="132" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="176" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="SubProcess_Handle_di" bpmnElement="SubProcess_Handle" isExpanded="true">
+        <dc:Bounds x="148" y="10" width="549" height="280" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="747" y="132" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="720" y="176" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="192" y="62" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="165" y="106" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Gateway_Split_di" bpmnElement="Sub_Gateway_Split" isMarkerVisible="true">
+        <dc:Bounds x="278" y="55" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="309" y="105" width="69" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Task_Fulfil_di" bpmnElement="Sub_Task_Fulfil">
+        <dc:Bounds x="378" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Task_Backorder_di" bpmnElement="Sub_Task_Backorder">
+        <dc:Bounds x="370" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Gateway_Join_di" bpmnElement="Sub_Gateway_Join" isMarkerVisible="true">
+        <dc:Bounds x="525" y="55" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="569" y="111" width="42" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="625" y="62" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="598" y="106" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Sub_di" bpmnElement="Flow_Start_Sub">
+        <di:waypoint x="98" y="150" />
+        <di:waypoint x="148" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Sub_End_di" bpmnElement="Flow_Sub_End">
+        <di:waypoint x="697" y="150" />
+        <di:waypoint x="747" y="150" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Start_Gateway_di" bpmnElement="Sub_Flow_Start_Gateway">
+        <di:waypoint x="228" y="80" />
+        <di:waypoint x="278" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Split_Fulfil_di" bpmnElement="Sub_Flow_Split_Fulfil">
+        <di:waypoint x="328" y="84" />
+        <di:waypoint x="378" y="84" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="302" y="88" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Split_Backorder_di" bpmnElement="Sub_Flow_Split_Backorder">
+        <di:waypoint x="328" y="61" />
+        <di:waypoint x="368" y="61" />
+        <di:waypoint x="368" y="220" />
+        <di:waypoint x="370" y="220" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="304" y="124" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Fulfil_Join_di" bpmnElement="Sub_Flow_Fulfil_Join">
+        <di:waypoint x="478" y="80" />
+        <di:waypoint x="525" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Backorder_Join_di" bpmnElement="Sub_Flow_Backorder_Join">
+        <di:waypoint x="420" y="180" />
+        <di:waypoint x="420" y="130" />
+        <di:waypoint x="550" y="130" />
+        <di:waypoint x="550" y="105" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_Join_End_di" bpmnElement="Sub_Flow_Join_End">
+        <di:waypoint x="575" y="80" />
+        <di:waypoint x="625" y="80" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

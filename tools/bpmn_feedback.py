@@ -12,7 +12,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass, field
+from collections.abc import Callable
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -28,835 +28,16 @@ NS = {
 for prefix, uri in NS.items():
     ET.register_namespace(prefix, uri)
 
-EVENT_DEFINITION_TAGS = {
-    "message": "messageEventDefinition",
-    "timer": "timerEventDefinition",
-    "error": "errorEventDefinition",
-    "signal": "signalEventDefinition",
-    "escalation": "escalationEventDefinition",
-    "conditional": "conditionalEventDefinition",
-    "compensate": "compensateEventDefinition",
-    "terminate": "terminateEventDefinition",
-    "cancel": "cancelEventDefinition",
-    "link": "linkEventDefinition",
-    "multiple": "multipleEventDefinition",
-    "parallelMultiple": "parallelMultipleEventDefinition",
-}
-
 CONTAINER_TYPES = {"lane", "participant", "subProcess"}
 ROUTE_UNIT = 50
+
+
 def q(prefix: str, local: str) -> str:
     return f"{{{NS[prefix]}}}{local}"
 
 
 def local_name(tag: str) -> str:
     return tag.rsplit("}", 1)[-1]
-
-
-def bpmn_tag(kind: str) -> str:
-    return kind[:1].lower() + kind[1:]
-
-
-@dataclass(frozen=True)
-class EventDefinition:
-    kind: str
-    attrs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class Node:
-    id: str
-    kind: str
-    name: str = ""
-    x: int = 0
-    y: int = 0
-    width: int | None = None
-    height: int | None = None
-    attrs: dict[str, str] = field(default_factory=dict)
-    event_definitions: tuple[EventDefinition, ...] = ()
-    children: tuple["Node", ...] = ()
-    child_flows: tuple["Flow", ...] = ()
-    extensions: tuple[tuple[str, dict[str, str]], ...] = ()
-    io_inputs: tuple[tuple[str, str], ...] = ()
-    io_outputs: tuple[tuple[str, str], ...] = ()
-    io_input_associations: tuple[tuple[str, str], ...] = ()
-    io_output_associations: tuple[tuple[str, str], ...] = ()
-
-
-@dataclass(frozen=True)
-class Flow:
-    id: str
-    source: str
-    target: str
-    name: str = ""
-    kind: str = "sequenceFlow"
-    attrs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class Artifact:
-    id: str
-    kind: str
-    name: str = ""
-    x: int = 0
-    y: int = 0
-    width: int = 100
-    height: int = 60
-    attrs: dict[str, str] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class Lane:
-    id: str
-    name: str
-    refs: tuple[str, ...]
-    x: int
-    y: int
-    width: int
-    height: int
-
-
-@dataclass(frozen=True)
-class Participant:
-    id: str
-    name: str
-    process_ref: str
-    x: int
-    y: int
-    width: int
-    height: int
-
-
-@dataclass(frozen=True)
-class ProcessSpec:
-    id: str
-    name: str
-    nodes: tuple[Node, ...]
-    flows: tuple[Flow, ...]
-    lanes: tuple[Lane, ...] = ()
-    is_executable: bool = False
-    attrs: dict[str, str] = field(default_factory=dict)
-    extensions: tuple[tuple[str, dict[str, str]], ...] = ()
-    artifacts: tuple[Artifact, ...] = ()
-
-
-@dataclass(frozen=True)
-class FixtureSpec:
-    filename: str
-    definitions_id: str
-    processes: tuple[ProcessSpec, ...]
-    messages: tuple[tuple[str, str], ...] = ()
-    signals: tuple[tuple[str, str], ...] = ()
-    escalations: tuple[tuple[str, str], ...] = ()
-    data_objects: tuple[str, ...] = ()
-    data_stores: tuple[tuple[str, str], ...] = ()
-    collaborations: tuple[str, str, tuple[Participant, ...], tuple[Flow, ...]] | None = None
-    vendor_extensions: bool = False
-
-
-def default_size(kind: str) -> tuple[int, int]:
-    if kind.endswith("Event"):
-        return (36, 36)
-    if kind.endswith("Gateway"):
-        return (50, 50)
-    if kind == "SubProcess":
-        return (360, 200)
-    if kind in {"DataObjectReference", "DataStoreReference"}:
-        return (50, 64)
-    return (100, 80)
-
-
-def add_text(parent: ET.Element, tag: str, text: str) -> None:
-    child = ET.SubElement(parent, q("bpmn", tag))
-    child.text = text
-
-
-def extension_elements(parent: ET.Element, extensions: tuple[tuple[str, dict[str, str]], ...]) -> None:
-    if not extensions:
-        return
-    container = ET.SubElement(parent, q("bpmn", "extensionElements"))
-    for tag, attrs in extensions:
-        ET.SubElement(container, q("vendor", tag), attrs)
-
-
-def io_specification(node_element: ET.Element, node: Node) -> None:
-    if not (node.io_inputs or node.io_outputs or node.io_input_associations or node.io_output_associations):
-        return
-    specification = ET.SubElement(node_element, q("bpmn", "ioSpecification"), {"id": f"{node.id}_ioSpecification"})
-    for element_id, name in node.io_inputs:
-        ET.SubElement(specification, q("bpmn", "dataInput"), {"id": element_id, "name": name})
-    for element_id, name in node.io_outputs:
-        ET.SubElement(specification, q("bpmn", "dataOutput"), {"id": element_id, "name": name})
-    input_set = ET.SubElement(specification, q("bpmn", "inputSet"), {"id": f"{node.id}_inputSet"})
-    for element_id, _name in node.io_inputs:
-        add_text(input_set, "dataInputRefs", element_id)
-    output_set = ET.SubElement(specification, q("bpmn", "outputSet"), {"id": f"{node.id}_outputSet"})
-    for element_id, _name in node.io_outputs:
-        add_text(output_set, "dataOutputRefs", element_id)
-    for source, target in node.io_input_associations:
-        association = ET.SubElement(node_element, q("bpmn", "dataInputAssociation"))
-        add_text(association, "sourceRef", source)
-        add_text(association, "targetRef", target)
-    for source, target in node.io_output_associations:
-        association = ET.SubElement(node_element, q("bpmn", "dataOutputAssociation"))
-        add_text(association, "sourceRef", source)
-        add_text(association, "targetRef", target)
-
-
-def node_size(node: Node) -> tuple[int, int]:
-    width, height = default_size(node.kind)
-    return (node.width or width, node.height or height)
-
-
-def all_nodes(process: ProcessSpec) -> dict[str, Node]:
-    nodes: dict[str, Node] = {}
-
-    def visit(node: Node) -> None:
-        nodes[node.id] = node
-        for child in node.children:
-            visit(child)
-
-    for node in process.nodes:
-        visit(node)
-    return nodes
-
-
-def add_bpmn_node(parent: ET.Element, node: Node, incoming: dict[str, list[str]], outgoing: dict[str, list[str]]) -> None:
-    attrs = {"id": node.id}
-    if node.name:
-        attrs["name"] = node.name
-    attrs.update(node.attrs)
-    element = ET.SubElement(parent, q("bpmn", bpmn_tag(node.kind)), attrs)
-    for flow_id in incoming.get(node.id, []):
-        add_text(element, "incoming", flow_id)
-    for flow_id in outgoing.get(node.id, []):
-        add_text(element, "outgoing", flow_id)
-    for event_definition in node.event_definitions:
-        tag = EVENT_DEFINITION_TAGS[event_definition.kind]
-        ev_attrs = {"id": f"{node.id}_{tag}"}
-        ev_attrs.update(event_definition.attrs)
-        ET.SubElement(element, q("bpmn", tag), ev_attrs)
-    io_specification(element, node)
-    extension_elements(element, node.extensions)
-    if node.kind == "SubProcess":
-        child_incoming, child_outgoing = flow_maps(node.child_flows)
-        for child in node.children:
-            add_bpmn_node(element, child, child_incoming, child_outgoing)
-        for flow in node.child_flows:
-            add_bpmn_flow(element, flow)
-
-
-def add_bpmn_flow(parent: ET.Element, flow: Flow) -> None:
-    attrs = {"id": flow.id, "sourceRef": flow.source, "targetRef": flow.target}
-    if flow.name:
-        attrs["name"] = flow.name
-    attrs.update(flow.attrs)
-    ET.SubElement(parent, q("bpmn", flow.kind), attrs)
-
-
-def flow_maps(flows: tuple[Flow, ...]) -> tuple[dict[str, list[str]], dict[str, list[str]]]:
-    incoming: dict[str, list[str]] = {}
-    outgoing: dict[str, list[str]] = {}
-    for flow in flows:
-        outgoing.setdefault(flow.source, []).append(flow.id)
-        incoming.setdefault(flow.target, []).append(flow.id)
-    return incoming, outgoing
-
-
-def label_bounds(x: int, y: int, width: int, height: int, kind: str) -> tuple[int, int, int, int]:
-    if kind == "Lane":
-        return (x + 12, y + 8, min(120, max(60, height - 20)), 20)
-    if kind.endswith("Event") or kind.endswith("Gateway"):
-        return (round(x + width / 2 - 45), y + height + 6, 90, 20)
-    return (x, y + height + 4, 90, 20)
-
-
-def add_label(parent: ET.Element, bounds: tuple[int, int, int, int]) -> None:
-    label = ET.SubElement(parent, q("bpmndi", "BPMNLabel"))
-    x, y, width, height = bounds
-    ET.SubElement(label, q("dc", "Bounds"), {"x": str(x), "y": str(y), "width": str(width), "height": str(height)})
-
-
-def add_shape(plane: ET.Element, bpmn_id: str, x: int, y: int, width: int, height: int, kind: str, name: str = "") -> None:
-    attrs = {"id": f"{bpmn_id}_di", "bpmnElement": bpmn_id}
-    if kind.endswith("Gateway"):
-        attrs["isMarkerVisible"] = "true"
-    if kind == "SubProcess":
-        attrs["isExpanded"] = "true"
-    shape = ET.SubElement(plane, q("bpmndi", "BPMNShape"), attrs)
-    ET.SubElement(shape, q("dc", "Bounds"), {"x": str(x), "y": str(y), "width": str(width), "height": str(height)})
-    if name and (kind.endswith("Event") or kind.endswith("Gateway") or kind == "Lane"):
-        add_label(shape, label_bounds(x, y, width, height, kind))
-
-
-def add_artifact(parent: ET.Element, artifact: Artifact) -> None:
-    attrs = {"id": artifact.id}
-    if artifact.name and artifact.kind != "TextAnnotation" and artifact.kind != "Group":
-        attrs["name"] = artifact.name
-    attrs.update(artifact.attrs)
-    element = ET.SubElement(parent, q("bpmn", bpmn_tag(artifact.kind)), attrs)
-    if artifact.kind == "TextAnnotation" and artifact.name:
-        add_text(element, "text", artifact.name)
-
-
-def waypoint_between(source: Node, target: Node) -> list[tuple[int, int]]:
-    sw, sh = node_size(source)
-    tw, th = node_size(target)
-    sx, sy = source.x + sw, source.y + sh // 2
-    tx, ty = target.x, target.y + th // 2
-    if target.x <= source.x:
-        lane_y = max(source.y + sh, target.y + th) + 55
-        return [(source.x + sw // 2, source.y + sh), (source.x + sw // 2, lane_y), (target.x + tw // 2, lane_y), (target.x + tw // 2, target.y + th)]
-    if sy == ty:
-        return [(sx, sy), (tx, ty)]
-    mid_x = round((sx + tx) / 2)
-    return [(sx, sy), (mid_x, sy), (mid_x, ty), (tx, ty)]
-
-
-def add_edge(plane: ET.Element, flow: Flow, nodes: dict[str, Node], label: bool = True) -> None:
-    edge = ET.SubElement(plane, q("bpmndi", "BPMNEdge"), {"id": f"{flow.id}_di", "bpmnElement": flow.id})
-    for x, y in waypoint_between(nodes[flow.source], nodes[flow.target]):
-        ET.SubElement(edge, q("di", "waypoint"), {"x": str(x), "y": str(y)})
-    if label and flow.name:
-        points = [(int(point.get("x", "0")), int(point.get("y", "0"))) for point in edge.findall(q("di", "waypoint"))]
-        a, b = points[min(1, len(points) - 1)], points[min(2, len(points) - 1)]
-        x = round((a[0] + b[0]) / 2 - 35)
-        y = round((a[1] + b[1]) / 2 - 18)
-        add_label(edge, (x, max(0, y), 70, 14))
-
-
-def fixture_specs() -> list[FixtureSpec]:
-    basic = ProcessSpec(
-        id="Process_BasicEventsTasks",
-        name="Basic events and tasks",
-        nodes=(
-            Node("Start_Order", "StartEvent", "Order received", 60, 110),
-            Node("Task_Validate", "UserTask", "Validate order", 150, 88),
-            Node("Task_Charge", "ServiceTask", "Charge payment", 310, 88),
-            Node("Throw_Receipt", "IntermediateThrowEvent", "Send receipt", 480, 110, event_definitions=(EventDefinition("message", {"messageRef": "Message_Receipt"}),)),
-            Node("End_Fulfilled", "EndEvent", "Fulfilled", 610, 110),
-        ),
-        flows=(
-            Flow("Flow_Order_To_Validate", "Start_Order", "Task_Validate"),
-            Flow("Flow_Validate_To_Charge", "Task_Validate", "Task_Charge", "valid"),
-            Flow("Flow_Charge_To_Receipt", "Task_Charge", "Throw_Receipt", "paid"),
-            Flow("Flow_Receipt_To_End", "Throw_Receipt", "End_Fulfilled"),
-        ),
-    )
-
-    branches = ProcessSpec(
-        id="Process_GatewaysBranchesLoops",
-        name="Gateways, branches, and loops",
-        nodes=(
-            Node("Start_Draft", "StartEvent", "Draft ready", 60, 160),
-            Node("Task_Draft", "Task", "Prepare draft", 150, 138),
-            Node("Gateway_ReviewNeeded", "ExclusiveGateway", "Need review?", 310, 153),
-            Node("Task_Review", "UserTask", "Review draft", 430, 138),
-            Node("Gateway_Accepted", "ExclusiveGateway", "Accepted?", 590, 153),
-            Node("Task_Revise", "Task", "Revise draft", 430, 300),
-            Node("End_Cancelled", "EndEvent", "Cancelled", 430, 40),
-            Node("Task_Publish", "ServiceTask", "Publish", 730, 138),
-            Node("Gateway_Split", "ParallelGateway", "Notify and archive", 890, 153),
-            Node("Task_Notify", "SendTask", "Notify requester", 1020, 48),
-            Node("Task_Archive", "ServiceTask", "Archive package", 1020, 250),
-            Node("Gateway_Join", "ParallelGateway", "Done?", 1190, 153),
-            Node("End_Published", "EndEvent", "Published", 1320, 160),
-        ),
-        flows=(
-            Flow("Flow_Start_Draft", "Start_Draft", "Task_Draft"),
-            Flow("Flow_Draft_Gateway", "Task_Draft", "Gateway_ReviewNeeded"),
-            Flow("Flow_NoReview_Publish", "Gateway_ReviewNeeded", "Task_Publish", "no"),
-            Flow("Flow_ReviewNeeded", "Gateway_ReviewNeeded", "Task_Review", "yes"),
-            Flow("Flow_Review_Accepted", "Task_Review", "Gateway_Accepted"),
-            Flow("Flow_Accepted_Publish", "Gateway_Accepted", "Task_Publish", "accepted"),
-            Flow("Flow_Changes_Revise", "Gateway_Accepted", "Task_Revise", "changes"),
-            Flow("Flow_Revise_Back_To_Review", "Task_Revise", "Task_Review", "retry"),
-            Flow("Flow_Cancelled", "Gateway_ReviewNeeded", "End_Cancelled", "reject"),
-            Flow("Flow_Publish_Split", "Task_Publish", "Gateway_Split"),
-            Flow("Flow_Split_Notify", "Gateway_Split", "Task_Notify"),
-            Flow("Flow_Split_Archive", "Gateway_Split", "Task_Archive"),
-            Flow("Flow_Notify_Join", "Task_Notify", "Gateway_Join"),
-            Flow("Flow_Archive_Join", "Task_Archive", "Gateway_Join"),
-            Flow("Flow_Join_End", "Gateway_Join", "End_Published"),
-        ),
-    )
-
-    subprocess = ProcessSpec(
-        id="Process_SubprocessBoundaryDataLanes",
-        name="Subprocess, boundary event, data, and lanes",
-        nodes=(
-            Node("Start_Request", "StartEvent", "Request", 80, 85),
-            Node("Task_Submit", "UserTask", "Submit request", 170, 63),
-            Node(
-                "SubProcess_Handle",
-                "SubProcess",
-                "Handle request",
-                330,
-                220,
-                children=(
-                    Node("Sub_Start", "StartEvent", "Begin", 365, 302),
-                    Node("Sub_Task_Check", "ServiceTask", "Check inventory", 435, 280),
-                    Node("Sub_End", "EndEvent", "Ready", 590, 302),
-                ),
-                child_flows=(
-                    Flow("Sub_Flow_Start_Check", "Sub_Start", "Sub_Task_Check"),
-                    Flow("Sub_Flow_Check_End", "Sub_Task_Check", "Sub_End"),
-                ),
-            ),
-            Node("Boundary_Timeout", "BoundaryEvent", "Timeout", 640, 320, attrs={"attachedToRef": "SubProcess_Handle"}, event_definitions=(EventDefinition("timer"),)),
-            Node("Task_Escalate", "SendTask", "Escalate", 750, 430),
-            Node("Data_Order", "DataObjectReference", "Order data", 170, 170, attrs={"dataObjectRef": "DataObject_Order"}),
-            Node("Store_Inventory", "DataStoreReference", "Inventory store", 520, 485, attrs={"dataStoreRef": "DataStore_Inventory"}),
-            Node("End_Handled", "EndEvent", "Handled", 760, 302),
-            Node("End_Escalated", "EndEvent", "Escalated", 910, 452),
-        ),
-        flows=(
-            Flow("Flow_Request_Submit", "Start_Request", "Task_Submit"),
-            Flow("Flow_Submit_Handle", "Task_Submit", "SubProcess_Handle"),
-            Flow("Flow_Handle_End", "SubProcess_Handle", "End_Handled"),
-            Flow("Flow_Timeout_Escalate", "Boundary_Timeout", "Task_Escalate", "timeout"),
-            Flow("Flow_Escalate_End", "Task_Escalate", "End_Escalated"),
-        ),
-        lanes=(
-            Lane("Lane_Requester", "Requester", ("Start_Request", "Task_Submit", "Data_Order"), 40, 40, 960, 180),
-            Lane("Lane_Automation", "Automation", ("SubProcess_Handle", "Boundary_Timeout", "Task_Escalate", "Store_Inventory", "End_Handled", "End_Escalated"), 40, 220, 960, 360),
-        ),
-    )
-
-    customer = ProcessSpec(
-        id="Process_Customer",
-        name="Customer",
-        nodes=(
-            Node("Start_Customer", "StartEvent", "Need goods", 110, 108),
-            Node("Task_SendOrder", "SendTask", "Send order", 210, 86),
-            Node("Catch_Confirmation", "IntermediateCatchEvent", "Receive confirmation", 380, 108, event_definitions=(EventDefinition("message", {"messageRef": "Message_Confirmation"}),)),
-            Node("End_Customer", "EndEvent", "Confirmed", 520, 108),
-        ),
-        flows=(
-            Flow("Flow_Customer_Start_Send", "Start_Customer", "Task_SendOrder"),
-            Flow("Flow_Customer_Send_Catch", "Task_SendOrder", "Catch_Confirmation"),
-            Flow("Flow_Customer_Catch_End", "Catch_Confirmation", "End_Customer"),
-        ),
-    )
-    supplier = ProcessSpec(
-        id="Process_Supplier",
-        name="Supplier",
-        nodes=(
-            Node("Start_OrderMessage", "StartEvent", "Order message", 110, 328, event_definitions=(EventDefinition("message", {"messageRef": "Message_Order"}),)),
-            Node("Task_ReserveStock", "ServiceTask", "Reserve stock", 210, 306),
-            Node("Task_SendConfirmation", "SendTask", "Send confirmation", 380, 306),
-            Node("End_Supplier", "EndEvent", "Sent", 550, 328),
-        ),
-        flows=(
-            Flow("Flow_Supplier_Start_Reserve", "Start_OrderMessage", "Task_ReserveStock"),
-            Flow("Flow_Supplier_Reserve_Send", "Task_ReserveStock", "Task_SendConfirmation"),
-            Flow("Flow_Supplier_Send_End", "Task_SendConfirmation", "End_Supplier"),
-        ),
-    )
-
-    coverage = ProcessSpec(
-        id="Process_ActivitiesGatewaysCoverage",
-        name="Activities and gateways coverage",
-        nodes=(
-            Node("C7_Start", "StartEvent", "Start", 60, 180),
-            Node("C7_User", "UserTask", "User task", 150, 158),
-            Node("C7_Service", "ServiceTask", "Service task", 300, 158),
-            Node("C7_Send", "SendTask", "Send task", 450, 158),
-            Node("C7_Receive", "ReceiveTask", "Receive task", 600, 158),
-            Node("C7_Manual", "ManualTask", "Manual task", 750, 158),
-            Node("C7_Script", "ScriptTask", "Script task", 900, 158),
-            Node("C7_BusinessRule", "BusinessRuleTask", "Business rule", 1050, 158),
-            Node("C7_Inclusive", "InclusiveGateway", "Any approval", 1200, 173),
-            Node("C7_Complex", "ComplexGateway", "Complex merge", 1350, 173),
-            Node("C7_EventBased", "EventBasedGateway", "Wait for event", 1500, 173),
-            Node("C7_Call", "CallActivity", "Call invoice process", 1650, 158, attrs={"calledElement": "InvoiceProcess"}),
-            Node("C7_End", "EndEvent", "Complete", 1800, 180),
-        ),
-        flows=tuple(
-            Flow(f"C7_Flow_{index}", source, target)
-            for index, (source, target) in enumerate(
-                (
-                    ("C7_Start", "C7_User"),
-                    ("C7_User", "C7_Service"),
-                    ("C7_Service", "C7_Send"),
-                    ("C7_Send", "C7_Receive"),
-                    ("C7_Receive", "C7_Manual"),
-                    ("C7_Manual", "C7_Script"),
-                    ("C7_Script", "C7_BusinessRule"),
-                    ("C7_BusinessRule", "C7_Inclusive"),
-                    ("C7_Inclusive", "C7_Complex"),
-                    ("C7_Complex", "C7_EventBased"),
-                    ("C7_EventBased", "C7_Call"),
-                    ("C7_Call", "C7_End"),
-                ),
-                start=1,
-            )
-        ),
-        is_executable=True,
-    )
-
-    events = ProcessSpec(
-        id="Process_EventDefinitions",
-        name="BPMN event definitions",
-        nodes=(
-            Node("Events_Start", "StartEvent", "Message start", 60, 180, event_definitions=(EventDefinition("message", {"messageRef": "Message_Event"}),)),
-            Node("Events_Timer", "IntermediateCatchEvent", "Timer wait", 180, 180, event_definitions=(EventDefinition("timer"),)),
-            Node("Events_Signal", "IntermediateCatchEvent", "Signal wait", 300, 180, event_definitions=(EventDefinition("signal", {"signalRef": "Signal_Event"}),)),
-            Node("Events_Error", "IntermediateCatchEvent", "Error wait", 420, 180, event_definitions=(EventDefinition("error"),)),
-            Node("Events_Conditional", "IntermediateCatchEvent", "Condition wait", 540, 180, event_definitions=(EventDefinition("conditional"),)),
-            Node("Events_Link", "IntermediateThrowEvent", "Continue", 660, 180, event_definitions=(EventDefinition("link", {"name": "continue"}),)),
-            Node("Events_Escalation", "IntermediateThrowEvent", "Escalate", 780, 180, event_definitions=(EventDefinition("escalation", {"escalationRef": "Escalation_Event"}),)),
-            Node("Events_Compensate", "IntermediateThrowEvent", "Compensate", 900, 180, event_definitions=(EventDefinition("compensate"),)),
-            Node("Events_Cancel", "IntermediateThrowEvent", "Cancel", 1020, 180, event_definitions=(EventDefinition("cancel"),)),
-            Node("Events_End", "EndEvent", "Terminated", 1140, 180, event_definitions=(EventDefinition("terminate"),)),
-        ),
-        flows=tuple(
-            Flow(f"Events_Flow_{index}", f"Events_{left}", f"Events_{right}")
-            for index, (left, right) in enumerate(
-                (
-                    ("Start", "Timer"),
-                    ("Timer", "Signal"),
-                    ("Signal", "Error"),
-                    ("Error", "Conditional"),
-                    ("Conditional", "Link"),
-                    ("Link", "Escalation"),
-                    ("Escalation", "Compensate"),
-                    ("Compensate", "Cancel"),
-                    ("Cancel", "End"),
-                ),
-                start=1,
-            )
-        ),
-    )
-
-    boundary = ProcessSpec(
-        id="Process_BoundaryAndSubprocesses",
-        name="Boundary events and embedded subprocess",
-        nodes=(
-            Node("Boundary_Start", "StartEvent", "Request", 60, 180),
-            Node("Boundary_Task", "ServiceTask", "Process request", 180, 158),
-            Node(
-                "Boundary_InterruptingTimer",
-                "BoundaryEvent",
-                "Timeout",
-                250,
-                220,
-                attrs={"attachedToRef": "Boundary_Task"},
-                event_definitions=(EventDefinition("timer"),),
-            ),
-            Node(
-                "Boundary_NonInterruptingMessage",
-                "BoundaryEvent",
-                "Message override",
-                290,
-                220,
-                attrs={"attachedToRef": "Boundary_Task", "cancelActivity": "false"},
-                event_definitions=(EventDefinition("message", {"messageRef": "Message_Override"}),),
-            ),
-            Node(
-                "Boundary_SubProcess",
-                "SubProcess",
-                "Fulfil request",
-                420,
-                120,
-                width=300,
-                height=180,
-                children=(
-                    Node("Boundary_SubStart", "StartEvent", "Inside", 450, 202),
-                    Node("Boundary_SubTask", "UserTask", "Handle", 525, 180),
-                    Node("Boundary_SubEnd", "EndEvent", "Handled", 650, 202),
-                ),
-                child_flows=(
-                    Flow("Boundary_SubFlow_Start", "Boundary_SubStart", "Boundary_SubTask"),
-                    Flow("Boundary_SubFlow_End", "Boundary_SubTask", "Boundary_SubEnd"),
-                ),
-            ),
-            Node("Boundary_End", "EndEvent", "Done", 780, 180),
-            Node("Boundary_TimeoutTask", "ScriptTask", "Recover timeout", 420, 380),
-            Node("Boundary_TimeoutEnd", "EndEvent", "Timed out", 580, 402),
-            Node("Boundary_MessageTask", "UserTask", "Review override", 420, 520),
-            Node("Boundary_MessageEnd", "EndEvent", "Override handled", 580, 542),
-        ),
-        flows=(
-            Flow("Boundary_Flow_Start", "Boundary_Start", "Boundary_Task"),
-            Flow("Boundary_Flow_Task", "Boundary_Task", "Boundary_SubProcess"),
-            Flow("Boundary_Flow_End", "Boundary_SubProcess", "Boundary_End"),
-            Flow("Boundary_Flow_Timeout", "Boundary_InterruptingTimer", "Boundary_TimeoutTask"),
-            Flow("Boundary_Flow_Timeout_End", "Boundary_TimeoutTask", "Boundary_TimeoutEnd"),
-            Flow("Boundary_Flow_Message", "Boundary_NonInterruptingMessage", "Boundary_MessageTask"),
-            Flow("Boundary_Flow_Message_End", "Boundary_MessageTask", "Boundary_MessageEnd"),
-        ),
-        is_executable=True,
-    )
-
-    artifacts = ProcessSpec(
-        id="Process_DataArtifacts",
-        name="Data and BPMN artifacts",
-        nodes=(
-            Node("Artifact_Start", "StartEvent", "Start", 60, 180),
-            Node(
-                "Artifact_Task",
-                "ServiceTask",
-                "Transform data",
-                220,
-                158,
-                io_inputs=(("Artifact_Task_Input", "Input"),),
-                io_outputs=(("Artifact_Task_Output", "Output"),),
-                io_input_associations=(("Artifact_DataInput", "Artifact_Task_Input"),),
-                io_output_associations=(("Artifact_Task_Output", "Artifact_DataOutput"),),
-            ),
-            Node("Artifact_End", "EndEvent", "Done", 500, 180),
-        ),
-        flows=(
-            Flow("Artifact_Flow_Start", "Artifact_Start", "Artifact_Task"),
-            Flow("Artifact_Flow_End", "Artifact_Task", "Artifact_End"),
-            Flow("Artifact_Association_In", "Artifact_DataInput", "Artifact_Task", kind="association"),
-            Flow("Artifact_Association_Out", "Artifact_Task", "Artifact_Annotation", kind="association"),
-        ),
-        artifacts=(
-            Artifact("Artifact_DataInput", "DataObjectReference", "Input document", 180, 300, 50, 64, {"dataObjectRef": "Artifact_InputObject"}),
-            Artifact("Artifact_DataOutput", "DataStoreReference", "Output store", 430, 300, 50, 64, {"dataStoreRef": "Artifact_OutputStore"}),
-            Artifact("Artifact_Annotation", "TextAnnotation", "Important transformation note", 600, 130, 180, 70),
-            Artifact("Artifact_Group", "Group", "Data handling", 140, 260, 600, 150),
-        ),
-    )
-
-    vendor_extensions = ProcessSpec(
-        id="Process_VendorExtensions",
-        name="Vendor extensions",
-        nodes=(
-            Node("Vendor_Start", "StartEvent", "Start", 60, 180),
-            Node(
-                "Vendor_User",
-                "UserTask",
-                "Approve request",
-                180,
-                158,
-                attrs={
-                    q("vendor", "assignee"): "demo",
-                    q("vendor", "candidateGroups"): "approvers",
-                    q("vendor", "formKey"): "embedded:app:approval.html",
-                    q("vendor", "asyncBefore"): "true",
-                },
-                extensions=(
-                    ("formData", {"businessKey": "requestId"}),
-                    ("taskListener", {"event": "create", q("vendor", "class"): "com.example.AuditListener"}),
-                ),
-            ),
-            Node(
-                "Vendor_Service",
-                "ServiceTask",
-                "Invoke worker",
-                360,
-                158,
-                attrs={
-                    q("vendor", "type"): "external",
-                    q("vendor", "topic"): "invoice",
-                    q("vendor", "asyncAfter"): "true",
-                    q("vendor", "failedJobRetryTimeCycle"): "R3/PT10M",
-                },
-                extensions=(
-                    ("executionListener", {q("vendor", "event"): "start", q("vendor", "expression"): "${audit()}"}),
-                    ("inputOutput", {q("vendor", "source"): "requestId", q("vendor", "target"): "workerRequest"}),
-                ),
-            ),
-            Node("Vendor_End", "EndEvent", "Complete", 540, 180),
-        ),
-        flows=(
-            Flow("Vendor_Flow_Start", "Vendor_Start", "Vendor_User"),
-            Flow("Vendor_Flow_Service", "Vendor_User", "Vendor_Service"),
-            Flow("Vendor_Flow_End", "Vendor_Service", "Vendor_End"),
-        ),
-        is_executable=True,
-        attrs={q("vendor", "historyTimeToLive"): "180"},
-        extensions=(("properties", {"source": "fixture"}),),
-    )
-
-    stress_routing = ProcessSpec(
-        id="Process_StressRouting",
-        name="Stress: dense routing and loops",
-        nodes=(
-            Node("Stress_Start", "StartEvent", "Very long request intake label", 60, 250),
-            Node("Stress_Prepare", "UserTask", "Prepare and validate a request with a long descriptive label", 150, 228),
-            Node("Stress_Decide", "ExclusiveGateway", "Validation passed?", 310, 243),
-            Node("Stress_Reject", "ServiceTask", "Reject and notify requester", 470, 70),
-            Node("Stress_Review", "UserTask", "Manual review with additional checks", 470, 228),
-            Node("Stress_Repair", "ScriptTask", "Repair invalid data and retry", 470, 430),
-            Node("Stress_Parallel", "ParallelGateway", "Run all follow-up work", 650, 243),
-            Node("Stress_Notify", "SendTask", "Send a long notification message", 810, 70),
-            Node("Stress_Audit", "ServiceTask", "Write audit record", 810, 228),
-            Node("Stress_Archive", "ManualTask", "Archive the completed request", 810, 430),
-            Node("Stress_Merge", "InclusiveGateway", "All applicable work complete?", 990, 243),
-            Node("Stress_End", "EndEvent", "Successfully completed with a long final label", 1150, 250),
-        ),
-        flows=(
-            Flow("Stress_Flow_Start", "Stress_Start", "Stress_Prepare"),
-            Flow("Stress_Flow_Decide", "Stress_Prepare", "Stress_Decide"),
-            Flow("Stress_Flow_Reject", "Stress_Decide", "Stress_Reject", "reject"),
-            Flow("Stress_Flow_Review", "Stress_Decide", "Stress_Review", "review"),
-            Flow("Stress_Flow_Repair", "Stress_Decide", "Stress_Repair", "repair"),
-            Flow("Stress_Flow_Review_Decide", "Stress_Review", "Stress_Decide", "needs another pass"),
-            Flow("Stress_Flow_Repair_Review", "Stress_Repair", "Stress_Review", "retry review"),
-            Flow("Stress_Flow_Reject_End", "Stress_Reject", "Stress_End"),
-            Flow("Stress_Flow_Review_Parallel", "Stress_Review", "Stress_Parallel"),
-            Flow("Stress_Flow_Parallel_Notify", "Stress_Parallel", "Stress_Notify"),
-            Flow("Stress_Flow_Parallel_Audit", "Stress_Parallel", "Stress_Audit"),
-            Flow("Stress_Flow_Parallel_Archive", "Stress_Parallel", "Stress_Archive"),
-            Flow("Stress_Flow_Notify_Merge", "Stress_Notify", "Stress_Merge"),
-            Flow("Stress_Flow_Audit_Merge", "Stress_Audit", "Stress_Merge"),
-            Flow("Stress_Flow_Archive_Merge", "Stress_Archive", "Stress_Merge"),
-            Flow("Stress_Flow_Merge_End", "Stress_Merge", "Stress_End"),
-        ),
-    )
-
-    return [
-        FixtureSpec("basic-events-tasks.bpmn", "Definitions_BasicEventsTasks", (basic,), messages=(("Message_Receipt", "Receipt"),)),
-        FixtureSpec("boundary-and-subprocesses.bpmn", "Definitions_BoundaryAndSubprocesses", (boundary,), messages=(("Message_Override", "Override"),)),
-        FixtureSpec(
-            "activities-gateways.bpmn",
-            "Definitions_ActivitiesGatewaysCoverage",
-            (coverage,),
-            vendor_extensions=True,
-        ),
-        FixtureSpec("extensions.bpmn", "Definitions_VendorExtensions", (vendor_extensions,), vendor_extensions=True),
-        FixtureSpec(
-            "collaboration-lanes-messages.bpmn",
-            "Definitions_CollaborationMessages",
-            (customer, supplier),
-            messages=(("Message_Order", "Order"), ("Message_Confirmation", "Confirmation")),
-            collaborations=(
-                "Collaboration_OrderFulfilment",
-                "Order fulfilment collaboration",
-                (
-                    Participant("Participant_Customer", "Customer", "Process_Customer", 70, 60, 570, 150),
-                    Participant("Participant_Supplier", "Supplier", "Process_Supplier", 70, 280, 620, 150),
-                ),
-                (
-                    Flow("MessageFlow_Order", "Task_SendOrder", "Start_OrderMessage", "order", "messageFlow"),
-                    Flow("MessageFlow_Confirmation", "Task_SendConfirmation", "Catch_Confirmation", "confirmation", "messageFlow"),
-                ),
-            ),
-        ),
-        FixtureSpec(
-            "data-artifacts.bpmn",
-            "Definitions_DataArtifacts",
-            (artifacts,),
-            data_stores=(("Artifact_OutputStore", "Output store"),),
-        ),
-        FixtureSpec(
-            "event-definitions.bpmn",
-            "Definitions_EventDefinitions",
-            (events,),
-            messages=(("Message_Event", "Event"),),
-            signals=(("Signal_Event", "Signal"),),
-            escalations=(("Escalation_Event", "Escalation"),),
-        ),
-        FixtureSpec("gateways-branches-loops.bpmn", "Definitions_GatewaysBranchesLoops", (branches,)),
-        FixtureSpec("stress-dense-routing.bpmn", "Definitions_StressRouting", (stress_routing,)),
-        FixtureSpec(
-            "subprocess-boundary-data-lanes.bpmn",
-            "Definitions_SubprocessBoundaryDataLanes",
-            (subprocess,),
-            data_stores=(("DataStore_Inventory", "Inventory"),),
-        ),
-    ]
-
-
-def append_process(root: ET.Element, process: ProcessSpec) -> None:
-    attrs = {"id": process.id, "isExecutable": "true" if process.is_executable else "false"}
-    if process.name:
-        attrs["name"] = process.name
-    attrs.update(process.attrs)
-    proc = ET.SubElement(root, q("bpmn", "process"), attrs)
-    extension_elements(proc, process.extensions)
-    if process.lanes:
-        lane_set = ET.SubElement(proc, q("bpmn", "laneSet"), {"id": f"LaneSet_{process.id}"})
-        for lane in process.lanes:
-            lane_el = ET.SubElement(lane_set, q("bpmn", "lane"), {"id": lane.id, "name": lane.name})
-            for ref in lane.refs:
-                add_text(lane_el, "flowNodeRef", ref)
-    incoming, outgoing = flow_maps(process.flows)
-    for node in process.nodes:
-        if node.kind == "DataObjectReference":
-            ET.SubElement(proc, q("bpmn", "dataObject"), {"id": node.attrs.get("dataObjectRef", f"{node.id}_Object")})
-        add_bpmn_node(proc, node, incoming, outgoing)
-    for artifact in process.artifacts:
-        if artifact.kind == "DataObjectReference":
-            ET.SubElement(proc, q("bpmn", "dataObject"), {"id": artifact.attrs.get("dataObjectRef", f"{artifact.id}_Object")})
-        add_artifact(proc, artifact)
-    for flow in process.flows:
-        add_bpmn_flow(proc, flow)
-
-
-def append_diagram(root: ET.Element, plane_id: str, bpmn_element: str, processes: tuple[ProcessSpec, ...], participants: tuple[Participant, ...] = (), message_flows: tuple[Flow, ...] = ()) -> None:
-    diagram = ET.SubElement(root, q("bpmndi", "BPMNDiagram"), {"id": f"BPMNDiagram_{plane_id}"})
-    plane = ET.SubElement(diagram, q("bpmndi", "BPMNPlane"), {"id": f"BPMNPlane_{plane_id}", "bpmnElement": bpmn_element})
-    all_by_id: dict[str, Node] = {}
-    for participant in participants:
-        add_shape(plane, participant.id, participant.x, participant.y, participant.width, participant.height, "Participant", participant.name)
-    for process in processes:
-        all_by_id.update(all_nodes(process))
-        all_by_id.update(
-            {
-                artifact.id: Node(artifact.id, artifact.kind, artifact.name, artifact.x, artifact.y, artifact.width, artifact.height)
-                for artifact in process.artifacts
-            }
-        )
-        for lane in process.lanes:
-            add_shape(plane, lane.id, lane.x, lane.y, lane.width, lane.height, "Lane", lane.name)
-        for node in all_nodes(process).values():
-            width, height = node_size(node)
-            add_shape(plane, node.id, node.x, node.y, width, height, node.kind, node.name)
-        for artifact in process.artifacts:
-            add_shape(plane, artifact.id, artifact.x, artifact.y, artifact.width, artifact.height, artifact.kind, artifact.name)
-        for flow in process.flows:
-            if flow.kind != "association":
-                add_edge(plane, flow, all_nodes(process))
-        for node in process.nodes:
-            for flow in node.child_flows:
-                add_edge(plane, flow, all_nodes(process))
-        for flow in process.flows:
-            if flow.kind == "association":
-                add_edge(plane, flow, all_by_id)
-    for flow in message_flows:
-        add_edge(plane, flow, all_by_id)
-
-
-def fixture_xml(spec: FixtureSpec) -> str:
-    root = ET.Element(
-        q("bpmn", "definitions"),
-        {
-            "id": spec.definitions_id,
-            "targetNamespace": "https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures",
-        },
-    )
-    for message_id, name in spec.messages:
-        ET.SubElement(root, q("bpmn", "message"), {"id": message_id, "name": name})
-    for signal_id, name in spec.signals:
-        ET.SubElement(root, q("bpmn", "signal"), {"id": signal_id, "name": name})
-    for escalation_id, name in spec.escalations:
-        ET.SubElement(root, q("bpmn", "escalation"), {"id": escalation_id, "name": name})
-    for data_object_id in spec.data_objects:
-        ET.SubElement(root, q("bpmn", "dataObject"), {"id": data_object_id})
-    for data_store_id, name in spec.data_stores:
-        ET.SubElement(root, q("bpmn", "dataStore"), {"id": data_store_id, "name": name})
-    if spec.collaborations:
-        collaboration_id, name, participants, message_flows = spec.collaborations
-        collab = ET.SubElement(root, q("bpmn", "collaboration"), {"id": collaboration_id, "name": name})
-        for participant in participants:
-            ET.SubElement(collab, q("bpmn", "participant"), {"id": participant.id, "name": participant.name, "processRef": participant.process_ref})
-        for flow in message_flows:
-            add_bpmn_flow(collab, flow)
-    for process in spec.processes:
-        append_process(root, process)
-    if spec.collaborations:
-        collaboration_id, _name, participants, message_flows = spec.collaborations
-        append_diagram(root, collaboration_id, collaboration_id, spec.processes, participants, message_flows)
-    else:
-        for process in spec.processes:
-            append_diagram(root, process.id, process.id, (process,))
-    ET.indent(root, space="  ")
-    return "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n" + ET.tostring(root, encoding="unicode") + "\n"
 
 
 def persisted_fixtures() -> dict[str, str]:
@@ -1938,6 +1119,144 @@ def selftest(layout_command: list[str] | None = None) -> None:
     print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types ({suffix})")
 
 
+def regression_fixtures() -> dict[str, str]:
+    fixture_dir = Path("fixtures") / "regression"
+    fixtures = sorted(fixture_dir.glob("*.bpmn"))
+    if not fixtures:
+        raise SystemExit(f"no regression fixtures found under {fixture_dir}")
+    return {fixture.name: fixture.read_text(encoding="utf8") for fixture in fixtures}
+
+
+def shape_bounds_by_element(root: ET.Element) -> dict[str, dict[str, float]]:
+    bounds: dict[str, dict[str, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            shape_bounds = bounds_from(shape)
+            if element_id and shape_bounds is not None:
+                bounds[element_id] = shape_bounds
+    return bounds
+
+
+def check_boundary_events_distinct(root: ET.Element) -> list[str]:
+    """Pins #7: two boundary events attached to the same host must never be
+    placed at byte-identical coordinates."""
+    bounds = shape_bounds_by_element(root)
+    coords: dict[tuple[float, float], list[str]] = {}
+    for element in root.iter(q("bpmn", "boundaryEvent")):
+        element_id = element.get("id", "")
+        element_bounds = bounds.get(element_id)
+        if element_bounds is None:
+            continue
+        key = (element_bounds["x"], element_bounds["y"])
+        coords.setdefault(key, []).append(element_id)
+    return [
+        f"boundary events share identical coordinates {key}: {', '.join(ids)}"
+        for key, ids in coords.items()
+        if len(ids) > 1
+    ]
+
+
+def check_lane_bands_tile(root: ET.Element) -> list[str]:
+    """Pins #2: a multi-lane process with no collaboration must still emit
+    lanes that stack or tile into a single band, not diagonal neighbours."""
+    bounds = shape_bounds_by_element(root)
+    lanes = [
+        (lane.get("id", ""), bounds[lane.get("id", "")])
+        for lane in root.iter(q("bpmn", "lane"))
+        if lane.get("id") in bounds
+    ]
+    if len(lanes) < 2:
+        return [f"expected at least 2 lanes with DI, found {len(lanes)}"]
+    problems: list[str] = []
+    for i, (id_a, a) in enumerate(lanes):
+        for id_b, b in lanes[i + 1 :]:
+            if box_overlap(a, b) > 0:
+                problems.append(f"lanes {id_a} and {id_b} overlap")
+                continue
+            same_column = abs(a["x"] - b["x"]) < 0.5 and abs(a["width"] - b["width"]) < 0.5
+            same_row = abs(a["y"] - b["y"]) < 0.5 and abs(a["height"] - b["height"]) < 0.5
+            if not (same_column or same_row):
+                problems.append(f"lanes {id_a} and {id_b} are diagonal neighbours instead of a single stack")
+            elif same_column:
+                gap = (b["y"] - (a["y"] + a["height"])) if b["y"] >= a["y"] else (a["y"] - (b["y"] + b["height"]))
+                if abs(gap) > 0.5:
+                    problems.append(f"lanes {id_a} and {id_b} are not contiguous: gap={gap}")
+    return problems
+
+
+def check_subprocess_internal_edges_stay_inside(root: ET.Element) -> list[str]:
+    """Pins #26/#27: a sequence flow routed entirely between two children of
+    the same expanded subprocess must stay inside that subprocess's bounds."""
+    parents = subprocess_parents(root)
+    shape_bounds = shape_bounds_by_element(root)
+    flow_endpoints = {
+        flow.get("id", ""): (flow.get("sourceRef"), flow.get("targetRef"))
+        for flow in root.iter(q("bpmn", "sequenceFlow"))
+    }
+    problems: list[str] = []
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            flow_id = edge.get("bpmnElement", "")
+            source_id, target_id = flow_endpoints.get(flow_id, (None, None))
+            if not source_id or not target_id:
+                continue
+            container_id = parents.get(source_id)
+            if container_id is None or container_id != parents.get(target_id):
+                continue
+            container_bounds = shape_bounds.get(container_id)
+            if container_bounds is None:
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            for point in points:
+                if not point_within(point, container_bounds):
+                    problems.append(f"{flow_id} leaves its container {container_id} at {point}")
+    return problems
+
+
+REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
+    "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
+    "lanes-without-collaboration.bpmn": check_lane_bands_tile,
+    "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
+}
+
+
+def regression(layout_command: list[str] | None = None) -> None:
+    """Lay out each fixture under fixtures/regression/ and assert the one
+    invariant it exists to pin -- not image comparison, so a fix elsewhere
+    never requires re-blessing a golden file. Add a fixture and an entry in
+    REGRESSION_CHECKS whenever an iteration finds a new minimal, single-
+    concern reproduction worth keeping (see AGENTS.md)."""
+    fixtures = regression_fixtures()
+    unchecked = sorted(set(fixtures) - set(REGRESSION_CHECKS))
+    if unchecked:
+        raise SystemExit(f"regression fixtures with no invariant check registered: {', '.join(unchecked)}")
+    scratch = Path(".bpmn-feedback") / "regression"
+    scratch.mkdir(parents=True, exist_ok=True)
+    engine_ran = False
+    failures: list[str] = []
+    for filename, xml in fixtures.items():
+        target = scratch / filename
+        target.write_text(xml, encoding="utf8")
+        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
+            engine_ran = True
+        root = parse_xml(target)
+        problems = REGRESSION_CHECKS[filename](root)
+        failures.extend(f"{filename}: {problem}" for problem in problems)
+    if layout_command and not engine_ran:
+        print(
+            f"regression warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
+            "checking persisted DI as-is instead of freshly generated layout output",
+        )
+    if failures:
+        raise SystemExit("regression checks failed:\n" + "\n".join(f"  {failure}" for failure in failures))
+    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
+    print(f"regression OK: {len(fixtures)} fixtures each satisfy their pinned invariant ({suffix})")
+
+
 def latest_report(output_dir: str) -> Path:
     root = Path(output_dir)
     reports = [path for path in root.glob("report-*/index.html") if path.is_file()]
@@ -2066,6 +1385,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="layout command, shell-style string; skipped with a warning if not found on PATH",
     )
 
+    regression_parser = subparsers.add_parser(
+        "regression",
+        help="lay out fixtures/regression/*.bpmn and assert each one's pinned invariant",
+    )
+    regression_parser.add_argument(
+        "--layout-command",
+        default="bpmn-auto-layout",
+        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+    )
+
     stability_parser = subparsers.add_parser(
         "stability",
         help="lay out BASE and VARIANT and report how much geometry shared between them moved",
@@ -2090,6 +1419,8 @@ def main(argv: list[str] | None = None) -> int:
         check_report(args)
     elif args.command == "selftest":
         selftest(split_command(args.layout_command))
+    elif args.command == "regression":
+        regression(split_command(args.layout_command))
     elif args.command == "stability":
         result = stability(Path(args.base), Path(args.variant), split_command(args.layout_command))
         print(json.dumps(result, indent=2, sort_keys=True))

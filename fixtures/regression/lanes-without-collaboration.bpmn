@@ -1,0 +1,81 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_LanesWithoutCollaboration" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:process id="Process_LanesWithoutCollaboration" name="Lanes without collaboration" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_1">
+      <bpmn:lane id="Lane_FrontDesk" name="Front desk">
+        <bpmn:flowNodeRef>Start_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Intake</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_BackOffice" name="Back office">
+        <bpmn:flowNodeRef>Task_Process</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_1</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_1" name="Request received">
+      <bpmn:outgoing>Flow_Start_Intake</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_Intake" name="Take request">
+      <bpmn:incoming>Flow_Start_Intake</bpmn:incoming>
+      <bpmn:outgoing>Flow_Intake_Process</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_Process" name="Process request">
+      <bpmn:incoming>Flow_Intake_Process</bpmn:incoming>
+      <bpmn:outgoing>Flow_Process_End</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_1" name="Done">
+      <bpmn:incoming>Flow_Process_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Intake" sourceRef="Start_1" targetRef="Task_Intake" />
+    <bpmn:sequenceFlow id="Flow_Intake_Process" sourceRef="Task_Intake" targetRef="Task_Process" />
+    <bpmn:sequenceFlow id="Flow_Process_End" sourceRef="Task_Process" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_LanesWithoutCollaboration">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_LanesWithoutCollaboration" bpmnElement="Process_LanesWithoutCollaboration">
+      <bpmndi:BPMNShape id="Lane_FrontDesk_di" bpmnElement="Lane_FrontDesk">
+        <dc:Bounds x="32" y="10" width="474" height="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="70" width="20" height="120" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_BackOffice_di" bpmnElement="Lane_BackOffice">
+        <dc:Bounds x="32" y="150" width="474" height="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="210" width="20" height="120" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="62" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="106" width="90" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Intake_di" bpmnElement="Task_Intake">
+        <dc:Bounds x="148" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Process_di" bpmnElement="Task_Process">
+        <dc:Bounds x="290" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="440" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="413" y="246" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Intake_di" bpmnElement="Flow_Start_Intake">
+        <di:waypoint x="98" y="80" />
+        <di:waypoint x="148" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Intake_Process_di" bpmnElement="Flow_Intake_Process">
+        <di:waypoint x="248" y="80" />
+        <di:waypoint x="510" y="80" />
+        <di:waypoint x="510" y="160" />
+        <di:waypoint x="340" y="160" />
+        <di:waypoint x="340" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Process_End_di" bpmnElement="Flow_Process_End">
+        <di:waypoint x="390" y="220" />
+        <di:waypoint x="440" y="220" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

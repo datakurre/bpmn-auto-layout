@@ -1,0 +1,172 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_ThreeBoundaryEventsOnOneHost" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:message id="Message_Override" name="Override" />
+  <bpmn:process id="Process_ThreeBoundaryEventsOnOneHost" name="Three boundary events on one host" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Host</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_Host" name="Process request">
+      <bpmn:incoming>Flow_Start_Host</bpmn:incoming>
+      <bpmn:outgoing>Flow_Host_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Normal" name="Done">
+      <bpmn:incoming>Flow_Host_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Boundary_Timer" name="Timeout" attachedToRef="Task_Host">
+      <bpmn:outgoing>Flow_Timer_Escalate</bpmn:outgoing>
+      <bpmn:timerEventDefinition id="Boundary_Timer_timerEventDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_Message" name="Override" cancelActivity="false" attachedToRef="Task_Host">
+      <bpmn:outgoing>Flow_Message_Review</bpmn:outgoing>
+      <bpmn:messageEventDefinition id="Boundary_Message_messageEventDefinition" messageRef="Message_Override" />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_Error" name="Failed" attachedToRef="Task_Host">
+      <bpmn:outgoing>Flow_Error_Recover</bpmn:outgoing>
+      <bpmn:errorEventDefinition id="Boundary_Error_errorEventDefinition" />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_Escalate" name="Escalate">
+      <bpmn:incoming>Flow_Timer_Escalate</bpmn:incoming>
+      <bpmn:outgoing>Flow_Escalate_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Escalated" name="Escalated">
+      <bpmn:incoming>Flow_Escalate_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="Task_Review" name="Review override">
+      <bpmn:incoming>Flow_Message_Review</bpmn:incoming>
+      <bpmn:outgoing>Flow_Review_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Reviewed" name="Reviewed">
+      <bpmn:incoming>Flow_Review_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="Task_Recover" name="Recover">
+      <bpmn:incoming>Flow_Error_Recover</bpmn:incoming>
+      <bpmn:outgoing>Flow_Recover_End</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_Recovered" name="Recovered">
+      <bpmn:incoming>Flow_Recover_End</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Host" sourceRef="Start_1" targetRef="Task_Host" />
+    <bpmn:sequenceFlow id="Flow_Host_End" sourceRef="Task_Host" targetRef="End_Normal" />
+    <bpmn:sequenceFlow id="Flow_Timer_Escalate" name="timeout" sourceRef="Boundary_Timer" targetRef="Task_Escalate" />
+    <bpmn:sequenceFlow id="Flow_Escalate_End" sourceRef="Task_Escalate" targetRef="End_Escalated" />
+    <bpmn:sequenceFlow id="Flow_Message_Review" name="override" sourceRef="Boundary_Message" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Review_End" sourceRef="Task_Review" targetRef="End_Reviewed" />
+    <bpmn:sequenceFlow id="Flow_Error_Recover" name="failed" sourceRef="Boundary_Error" targetRef="Task_Recover" />
+    <bpmn:sequenceFlow id="Flow_Recover_End" sourceRef="Task_Recover" targetRef="End_Recovered" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_ThreeBoundaryEventsOnOneHost">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_ThreeBoundaryEventsOnOneHost" bpmnElement="Process_ThreeBoundaryEventsOnOneHost">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="246" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Host_di" bpmnElement="Task_Host">
+        <dc:Bounds x="148" y="180" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Normal_di" bpmnElement="End_Normal">
+        <dc:Bounds x="298" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="271" y="246" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Timer_di" bpmnElement="Boundary_Timer">
+        <dc:Bounds x="197" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="170" y="206" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Message_di" bpmnElement="Boundary_Message">
+        <dc:Bounds x="180" y="242" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="123" y="284" width="70" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Error_di" bpmnElement="Boundary_Error">
+        <dc:Bounds x="163" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="136" y="206" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Escalate_di" bpmnElement="Task_Escalate">
+        <dc:Bounds x="780" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Escalated_di" bpmnElement="End_Escalated">
+        <dc:Bounds x="930" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="903" y="246" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review">
+        <dc:Bounds x="840" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Reviewed_di" bpmnElement="End_Reviewed">
+        <dc:Bounds x="990" y="502" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="963" y="546" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Recover_di" bpmnElement="Task_Recover">
+        <dc:Bounds x="990" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Recovered_di" bpmnElement="End_Recovered">
+        <dc:Bounds x="1140" y="802" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1113" y="846" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Host_di" bpmnElement="Flow_Start_Host">
+        <di:waypoint x="98" y="235" />
+        <di:waypoint x="148" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Host_End_di" bpmnElement="Flow_Host_End">
+        <di:waypoint x="248" y="235" />
+        <di:waypoint x="298" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Timer_Escalate_di" bpmnElement="Flow_Timer_Escalate">
+        <di:waypoint x="215" y="162" />
+        <di:waypoint x="215" y="40" />
+        <di:waypoint x="830" y="40" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="494.33333333333337" y="29" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Escalate_End_di" bpmnElement="Flow_Escalate_End">
+        <di:waypoint x="780" y="80" />
+        <di:waypoint x="740" y="80" />
+        <di:waypoint x="740" y="220" />
+        <di:waypoint x="930" y="220" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Message_Review_di" bpmnElement="Flow_Message_Review">
+        <di:waypoint x="198" y="278" />
+        <di:waypoint x="198" y="318" />
+        <di:waypoint x="890" y="318" />
+        <di:waypoint x="890" y="120" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="513" y="302" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Review_End_di" bpmnElement="Flow_Review_End">
+        <di:waypoint x="940" y="80" />
+        <di:waypoint x="975" y="80" />
+        <di:waypoint x="975" y="520" />
+        <di:waypoint x="990" y="520" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Error_Recover_di" bpmnElement="Flow_Error_Recover">
+        <di:waypoint x="181" y="162" />
+        <di:waypoint x="181" y="10" />
+        <di:waypoint x="1040" y="10" />
+        <di:waypoint x="1040" y="40" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="586.1666666666666" y="14" width="49" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Recover_End_di" bpmnElement="Flow_Recover_End">
+        <di:waypoint x="1090" y="80" />
+        <di:waypoint x="1158" y="80" />
+        <di:waypoint x="1158" y="802" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

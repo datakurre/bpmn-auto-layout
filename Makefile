@@ -1,4 +1,4 @@
-.PHONY: shell feedback-ui feedback-selftest feedback-report feedback-check
+.PHONY: shell feedback-ui feedback-selftest feedback-regression feedback-report feedback-check
 
 shell:
 	nix develop
@@ -12,6 +12,10 @@ feedback-ui:
 
 feedback-selftest:
 	bpmn-feedback selftest
+
+# Lay out fixtures/regression/*.bpmn and assert each one's pinned invariant.
+feedback-regression:
+	bpmn-feedback regression
 
 feedback-report:
 	bpmn-feedback report fixtures/*.bpmn
