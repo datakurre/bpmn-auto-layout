@@ -1,0 +1,133 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" xmlns:vendor="https://example.com/vendor/bpmn" id="Definitions_ActivityGatewayVendorCoverage" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures">
+  <bpmn:process id="Process_ActivityGatewayVendorCoverage" name="Activity, gateway, and vendor-extension coverage" isExecutable="true" vendor:historyTimeToLive="180">
+    <bpmn:extensionElements>
+      <vendor:properties source="fixture" />
+    </bpmn:extensionElements>
+    <bpmn:startEvent id="Coverage_Start" name="Start">
+      <bpmn:outgoing>Coverage_Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Coverage_User" name="Approve request" vendor:assignee="demo" vendor:candidateGroups="approvers" vendor:formKey="embedded:app:approval.html" vendor:asyncBefore="true">
+      <bpmn:extensionElements>
+        <vendor:formData businessKey="requestId" />
+        <vendor:taskListener event="create" class="com.example.AuditListener" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Coverage_Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:receiveTask id="Coverage_Receive" name="Await response">
+      <bpmn:incoming>Coverage_Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_3</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:businessRuleTask id="Coverage_BusinessRule" name="Decide discount">
+      <bpmn:incoming>Coverage_Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_4</bpmn:outgoing>
+    </bpmn:businessRuleTask>
+    <bpmn:serviceTask id="Coverage_Service" name="Invoke worker" vendor:type="external" vendor:topic="invoice" vendor:asyncAfter="true" vendor:failedJobRetryTimeCycle="R3/PT10M">
+      <bpmn:extensionElements>
+        <vendor:executionListener event="start" expression="${audit()}" />
+        <vendor:inputOutput source="requestId" target="workerRequest" />
+      </bpmn:extensionElements>
+      <bpmn:incoming>Coverage_Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_5</bpmn:outgoing>
+    </bpmn:serviceTask>
+    <bpmn:inclusiveGateway id="Coverage_Inclusive" name="Any approval">
+      <bpmn:incoming>Coverage_Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_6</bpmn:outgoing>
+    </bpmn:inclusiveGateway>
+    <bpmn:complexGateway id="Coverage_Complex" name="Complex merge">
+      <bpmn:incoming>Coverage_Flow_6</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_7</bpmn:outgoing>
+    </bpmn:complexGateway>
+    <bpmn:callActivity id="Coverage_Call" name="Call invoice process" calledElement="InvoiceProcess">
+      <bpmn:incoming>Coverage_Flow_7</bpmn:incoming>
+      <bpmn:outgoing>Coverage_Flow_8</bpmn:outgoing>
+    </bpmn:callActivity>
+    <bpmn:endEvent id="Coverage_End" name="Complete">
+      <bpmn:incoming>Coverage_Flow_8</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Coverage_Flow_1" sourceRef="Coverage_Start" targetRef="Coverage_User" />
+    <bpmn:sequenceFlow id="Coverage_Flow_2" sourceRef="Coverage_User" targetRef="Coverage_Receive" />
+    <bpmn:sequenceFlow id="Coverage_Flow_3" sourceRef="Coverage_Receive" targetRef="Coverage_BusinessRule" />
+    <bpmn:sequenceFlow id="Coverage_Flow_4" sourceRef="Coverage_BusinessRule" targetRef="Coverage_Service" />
+    <bpmn:sequenceFlow id="Coverage_Flow_5" sourceRef="Coverage_Service" targetRef="Coverage_Inclusive" />
+    <bpmn:sequenceFlow id="Coverage_Flow_6" sourceRef="Coverage_Inclusive" targetRef="Coverage_Complex" />
+    <bpmn:sequenceFlow id="Coverage_Flow_7" sourceRef="Coverage_Complex" targetRef="Coverage_Call" />
+    <bpmn:sequenceFlow id="Coverage_Flow_8" sourceRef="Coverage_Call" targetRef="Coverage_End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_ActivityGatewayVendorCoverage">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_ActivityGatewayVendorCoverage" bpmnElement="Process_ActivityGatewayVendorCoverage">
+      <bpmndi:BPMNShape id="Coverage_Start_di" bpmnElement="Coverage_Start">
+        <dc:Bounds x="62" y="52" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="35" y="96" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_User_di" bpmnElement="Coverage_User">
+        <dc:Bounds x="148" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_Receive_di" bpmnElement="Coverage_Receive">
+        <dc:Bounds x="298" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_BusinessRule_di" bpmnElement="Coverage_BusinessRule">
+        <dc:Bounds x="448" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_Service_di" bpmnElement="Coverage_Service">
+        <dc:Bounds x="598" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_Inclusive_di" bpmnElement="Coverage_Inclusive" isMarkerVisible="true">
+        <dc:Bounds x="748" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="753" y="101" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_Complex_di" bpmnElement="Coverage_Complex" isMarkerVisible="true">
+        <dc:Bounds x="848" y="45" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="853" y="101" width="40" height="27" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_Call_di" bpmnElement="Coverage_Call">
+        <dc:Bounds x="948" y="30" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Coverage_End_di" bpmnElement="Coverage_End">
+        <dc:Bounds x="1098" y="52" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1071" y="96" width="90" height="20" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Coverage_Flow_1_di" bpmnElement="Coverage_Flow_1">
+        <di:waypoint x="98" y="70" />
+        <di:waypoint x="148" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_2_di" bpmnElement="Coverage_Flow_2">
+        <di:waypoint x="248" y="70" />
+        <di:waypoint x="298" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_3_di" bpmnElement="Coverage_Flow_3">
+        <di:waypoint x="398" y="70" />
+        <di:waypoint x="448" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_4_di" bpmnElement="Coverage_Flow_4">
+        <di:waypoint x="548" y="70" />
+        <di:waypoint x="598" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_5_di" bpmnElement="Coverage_Flow_5">
+        <di:waypoint x="698" y="70" />
+        <di:waypoint x="748" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_6_di" bpmnElement="Coverage_Flow_6">
+        <di:waypoint x="798" y="70" />
+        <di:waypoint x="848" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_7_di" bpmnElement="Coverage_Flow_7">
+        <di:waypoint x="898" y="70" />
+        <di:waypoint x="948" y="70" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Coverage_Flow_8_di" bpmnElement="Coverage_Flow_8">
+        <di:waypoint x="1048" y="70" />
+        <di:waypoint x="1098" y="70" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

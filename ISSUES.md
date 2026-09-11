@@ -305,6 +305,27 @@ reports:
 Not fixed here — this fixture's purpose is to make the defect visible, not to
 change the routing algorithm in the same change as a corpus-coverage fix.
 
+## Fixture: `activity-gateway-vendor-coverage.bpmn`
+
+**Assessment: new fixture, ported from the fixture generator's dead
+`activities-gateways`/`extensions` specs (see #36); surfaces a real vendor
+extension attribute-stripping defect.**
+
+Added so `receiveTask`, `businessRuleTask`, `complexGateway`, `callActivity`,
+and vendor `extensionElements` had a persisted fixture at all -- previously
+these existed only in generator code that produced no file on disk. Task- and
+process-level vendor attributes (`vendor:assignee`, `vendor:type`,
+`vendor:historyTimeToLive`, etc.) round-trip through the layout command with
+their namespace prefix intact. But a *namespaced attribute on a custom child
+element inside `extensionElements`* does not: `vendor:class` on
+`<vendor:taskListener>`, and `vendor:event`/`vendor:expression` on
+`<vendor:executionListener>`, come back with the `vendor:` prefix silently
+dropped (`class`, `event`, `expression`), while the element's own tag prefix
+is preserved. This looks like a `bpmn-moddle` limitation for namespaces with
+no registered moddle extension package, not something specific to this
+project's routing code -- worth its own investigation before assuming it's
+fixable the same way as a layout defect. Not fixed here.
+
 ## Tooling issue: fixture self-test contract
 
 The self-test's required-element-type inventory and the persisted fixture set
