@@ -123,6 +123,12 @@
       "rule": "Crowded node-side attach points are fanned out deterministically by flow id. Routed polylines are repaired by enforcing outward departure, treating nearby nodes, protected central portions of every existing path, and pool/lane container boundary obstacles as obstacles, trying visibility routes and ordered 15 px nudges up to 300 px, and side-approaching blocked final legs. External routes treat expanded subprocesses as opaque obstacles, while internal subprocess flows route against sibling content. Container boundary obstacles are thin strips -- pool top/bottom/right borders, the pool name-label gutter (solid), and lane dividers -- computed from lane/participant band geometry once known and passed into repairSegmentCollisions as `layout.containerObstacles`; the lane/pool interior itself is not an obstacle. Before serialization, every sequence flow must attach to both node boundaries, depart and arrive orthogonally outward, and use a source and target side compatible with clearly dominant horizontal or vertical separation; invalid restoration or fallback routes are rejected. Only validated gateway channel routes may be reasserted after this pass; non-gateway routes are never overwritten after validation."
     },
     {
+      "id": "routing.deterministic-order",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:112-135", "packages/bpmn-auto-layout/src/di-creation.ts:455-490"],
+      "rule": "Both the channel-span-recording pass and the post-repair edge-vs-edge avoidance pass iterate flows in orderFlowsForRouting's order -- ascending structural span (column + track distance between endpoints), then source id, then target id -- instead of source-document order, so inserting an unrelated sequence flow earlier in the XML cannot renumber or re-route flows that were already fine. The post-repair pass also skips re-running repair on a route that already has zero obstacle hits (countRouteHits) and passes validateConnectionPoints, so a route is never perturbed by an obstacle set that changed after it was already correct."
+    },
+    {
       "id": "feedback.geometry-diagnostics",
       "label": "quality-gate",
       "source_lines": ["tools/bpmn_feedback.py:923-952", "tools/bpmn_feedback.py:1078-1184", "tools/bpmn_feedback.py:1545-1580"],

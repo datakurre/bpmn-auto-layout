@@ -18,7 +18,7 @@ import {
   participantBoundaryObstacles,
 } from "./lane-layout";
 import { computeWaypoints, channelY } from "./edge-routing";
-import { repairSegmentCollisions, validateConnectionPoints } from "./collision-repair";
+import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
 import {
   fanOutAttachPoints,
   ensureOrthogonalWaypoints,
@@ -107,6 +107,32 @@ function snapRouteWaypoints(
     return snapped;
   }
   return points;
+}
+
+/**
+ * Order flows for routing by structural span (column + track distance
+ * between endpoints), then by source/target id. Routing in document order
+ * makes edge-vs-edge avoidance depend on where a flow happens to sit in the
+ * source XML: inserting an unrelated flow earlier in the document can
+ * renumber later flows and re-route ones that were already fine. Span-then-id
+ * order depends only on the graph, so it is stable under unrelated edits
+ * (see #10). Short, local flows are routed first, so a long bypass or
+ * loop-back's own repair pass already sees them as settled obstacles.
+ */
+function orderFlowsForRouting(layout: ProcessLayoutResult): any[] {
+  const span = (flow: any): number => {
+    const src = layout.nodes.get(flow.sourceRef?.id);
+    const tgt = layout.nodes.get(flow.targetRef?.id);
+    if (!src || !tgt) return 0;
+    return Math.abs(tgt.col - src.col) + Math.abs(tgt.track - src.track);
+  };
+  return [...layout.allFlows].sort((a, b) => {
+    const spanDiff = span(a) - span(b);
+    if (spanDiff !== 0) return spanDiff;
+    const sourceDiff = (a.sourceRef?.id ?? "").localeCompare(b.sourceRef?.id ?? "");
+    if (sourceDiff !== 0) return sourceDiff;
+    return (a.targetRef?.id ?? "").localeCompare(b.targetRef?.id ?? "");
+  });
 }
 
 /**
@@ -388,14 +414,21 @@ function buildProcessShapesAndEdges(
 
   // 1. Pre-compute edge waypoints (two passes: record → resolve channel lanes)
   const edgeWaypoints = new Map<string, Array<{ x: number; y: number }>>();
+  const routingOrder = orderFlowsForRouting(shiftedLayout);
   const { recorder, resolve } = planContainerScopedChannels(shiftedLayout.nodes, shiftedLayout.allFlows);
   for (const pass of [recorder, null]) {
     shiftedLayout.channels = pass ?? resolve();
     edgeWaypoints.clear();
-    for (const flow of shiftedLayout.allFlows) {
+    for (const flow of routingOrder) {
       const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
       const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
       if (!src || !tgt) continue;
+      // Iterating in routingOrder (a graph-derived order -- span, then
+      // source/target id) rather than document order keeps channel-span
+      // recording, and every repair pass below, from depending on where a
+      // flow happens to sit in the source XML: inserting an unrelated flow
+      // earlier in the document no longer renumbers and re-routes flows
+      // that were already fine (#10).
       edgeWaypoints.set(
         flow.id,
         repairSegmentCollisions(
@@ -423,7 +456,7 @@ function buildProcessShapesAndEdges(
   }
 
   // Post-repair: re-route lower-track merge flows and re-apply collision repair
-  for (const flow of shiftedLayout.allFlows) {
+  for (const flow of routingOrder) {
     const existing = edgeWaypoints.get(flow.id);
     if (!existing) continue;
     const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
@@ -436,6 +469,16 @@ function buildProcessShapesAndEdges(
       !src.element?.$type?.endsWith("Gateway");
     if (isLowerMerge) {
       edgeWaypoints.set(flow.id, computeWaypoints(src, tgt, shiftedLayout, flow));
+      continue;
+    }
+    // A route that already has zero hits and validates does not need to be
+    // re-repaired against an obstacle set that may have shifted since it was
+    // chosen -- re-running repair here risked perturbing a route that was
+    // never wrong (#10).
+    if (
+      countRouteHits(existing, shiftedLayout, flow, edgeWaypoints) === 0 &&
+      validateConnectionPoints(existing, src, tgt)
+    ) {
       continue;
     }
     edgeWaypoints.set(

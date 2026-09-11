@@ -429,14 +429,18 @@ export function approachFromSide(
  * connect, try shifting that segment sideways (or up/down) into a clear gap,
  * keeping the polyline orthogonal by moving both of its endpoints.
  */
-export function repairSegmentCollisions(
-  waypoints: Array<{ x: number; y: number }>,
+/**
+ * The obstacle set a route between `flow`'s endpoints is judged against:
+ * sibling nodes in the same container, already-placed paths in
+ * `blockedPaths`, and container boundary strips. Shared by
+ * repairSegmentCollisions and countRouteHits so "how many hits does this
+ * route have" always means the same thing regardless of which one asks.
+ */
+function routeObstacles(
   layout: ProcessLayoutResult,
   flow: any,
-  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
-  routingPolicy: RoutingPolicy = DEFAULT_ROUTING_POLICY,
-): Array<{ x: number; y: number }> {
-  if (waypoints.length < 2) return waypoints;
+  blockedPaths: Map<string, Array<{ x: number; y: number }>>,
+): NodeLayout[] {
   const endpoints = new Set([flow?.sourceRef?.id, flow?.targetRef?.id]);
   const srcNodeForScope = layout.nodes.get(flow?.sourceRef?.id);
   const internalSubProcessFlow =
@@ -460,6 +464,37 @@ export function repairSegmentCollisions(
   });
   obstacles.push(...pathObstacles(blockedPaths, flow?.id));
   obstacles.push(...(layout.containerObstacles ?? []));
+  return obstacles;
+}
+
+/**
+ * Count how many obstacle hits `points` has against the same obstacle set
+ * repairSegmentCollisions would use. Lets a caller decide a route is
+ * already good without re-running the repair machinery on it (see #10) --
+ * useful for skipping a pass over a route a *different* obstacle set might
+ * otherwise perturb even though nothing is actually wrong with it.
+ */
+export function countRouteHits(
+  points: Array<{ x: number; y: number }>,
+  layout: ProcessLayoutResult,
+  flow: any,
+  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
+): number {
+  const obstacles = routeObstacles(layout, flow, blockedPaths);
+  let n = 0;
+  for (let i = 0; i < points.length - 1; i += 1) n += segmentHitCount(points[i]!, points[i + 1]!, obstacles);
+  return n;
+}
+
+export function repairSegmentCollisions(
+  waypoints: Array<{ x: number; y: number }>,
+  layout: ProcessLayoutResult,
+  flow: any,
+  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
+  routingPolicy: RoutingPolicy = DEFAULT_ROUTING_POLICY,
+): Array<{ x: number; y: number }> {
+  if (waypoints.length < 2) return waypoints;
+  const obstacles = routeObstacles(layout, flow, blockedPaths);
 
   const hits = (pts: Array<{ x: number; y: number }>): number => {
     let n = 0;
