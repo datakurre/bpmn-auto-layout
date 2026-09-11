@@ -15,6 +15,28 @@ test("layoutProcessWithDiagnostics reports no warnings for a clean fixture", asy
   assert.deepEqual(warnings, []);
 });
 
+test("layoutProcessWithDiagnostics does not warn SHAPE_OVERLAPS_SHAPE for a boundary event overlapping its own host (#49)", async () => {
+  // A boundary event straddling its host's border is required BPMN
+  // notation, not a layout defect (#20's exemption for the Python metric).
+  // The engine's own terminal shape-overlap check lacked the same
+  // exemption and reported a false positive here. This fixture's three
+  // boundary events straddle "Task_Host", each attached via attachedToRef;
+  // none of that should surface as a SHAPE_OVERLAPS_SHAPE warning naming
+  // Task_Host as the other shape (this pins only the #49 regression --
+  // unrelated pre-existing overlaps this fixture may have, if any, are out
+  // of scope here).
+  const xml = readFixture("regression/boundary-events-three-on-one-host.bpmn");
+  const { warnings } = await layoutProcessWithDiagnostics(xml);
+  const boundaryIds = ["Boundary_Timer", "Boundary_Message", "Boundary_Error"];
+  const hostOverlapWarning = warnings.find(
+    (w) => w.code === "SHAPE_OVERLAPS_SHAPE" && w.message.includes("Task_Host") && boundaryIds.some((id) => w.message.includes(id)),
+  );
+  assert.ok(
+    !hostOverlapWarning,
+    `expected no SHAPE_OVERLAPS_SHAPE warning between a boundary event and its host, got ${JSON.stringify(hostOverlapWarning)}`,
+  );
+});
+
 test("layoutProcessWithDiagnostics surfaces a structured warning instead of a silent or thrown degradation", async () => {
   // This fixture is known (via the bpmn-feedback quality gate) to have a
   // label that cannot avoid overlapping a shape/edge no matter which
