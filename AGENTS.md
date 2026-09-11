@@ -23,11 +23,16 @@ correct.
 
 ### 1. Develop the layout algorithm
 
-1. Reproduce the issue with the smallest BPMN input possible.
-2. Run the deterministic fixture self-test against the persisted fixture set:
+1. Reproduce the issue with the smallest BPMN input possible. If the
+   reproduction is a single, isolable concern (not a realistic diagram),
+   persist it under `fixtures/regression/` instead of a scratch file so the
+   next iteration does not have to rediscover it.
+2. Run the deterministic fixture self-test against the persisted fixture set,
+   and the regression fixtures against their pinned invariants:
 
    ```sh
    nix develop --command python3 tools/bpmn_feedback.py selftest
+   nix develop --command python3 tools/bpmn_feedback.py regression
    ```
 
 3. Change the TypeScript implementation in
@@ -43,6 +48,11 @@ correct.
 
 5. Compare the report images, `metrics.json`, and the serialized
    `transformed.bpmn`. Run targeted checks, then `nix flake check -L`.
+6. If the fix closes a `fixtures/regression/` gap, add the fixture (if not
+   already added in step 1) and a matching entry in `REGRESSION_CHECKS` in
+   `tools/bpmn_feedback.py` that asserts the one invariant it pins — not an
+   image comparison, so later fixes never require re-blessing a golden file.
+   Leave the corpus stronger than you found it.
 
 Prefer a rule that fixes the geometric cause across diagrams over a
 fixture-specific offset. Preserve valid BPMN container boundaries, orthogonal

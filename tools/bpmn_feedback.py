@@ -12,6 +12,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 from xml.etree import ElementTree as ET
@@ -1938,6 +1939,144 @@ def selftest(layout_command: list[str] | None = None) -> None:
     print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types ({suffix})")
 
 
+def regression_fixtures() -> dict[str, str]:
+    fixture_dir = Path("fixtures") / "regression"
+    fixtures = sorted(fixture_dir.glob("*.bpmn"))
+    if not fixtures:
+        raise SystemExit(f"no regression fixtures found under {fixture_dir}")
+    return {fixture.name: fixture.read_text(encoding="utf8") for fixture in fixtures}
+
+
+def shape_bounds_by_element(root: ET.Element) -> dict[str, dict[str, float]]:
+    bounds: dict[str, dict[str, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            shape_bounds = bounds_from(shape)
+            if element_id and shape_bounds is not None:
+                bounds[element_id] = shape_bounds
+    return bounds
+
+
+def check_boundary_events_distinct(root: ET.Element) -> list[str]:
+    """Pins #7: two boundary events attached to the same host must never be
+    placed at byte-identical coordinates."""
+    bounds = shape_bounds_by_element(root)
+    coords: dict[tuple[float, float], list[str]] = {}
+    for element in root.iter(q("bpmn", "boundaryEvent")):
+        element_id = element.get("id", "")
+        element_bounds = bounds.get(element_id)
+        if element_bounds is None:
+            continue
+        key = (element_bounds["x"], element_bounds["y"])
+        coords.setdefault(key, []).append(element_id)
+    return [
+        f"boundary events share identical coordinates {key}: {', '.join(ids)}"
+        for key, ids in coords.items()
+        if len(ids) > 1
+    ]
+
+
+def check_lane_bands_tile(root: ET.Element) -> list[str]:
+    """Pins #2: a multi-lane process with no collaboration must still emit
+    lanes that stack or tile into a single band, not diagonal neighbours."""
+    bounds = shape_bounds_by_element(root)
+    lanes = [
+        (lane.get("id", ""), bounds[lane.get("id", "")])
+        for lane in root.iter(q("bpmn", "lane"))
+        if lane.get("id") in bounds
+    ]
+    if len(lanes) < 2:
+        return [f"expected at least 2 lanes with DI, found {len(lanes)}"]
+    problems: list[str] = []
+    for i, (id_a, a) in enumerate(lanes):
+        for id_b, b in lanes[i + 1 :]:
+            if box_overlap(a, b) > 0:
+                problems.append(f"lanes {id_a} and {id_b} overlap")
+                continue
+            same_column = abs(a["x"] - b["x"]) < 0.5 and abs(a["width"] - b["width"]) < 0.5
+            same_row = abs(a["y"] - b["y"]) < 0.5 and abs(a["height"] - b["height"]) < 0.5
+            if not (same_column or same_row):
+                problems.append(f"lanes {id_a} and {id_b} are diagonal neighbours instead of a single stack")
+            elif same_column:
+                gap = (b["y"] - (a["y"] + a["height"])) if b["y"] >= a["y"] else (a["y"] - (b["y"] + b["height"]))
+                if abs(gap) > 0.5:
+                    problems.append(f"lanes {id_a} and {id_b} are not contiguous: gap={gap}")
+    return problems
+
+
+def check_subprocess_internal_edges_stay_inside(root: ET.Element) -> list[str]:
+    """Pins #26/#27: a sequence flow routed entirely between two children of
+    the same expanded subprocess must stay inside that subprocess's bounds."""
+    parents = subprocess_parents(root)
+    shape_bounds = shape_bounds_by_element(root)
+    flow_endpoints = {
+        flow.get("id", ""): (flow.get("sourceRef"), flow.get("targetRef"))
+        for flow in root.iter(q("bpmn", "sequenceFlow"))
+    }
+    problems: list[str] = []
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            flow_id = edge.get("bpmnElement", "")
+            source_id, target_id = flow_endpoints.get(flow_id, (None, None))
+            if not source_id or not target_id:
+                continue
+            container_id = parents.get(source_id)
+            if container_id is None or container_id != parents.get(target_id):
+                continue
+            container_bounds = shape_bounds.get(container_id)
+            if container_bounds is None:
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            for point in points:
+                if not point_within(point, container_bounds):
+                    problems.append(f"{flow_id} leaves its container {container_id} at {point}")
+    return problems
+
+
+REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
+    "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
+    "lanes-without-collaboration.bpmn": check_lane_bands_tile,
+    "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
+}
+
+
+def regression(layout_command: list[str] | None = None) -> None:
+    """Lay out each fixture under fixtures/regression/ and assert the one
+    invariant it exists to pin -- not image comparison, so a fix elsewhere
+    never requires re-blessing a golden file. Add a fixture and an entry in
+    REGRESSION_CHECKS whenever an iteration finds a new minimal, single-
+    concern reproduction worth keeping (see AGENTS.md)."""
+    fixtures = regression_fixtures()
+    unchecked = sorted(set(fixtures) - set(REGRESSION_CHECKS))
+    if unchecked:
+        raise SystemExit(f"regression fixtures with no invariant check registered: {', '.join(unchecked)}")
+    scratch = Path(".bpmn-feedback") / "regression"
+    scratch.mkdir(parents=True, exist_ok=True)
+    engine_ran = False
+    failures: list[str] = []
+    for filename, xml in fixtures.items():
+        target = scratch / filename
+        target.write_text(xml, encoding="utf8")
+        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
+            engine_ran = True
+        root = parse_xml(target)
+        problems = REGRESSION_CHECKS[filename](root)
+        failures.extend(f"{filename}: {problem}" for problem in problems)
+    if layout_command and not engine_ran:
+        print(
+            f"regression warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
+            "checking persisted DI as-is instead of freshly generated layout output",
+        )
+    if failures:
+        raise SystemExit("regression checks failed:\n" + "\n".join(f"  {failure}" for failure in failures))
+    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
+    print(f"regression OK: {len(fixtures)} fixtures each satisfy their pinned invariant ({suffix})")
+
+
 def latest_report(output_dir: str) -> Path:
     root = Path(output_dir)
     reports = [path for path in root.glob("report-*/index.html") if path.is_file()]
@@ -2066,6 +2205,16 @@ def build_parser() -> argparse.ArgumentParser:
         help="layout command, shell-style string; skipped with a warning if not found on PATH",
     )
 
+    regression_parser = subparsers.add_parser(
+        "regression",
+        help="lay out fixtures/regression/*.bpmn and assert each one's pinned invariant",
+    )
+    regression_parser.add_argument(
+        "--layout-command",
+        default="bpmn-auto-layout",
+        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+    )
+
     stability_parser = subparsers.add_parser(
         "stability",
         help="lay out BASE and VARIANT and report how much geometry shared between them moved",
@@ -2090,6 +2239,8 @@ def main(argv: list[str] | None = None) -> int:
         check_report(args)
     elif args.command == "selftest":
         selftest(split_command(args.layout_command))
+    elif args.command == "regression":
+        regression(split_command(args.layout_command))
     elif args.command == "stability":
         result = stability(Path(args.base), Path(args.variant), split_command(args.layout_command))
         print(json.dumps(result, indent=2, sort_keys=True))
