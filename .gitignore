@@ -3,3 +3,4 @@ __pycache__/
 *.py[cod]
 node_modules/
 packages/bpmn-auto-layout/dist/
+packages/bpmn-auto-layout/.test-build/

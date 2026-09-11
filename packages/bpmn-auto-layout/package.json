@@ -22,7 +22,9 @@
     "build:types": "tsc -p tsconfig.json",
     "format": "prettier --write \"src/**/*.ts\" \"*.{js,json}\"",
     "format:check": "prettier --check \"src/**/*.ts\" \"*.{js,json}\"",
-    "lint": "eslint \"src/**/*.ts\""
+    "lint": "eslint \"src/**/*.ts\"",
+    "pretest": "esbuild \"src/**/*.test.ts\" --bundle --format=esm --platform=node --external:bpmn-moddle --outdir=.test-build --outbase=src --loader:.json=json",
+    "test": "node --test \".test-build/**/*.test.js\""
   },
   "dependencies": {
     "bpmn-moddle": "^10.2.0"

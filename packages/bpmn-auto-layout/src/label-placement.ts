@@ -587,10 +587,6 @@ export function solveLabelPlacement(
     };
   }
 
-  if (isGateway && chosen.lines > 1) {
-    node.element.name = formatTextForLines(name, chosen.width);
-  }
-
   return { x: chosen.x, y: chosen.y, width: chosen.width, height: chosen.height };
 }
 

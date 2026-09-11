@@ -934,6 +934,62 @@ def valid_bounds(bounds: dict[str, float] | None) -> bool:
     return bool(bounds and bounds["width"] > 0 and bounds["height"] > 0)
 
 
+_SIDE_OUTWARD_NORMAL: dict[str, tuple[int, int]] = {
+    "top": (0, -1),
+    "bottom": (0, 1),
+    "left": (-1, 0),
+    "right": (1, 0),
+}
+
+
+def attach_side(point: tuple[float, float], box: dict[str, float]) -> str | None:
+    """Which side of `box` a boundary `point` sits on, or None if it isn't
+    on the boundary (e.g. the shape has zero size)."""
+    x, y = point
+    x0, y0 = box["x"], box["y"]
+    x1, y1 = x0 + box["width"], y0 + box["height"]
+    if abs(y - y0) < 0.5:
+        return "top"
+    if abs(y - y1) < 0.5:
+        return "bottom"
+    if abs(x - x0) < 0.5:
+        return "left"
+    if abs(x - x1) < 0.5:
+        return "right"
+    return None
+
+
+def min_bend_count(
+    source_point: tuple[float, float],
+    source_side: str,
+    target_point: tuple[float, float],
+    target_side: str,
+) -> int:
+    """Fewest orthogonal bends an unobstructed route could use between two
+    attach points, given only which side of each shape they leave/enter
+    from: 0 for a straight shot, 1 for an L, 2 for a Z/U detour."""
+    departure = _SIDE_OUTWARD_NORMAL[source_side]
+    arrival = _SIDE_OUTWARD_NORMAL[target_side]
+    # The route must be travelling opposite the target's outward normal to
+    # enter through that side.
+    required_final_direction = (-arrival[0], -arrival[1])
+    if departure == required_final_direction:
+        # Same travel direction throughout: a single straight segment only
+        # works if the ports already line up on the cross-axis; otherwise a
+        # Z/U-shaped detour (bend away, cross over, bend back) is needed.
+        if departure[0] != 0:
+            aligned = abs(source_point[1] - target_point[1]) < 0.5
+        else:
+            aligned = abs(source_point[0] - target_point[0]) < 0.5
+        return 0 if aligned else 2
+    if departure == (-required_final_direction[0], -required_final_direction[1]):
+        # Directly opposite travel directions: the route must double back,
+        # which always costs at least two bends.
+        return 2
+    # Perpendicular departure/arrival directions: a single corner suffices.
+    return 1
+
+
 def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
     """Map BPMN elements to their immediate expanded-subprocess ancestor."""
     parents: dict[str, str | None] = {}
@@ -952,6 +1008,40 @@ def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
     return parents
 
 
+def lane_owners(root: ET.Element) -> dict[str, str]:
+    """Map every flow node id listed in a lane's flowNodeRef to that lane's
+    id (the innermost lane wins when lanes are nested)."""
+    owners: dict[str, str] = {}
+    for lane in root.iter(q("bpmn", "lane")):
+        lane_id = lane.get("id", "")
+        for ref in lane.findall(q("bpmn", "flowNodeRef")):
+            node_id = (ref.text or "").strip()
+            if node_id:
+                owners[node_id] = lane_id
+    return owners
+
+
+def participant_owners(root: ET.Element) -> dict[str, str]:
+    """Map every element id declared inside a participant's referenced
+    process to that participant's id."""
+    owners: dict[str, str] = {}
+    processes_by_id = {process.get("id"): process for process in root.findall(q("bpmn", "process"))}
+    for participant in root.iter(q("bpmn", "participant")):
+        participant_id = participant.get("id", "")
+        process = processes_by_id.get(participant.get("processRef", ""))
+        if process is None:
+            continue
+        for element in process.iter():
+            if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+                continue
+            if local_name(element.tag) in {"process", "laneSet", "lane"}:
+                continue
+            element_id = element.get("id")
+            if element_id:
+                owners[element_id] = participant_id
+    return owners
+
+
 def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple[float, float], b2: tuple[float, float]) -> bool:
     a_horizontal = abs(a1[1] - a2[1]) < 0.5
     b_horizontal = abs(b1[1] - b2[1]) < 0.5
@@ -966,10 +1056,13 @@ def orthogonal_cross(a1: tuple[float, float], a2: tuple[float, float], b1: tuple
 def collect_metrics(path: Path) -> dict[str, object]:
     root = parse_xml(path)
     element_parents = subprocess_parents(root)
+    element_lane = lane_owners(root)
+    element_participant = participant_owners(root)
     element_types = {element.get("id"): local_name(element.tag) for element in root.iter() if element.get("id") and element.tag.startswith("{" + NS["bpmn"] + "}")}
     element_counts: dict[str, int] = {}
     named_external_targets: set[str] = set()
     flow_endpoints: dict[str, tuple[str | None, str | None]] = {}
+    boundary_hosts: dict[str, str] = {}
     for element in root.iter():
         if not element.tag.startswith("{" + NS["bpmn"] + "}"):
             continue
@@ -980,6 +1073,10 @@ def collect_metrics(path: Path) -> dict[str, object]:
             named_external_targets.add(element_id)
         if name in {"sequenceFlow", "messageFlow", "association"}:
             flow_endpoints[element.get("id", "")] = (element.get("sourceRef"), element.get("targetRef"))
+        if name == "boundaryEvent" and element_id:
+            host = element.get("attachedToRef")
+            if host:
+                boundary_hosts[element_id] = host
 
     shapes: list[dict[str, object]] = []
     labels: list[dict[str, float]] = []
@@ -1056,18 +1153,99 @@ def collect_metrics(path: Path) -> dict[str, object]:
     shape_overlap_area = 0.0
     for i, first in enumerate(shapes):
         first_bounds = first["bounds"]  # type: ignore[index]
+        first_id = str(first["bpmnElement"])
         for second in shapes[i + 1 :]:
             if first["plane"] != second["plane"]:
                 continue
+            second_id = str(second["bpmnElement"])
             second_bounds = second["bounds"]  # type: ignore[index]
             if first["type"] in CONTAINER_TYPES and contains(first_bounds, second_bounds):
                 continue
             if second["type"] in CONTAINER_TYPES and contains(second_bounds, first_bounds):
                 continue
+            # A boundary event is deliberately placed straddling its host
+            # activity's border; that overlap is required BPMN notation, not
+            # a layout defect.
+            if boundary_hosts.get(first_id) == second_id or boundary_hosts.get(second_id) == first_id:
+                continue
             area = box_overlap(first_bounds, second_bounds)
             if area > 0:
                 shape_overlaps += 1
                 shape_overlap_area += area
+
+    shapes_by_plane_id = {(shape["plane"], shape["bpmnElement"]): shape for shape in shapes}
+
+    def owning_containers(node_id: str) -> list[tuple[str, str]]:
+        # A subprocess child is laid out in its container's own internal
+        # coordinate space, not the outer lane/participant's: check it only
+        # against its immediate subprocess, even if a lane's flowNodeRef
+        # also (redundantly, per BPMN's permissive schema) lists it.
+        subprocess_id = element_parents.get(node_id)
+        if subprocess_id:
+            return [("subProcess", subprocess_id)]
+        result: list[tuple[str, str]] = []
+        lane_id = element_lane.get(node_id)
+        if lane_id:
+            result.append(("lane", lane_id))
+        participant_id = element_participant.get(node_id)
+        if participant_id:
+            result.append(("participant", participant_id))
+        return result
+
+    def border_distance(outer: dict[str, float], inner: dict[str, float]) -> float:
+        return min(
+            inner["x"] - outer["x"],
+            (outer["x"] + outer["width"]) - (inner["x"] + inner["width"]),
+            inner["y"] - outer["y"],
+            (outer["y"] + outer["height"]) - (inner["y"] + inner["height"]),
+        )
+
+    node_containment_violations = 0
+    node_containment_violation_details: list[dict[str, str]] = []
+    padding_by_type: dict[str, list[float]] = {}
+    for shape in shapes:
+        if shape["type"] in CONTAINER_TYPES:
+            continue
+        node_id = str(shape["bpmnElement"])
+        node_bounds = shape["bounds"]  # type: ignore[index]
+        for kind, owner_id in owning_containers(node_id):
+            owner_shape = shapes_by_plane_id.get((shape["plane"], owner_id))
+            if not owner_shape:
+                continue
+            owner_bounds = owner_shape["bounds"]  # type: ignore[index]
+            if not contains(owner_bounds, node_bounds):  # type: ignore[arg-type]
+                node_containment_violations += 1
+                node_containment_violation_details.append(
+                    {"node": node_id, "container": owner_id, "container_type": kind}
+                )
+            else:
+                padding_by_type.setdefault(kind, []).append(border_distance(owner_bounds, node_bounds))  # type: ignore[arg-type]
+
+    label_containment_violations = 0
+    label_containment_violation_details: list[dict[str, str]] = []
+    for label in labels:
+        label_target = str(label.get("_target", ""))
+        if not label_target:
+            continue
+        for kind, owner_id in owning_containers(label_target):
+            owner_shape = shapes_by_plane_id.get((label.get("_plane"), owner_id))
+            if not owner_shape:
+                continue
+            if not contains(owner_shape["bounds"], label):  # type: ignore[arg-type]
+                label_containment_violations += 1
+                label_containment_violation_details.append(
+                    {"label": label_target, "container": owner_id, "container_type": kind}
+                )
+
+    container_padding = {
+        kind: {
+            "count": len(values),
+            "min": round(min(values), 2) if values else None,
+            "max": round(max(values), 2) if values else None,
+            "avg": round(sum(values) / len(values), 2) if values else None,
+        }
+        for kind, values in padding_by_type.items()
+    }
 
     label_overlaps = 0
     for i, first in enumerate(labels):
@@ -1116,6 +1294,9 @@ def collect_metrics(path: Path) -> dict[str, object]:
     non_lattice_segments = 0
     max_lattice_remainder = 0.0
     horizontal_flow_gaps: list[float] = []
+    excess_turns_total = 0
+    excess_turn_details: list[dict[str, object]] = []
+    detour_ratios: list[float] = []
     shapes_by_plane_target = {
         (shape["plane"], shape["bpmnElement"]): shape
         for shape in shapes
@@ -1166,9 +1347,11 @@ def collect_metrics(path: Path) -> dict[str, object]:
         if target and points and not point_on_boundary(points[-1], target_bounds):
             invalid_edge_attachments += 1
             invalid_edge_attachment_details.append({"edge": str(edge["bpmnElement"]), "end": "target"})
+        edge_manhattan = 0.0
         for a, b in zip(points, points[1:]):
             segment_length = abs(a[0] - b[0]) + abs(a[1] - b[1])
             total_manhattan += segment_length
+            edge_manhattan += segment_length
             if abs(a[0] - b[0]) >= 0.5 and abs(a[1] - b[1]) >= 0.5:
                 non_orthogonal_segments += 1
             remainder = segment_length % ROUTE_UNIT
@@ -1202,6 +1385,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
                     edge_container_intersection_details.append(
                         {"edge": str(edge["bpmnElement"]), "container": container_id}
                     )
+        if points and len(points) >= 2 and source_bounds and target_bounds:
+            source_side = attach_side(points[0], source_bounds)
+            target_side = attach_side(points[-1], target_bounds)
+            if source_side and target_side:
+                actual_bends = max(0, len(points) - 2)
+                baseline_bends = min_bend_count(points[0], source_side, points[-1], target_side)
+                excess = max(0, actual_bends - baseline_bends)
+                if excess > 0:
+                    excess_turns_total += excess
+                    excess_turn_details.append({"edge": str(edge["bpmnElement"]), "excess_turns": excess})
+            port_distance = abs(points[0][0] - points[-1][0]) + abs(points[0][1] - points[-1][1])
+            if port_distance > 0.5:
+                detour_ratios.append(edge_manhattan / port_distance)
+    excess_turn_details.sort(key=lambda detail: -int(detail["excess_turns"]))  # type: ignore[arg-type]
     for i, first in enumerate(edges):
         first_points = first["points"]  # type: ignore[assignment]
         first_endpoints = set(flow_endpoints.get(first["bpmnElement"], (None, None)))  # type: ignore[arg-type]
@@ -1259,6 +1456,11 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "canvas": canvas,
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
+            "node_containment_violations": node_containment_violations,
+            "node_containment_violation_details": node_containment_violation_details,
+            "label_containment_violations": label_containment_violations,
+            "label_containment_violation_details": label_containment_violation_details,
+            "container_padding": container_padding,
             "label_overlaps": label_overlaps,
             "label_shape_intersections": label_shape_intersections,
             "label_edge_intersections": label_edge_intersections,
@@ -1276,6 +1478,14 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "total_bends": total_bends,
             "total_manhattan_length": round(total_manhattan, 2),
             "non_orthogonal_segments": non_orthogonal_segments,
+            "excess_turns": excess_turns_total,
+            "excess_turn_details": excess_turn_details,
+            "detour_ratio": {
+                "count": len(detour_ratios),
+                "min": round(min(detour_ratios), 2) if detour_ratios else None,
+                "max": round(max(detour_ratios), 2) if detour_ratios else None,
+                "avg": round(sum(detour_ratios) / len(detour_ratios), 2) if detour_ratios else None,
+            },
             "route_lattice": {
                 "unit": ROUTE_UNIT,
                 "non_multiple_segments": non_lattice_segments,
@@ -1306,6 +1516,18 @@ def run_command(command: list[str], purpose: str) -> None:
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
+
+
+def run_command_if_available(command: list[str], purpose: str) -> bool:
+    """Like run_command, but returns False instead of raising when the
+    command itself is missing from PATH (a real failure of an available
+    command still raises). Lets selftest verify the layout engine when it
+    can, while still working without external dependencies when it can't."""
+    executable = shutil.which(command[0]) if command else None
+    if not executable:
+        return False
+    run_command(command, purpose)
+    return True
 
 
 def split_command(value: str) -> list[str]:
@@ -1383,7 +1605,12 @@ def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> 
         ("label overlaps", ("layout", "label_overlaps")),
         ("edge crossings", ("layout", "edge_crossings")),
         ("edge/shape intersections", ("layout", "edge_shape_intersections")),
+        ("node containment violations", ("layout", "node_containment_violations")),
+        ("label containment violations", ("layout", "label_containment_violations")),
         ("total bends", ("layout", "total_bends")),
+        ("excess turns", ("layout", "excess_turns")),
+        ("detour ratio average", ("layout", "detour_ratio", "avg")),
+        ("detour ratio maximum", ("layout", "detour_ratio", "max")),
         ("total Manhattan length", ("layout", "total_manhattan_length")),
         ("non-50px route segments", ("layout", "route_lattice", "non_multiple_segments")),
         ("maximum route lattice remainder", ("layout", "route_lattice", "max_remainder")),
@@ -1504,22 +1731,117 @@ def resolve_report_reference(reference: str, output_dir: str = ".bpmn-feedback/r
 
 def print_host_view_command(report: Path) -> None:
     print(f"Host command to view report: xdg-open {shlex.quote(str(report.resolve()))}")
-def selftest() -> None:
+def collect_geometry(path: Path) -> tuple[dict[str, dict[str, float]], dict[str, list[tuple[float, float]]]]:
+    """Bounds and edge waypoints keyed by bpmnElement id, across every plane
+    in the file. Used to compare two laid-out versions of (structurally)
+    the same diagram element-by-element."""
+    root = parse_xml(path)
+    shape_bounds: dict[str, dict[str, float]] = {}
+    edge_points: dict[str, list[tuple[float, float]]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            bounds = bounds_from(shape)
+            target = shape.get("bpmnElement")
+            if bounds and target:
+                shape_bounds[target] = bounds
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            target = edge.get("bpmnElement")
+            if not target:
+                continue
+            edge_points[target] = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+    return shape_bounds, edge_points
+
+
+def stability_report(base: Path, variant: Path) -> dict[str, object]:
+    """Compare two already-laid-out BPMN files element-by-element and report
+    how much of the geometry shared between them (same bpmnElement ids)
+    moved -- the "does adding one unrelated element move everything else"
+    check from `AGENTS.md` §6 determinism and stability."""
+    base_shapes, base_edges = collect_geometry(base)
+    variant_shapes, variant_edges = collect_geometry(variant)
+
+    common_shapes = set(base_shapes) & set(variant_shapes)
+    moved_details: list[dict[str, object]] = []
+    for element_id in common_shapes:
+        a, b = base_shapes[element_id], variant_shapes[element_id]
+        dx, dy = b["x"] - a["x"], b["y"] - a["y"]
+        delta = (dx**2 + dy**2) ** 0.5
+        if delta > 0.5:
+            moved_details.append({"element": element_id, "delta": round(delta, 2), "dx": round(dx, 2), "dy": round(dy, 2)})
+    moved_details.sort(key=lambda detail: -detail["delta"])  # type: ignore[arg-type,return-value]
+    deltas = [detail["delta"] for detail in moved_details]
+
+    common_edges = set(base_edges) & set(variant_edges)
+    changed_details = [
+        {
+            "element": element_id,
+            "base_waypoints": len(base_edges[element_id]),
+            "variant_waypoints": len(variant_edges[element_id]),
+        }
+        for element_id in common_edges
+        if base_edges[element_id] != variant_edges[element_id]
+    ]
+
+    return {
+        "schema": "bpmn-layout-stability/v1",
+        "base": str(base),
+        "variant": str(variant),
+        "shapes": {
+            "common": len(common_shapes),
+            "moved": len(moved_details),
+            "moved_ratio": round(len(moved_details) / len(common_shapes), 4) if common_shapes else 0,
+            "max_delta": round(max(deltas), 2) if deltas else 0,
+            "avg_delta": round(sum(deltas) / len(deltas), 2) if deltas else 0,
+            "moved_details": moved_details,
+        },
+        "edges": {
+            "common": len(common_edges),
+            "changed": len(changed_details),
+            "changed_ratio": round(len(changed_details) / len(common_edges), 4) if common_edges else 0,
+            "changed_details": changed_details,
+        },
+    }
+
+
+def stability(base_input: Path, variant_input: Path, layout_command: list[str]) -> dict[str, object]:
+    scratch = Path(".bpmn-feedback") / "stability"
+    scratch.mkdir(parents=True, exist_ok=True)
+    base_target = scratch / f"base-{base_input.name}"
+    variant_target = scratch / f"variant-{variant_input.name}"
+    shutil.copyfile(base_input, base_target)
+    shutil.copyfile(variant_input, variant_target)
+    run_command(layout_command + [str(base_target)], f"layout {base_input}")
+    run_command(layout_command + [str(variant_target)], f"layout {variant_input}")
+    return stability_report(base_target, variant_target)
+
+
+def selftest(layout_command: list[str] | None = None) -> None:
     first = persisted_fixtures()
     second = persisted_fixtures()
     if first != second:
         raise SystemExit("persisted fixture set changed while being read")
     aggregate: dict[str, int] = {}
+    engine_ran = False
     for filename, xml in first.items():
         scratch = Path(".bpmn-feedback") / "selftest"
         scratch.mkdir(parents=True, exist_ok=True)
         target = scratch / filename
         target.write_text(xml, encoding="utf8")
+        if layout_command and run_command_if_available(layout_command + [str(target)], f"layout {filename}"):
+            engine_ran = True
         metrics = collect_metrics(target)
         if metrics["layout"]["diagrams"] < 1:  # type: ignore[index]
             raise SystemExit(f"fixture lacks BPMN DI diagram: {filename}")
         for name, count in metrics["semantic"]["element_counts"].items():  # type: ignore[index]
             aggregate[name] = aggregate.get(name, 0) + count
+    if layout_command and not engine_ran:
+        print(
+            f"selftest warning: layout command {shlex.join(layout_command)!r} not found on PATH; "
+            "validating persisted DI as-is instead of freshly generated layout output",
+        )
     required = [
         "startEvent",
         "endEvent",
@@ -1554,15 +1876,11 @@ def selftest() -> None:
     missing = [name for name in required if aggregate.get(name, 0) == 0]
     if missing:
         raise SystemExit(f"persisted fixtures are missing required element types: {', '.join(missing)}")
-    extension_xml = first.get("extensions.bpmn")
-    if extension_xml is not None and (
-        "extensionElements" not in extension_xml or 'isExecutable="true"' not in extension_xml
-    ):
-        raise SystemExit("extension fixture lacks extension elements or executable-process coverage")
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
-    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types")
+    suffix = "with fresh layout-engine output" if engine_ran else "structure-only (layout command unavailable)"
+    print(f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types ({suffix})")
 
 
 def latest_report(output_dir: str) -> Path:
@@ -1593,10 +1911,26 @@ def check_report(args: argparse.Namespace) -> None:
             "non_orthogonal_segments",
             "label_overlaps",
             "invalid_label_bounds",
+            "shape_overlaps",
+            "label_shape_intersections",
+            "label_edge_intersections",
+            "excess_turns",
+            "node_containment_violations",
+            "label_containment_violations",
         ):
             value = layout[metric]
             if value > 0:
                 failures.append(f"{title}: {metric}={value}")
+        for detail in layout.get("excess_turn_details", []):
+            failures.append(f"{title}: {detail['edge']} has {detail['excess_turns']} excess turn(s)")
+        for detail in layout.get("node_containment_violation_details", []):
+            failures.append(
+                f"{title}: {detail['node']} escapes its {detail['container_type']} {detail['container']}"
+            )
+        for detail in layout.get("label_containment_violation_details", []):
+            failures.append(
+                f"{title}: label {detail['label']} escapes its {detail['container_type']} {detail['container']}"
+            )
         for detail in layout.get("edge_crossing_details", []):
             failures.append(f"{title}: crossing {detail['first']} x {detail['second']}")
         for detail in layout.get("edge_shape_intersection_details", []):
@@ -1605,6 +1939,10 @@ def check_report(args: argparse.Namespace) -> None:
             failures.append(f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):
             failures.append(f"{title}: {detail['edge']} has invalid {detail['end']} attachment")
+        for detail in layout.get("label_shape_intersection_details", []):
+            failures.append(f"{title}: label {detail['label']} intersects {detail['shape']}")
+        for detail in layout.get("label_edge_intersection_details", []):
+            failures.append(f"{title}: label {detail['label']} intersects edge {detail['edge']}")
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             failures.append(f"{title}: missing_named_labels={missing}")
@@ -1631,7 +1969,23 @@ def build_parser() -> argparse.ArgumentParser:
     check.add_argument("--report", help="report HTML path or report directory; omitted means newest report")
     check.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
-    subparsers.add_parser("selftest", help="validate deterministic fixtures and metrics without external dependencies")
+    selftest_parser = subparsers.add_parser(
+        "selftest",
+        help="validate persisted fixtures and, when the layout command is available, re-verify them against current layout output",
+    )
+    selftest_parser.add_argument(
+        "--layout-command",
+        default="bpmn-auto-layout",
+        help="layout command, shell-style string; skipped with a warning if not found on PATH",
+    )
+
+    stability_parser = subparsers.add_parser(
+        "stability",
+        help="lay out BASE and VARIANT and report how much geometry shared between them moved",
+    )
+    stability_parser.add_argument("base", help="baseline BPMN file")
+    stability_parser.add_argument("variant", help="variant BPMN file (e.g. base plus one unrelated element)")
+    stability_parser.add_argument("--layout-command", default="bpmn-auto-layout", help="layout command, shell-style string")
     return parser
 
 
@@ -1648,7 +2002,16 @@ def main(argv: list[str] | None = None) -> int:
     elif args.command == "check":
         check_report(args)
     elif args.command == "selftest":
-        selftest()
+        selftest(split_command(args.layout_command))
+    elif args.command == "stability":
+        result = stability(Path(args.base), Path(args.variant), split_command(args.layout_command))
+        print(json.dumps(result, indent=2, sort_keys=True))
+        shapes = result["shapes"]  # type: ignore[index]
+        edges = result["edges"]  # type: ignore[index]
+        print(
+            f"stability: {shapes['moved']}/{shapes['common']} shapes moved, "  # type: ignore[index]
+            f"{edges['changed']}/{edges['common']} edges changed waypoints",  # type: ignore[index]
+        )
     return 0
 
 

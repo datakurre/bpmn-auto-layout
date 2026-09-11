@@ -7,6 +7,7 @@
 
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
+import { leafLaneOrderIndex } from "./lane-layout";
 import {
   DEFAULT_FLOW_GAP,
   COMPONENT_GAP,
@@ -621,6 +622,10 @@ function attachBoundaryEvents(
 
   for (const boundaries of byHost.values()) {
     boundaries.sort((left, right) => left.id.localeCompare(right.id));
+
+    // First pass: decide each boundary event's side (top/bottom) using the
+    // existing target-position/alternation heuristic.
+    const placements: Array<{ node: NodeLayout; host: NodeLayout; bottom: boolean }> = [];
     boundaries.forEach((boundary, index) => {
       const host = layoutNodes.get(boundary.attachedToRef?.id);
       const node = layoutNodes.get(boundary.id);
@@ -630,16 +635,32 @@ function attachBoundaryEvents(
       const target = outgoing ? layoutNodes.get(outgoing.targetRef?.id) : undefined;
       const targetBelow = target ? target.centerY >= host.centerY : false;
       const bottom = targetBelow !== (index % 2 === 1);
-      const centerX = host.centerX;
-      const centerY = bottom ? host.y + host.height : host.y;
 
       node.track = host.track;
       node.col = host.col;
-      node.centerX = centerX;
-      node.centerY = centerY;
-      node.x = centerX - node.width / 2;
-      node.y = centerY - node.height / 2;
+      placements.push({ node, host, bottom });
     });
+
+    // Second pass: spread every side's boundary events evenly across the
+    // host's width instead of stacking them all on host.centerX — two or
+    // more events sharing a side would otherwise land on the same point.
+    const bySide = new Map<string, typeof placements>();
+    for (const placement of placements) {
+      const key = `${placement.host.id}:${placement.bottom}`;
+      (bySide.get(key) ?? bySide.set(key, []).get(key)!).push(placement);
+    }
+    for (const group of bySide.values()) {
+      const { host, bottom } = group[0]!;
+      const centerY = bottom ? host.y + host.height : host.y;
+      group.forEach(({ node }, i) => {
+        const centerX =
+          group.length === 1 ? host.centerX : host.x + (host.width * (i + 1)) / (group.length + 1);
+        node.centerX = centerX;
+        node.centerY = centerY;
+        node.x = centerX - node.width / 2;
+        node.y = centerY - node.height / 2;
+      });
+    }
   }
 }
 
@@ -764,15 +785,7 @@ export function computeProcessLayout(
     backEdges,
     opts.colWidth,
     effectiveDim,
-    new Map(
-      (process.laneSets || []).flatMap((laneSet: any, laneSetIndex: number) =>
-        (laneSet.lanes || []).flatMap((lane: any, laneIndex: number) =>
-          (lane.flowNodeRef || [])
-            .filter((ref: any) => nodesById.has(ref.id))
-            .map((ref: any) => [ref.id, laneSetIndex + laneIndex] as [string, number]),
-        ),
-      ),
-    ),
+    leafLaneOrderIndex(process.laneSets || []),
   );
 
   // 4. Compute pixel coordinates

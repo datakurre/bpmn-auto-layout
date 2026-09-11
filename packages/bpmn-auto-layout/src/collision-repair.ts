@@ -9,6 +9,8 @@
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import {
   choosePreferredRoute,
+  isOrthogonal,
+  routeTurns,
   DEFAULT_ROUTING_POLICY,
   type RoutingPolicy,
 } from "./layout-policy";
@@ -460,7 +462,12 @@ export function repairSegmentCollisions(
 
   const srcNode = layout.nodes.get(flow?.sourceRef?.id);
   const tgtNode = layout.nodes.get(flow?.targetRef?.id);
-  if (bestHits === 0 && validateConnectionPoints(best, srcNode, tgtNode)) return best;
+  const meetsRoutingPolicy = (points: Array<{ x: number; y: number }>): boolean =>
+    (!routingPolicy.requireOrthogonal || isOrthogonal(points)) &&
+    routeTurns(points) >= routingPolicy.minimumTurns;
+  if (bestHits === 0 && validateConnectionPoints(best, srcNode, tgtNode) && meetsRoutingPolicy(best)) {
+    return best;
+  }
 
   const targetPoints = tgtNode
     ? [
