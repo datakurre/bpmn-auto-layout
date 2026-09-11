@@ -24,6 +24,7 @@ import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
 import { fanOutAttachPoints, ensureOrthogonalWaypoints } from "./label-placement";
 import { warn, type LayoutWarning } from "./layout-warnings";
+import { ROUTE_DEPARTURE_GAP, CHANNEL_LANE_GAP } from "./element-dimensions";
 
 export type RoutePoint = { x: number; y: number };
 
@@ -237,22 +238,54 @@ export function routeProcessFlows(
       .map((candidate) => layout.nodes.get(candidate.targetRef?.id))
       .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
     if (branches.length === 0) continue;
-    const channel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
-    const candidate = [
+    // Depart the gateway's right edge and arrive at the target's left edge
+    // horizontally before turning toward the channel -- turning immediately
+    // at the boundary reads as sliding along the shape's own edge rather
+    // than leaving it, and fails validateConnectionPoints's departure check
+    // (#41).
+    const gap = Math.min(ROUTE_DEPARTURE_GAP, Math.max(4, (tgt.x - (src.x + src.width)) / 4));
+    const buildCandidate = (channelValue: number): RoutePoint[] => [
       { x: src.x + src.width, y: src.centerY },
-      { x: src.x + src.width, y: channel },
-      { x: tgt.x, y: channel },
+      { x: src.x + src.width + gap, y: src.centerY },
+      { x: src.x + src.width + gap, y: channelValue },
+      { x: tgt.x - gap, y: channelValue },
+      { x: tgt.x - gap, y: tgt.centerY },
       { x: tgt.x, y: tgt.centerY },
     ];
-    if (validateConnectionPoints(candidate, src, tgt)) {
-      edgeWaypoints.set(flow.id, candidate);
+    // validateConnectionPoints only checks that the endpoints attach to the
+    // right side of each node -- it says nothing about what the channel
+    // segment in between passes through, so a route that "validates" can
+    // still cut straight through the very node it exists to bypass (#41).
+    // countRouteHits is what actually tells us the channel is clear. The
+    // channel plan hands back one default lane for a flow it never recorded
+    // a request for (as this one didn't, at the point the plan was built),
+    // so when that lane is already crowded, try the next few lanes out
+    // before falling back to per-segment repair.
+    const baseChannel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
+    let accepted: RoutePoint[] | null = null;
+    for (let lane = 0; lane < 6; lane += 1) {
+      const candidate = buildCandidate(baseChannel + lane * CHANNEL_LANE_GAP);
+      if (
+        validateConnectionPoints(candidate, src, tgt) &&
+        countRouteHits(candidate, layout, flow, edgeWaypoints) === 0
+      ) {
+        accepted = candidate;
+        break;
+      }
+    }
+    if (accepted) {
+      edgeWaypoints.set(flow.id, accepted);
       continue;
     }
     // The channel route can run through a boundary event or subprocess;
-    // repair it like every other route, and if it still does not validate,
-    // keep the previous (already validated) route rather than ship it.
-    const repaired = repairSegmentCollisions(candidate, layout, flow, edgeWaypoints, routingPolicy);
-    if (validateConnectionPoints(repaired, src, tgt)) {
+    // repair it like every other route, and if it still does not validate
+    // or is still not hit-free, keep the previous (already validated)
+    // route rather than ship it.
+    const repaired = repairSegmentCollisions(buildCandidate(baseChannel), layout, flow, edgeWaypoints, routingPolicy);
+    if (
+      validateConnectionPoints(repaired, src, tgt) &&
+      countRouteHits(repaired, layout, flow, edgeWaypoints) === 0
+    ) {
       edgeWaypoints.set(flow.id, repaired);
     }
   }

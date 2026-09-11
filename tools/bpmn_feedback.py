@@ -1217,10 +1217,42 @@ def check_subprocess_internal_edges_stay_inside(root: ET.Element) -> list[str]:
     return problems
 
 
+def check_gateway_bypass_avoids_sibling(root: ET.Element) -> list[str]:
+    """Pins #41: a sequence flow that bypasses a same-track sibling placed
+    directly between a gateway and its target (skipping over a review/detour
+    branch that rejoins on the same row) must route around that sibling, not
+    straight through it."""
+    shape_bounds = shape_bounds_by_element(root)
+    flow_endpoints = {
+        flow.get("id", ""): (flow.get("sourceRef"), flow.get("targetRef"))
+        for flow in root.iter(q("bpmn", "sequenceFlow"))
+    }
+    problems: list[str] = []
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            flow_id = edge.get("bpmnElement", "")
+            source_id, target_id = flow_endpoints.get(flow_id, (None, None))
+            if not source_id or not target_id:
+                continue
+            endpoints = {source_id, target_id}
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            for element_id, bounds in shape_bounds.items():
+                if element_id in endpoints:
+                    continue
+                for a, b in zip(points, points[1:]):
+                    if segment_intersects_box(a, b, bounds):
+                        problems.append(f"{flow_id} intersects sibling shape {element_id}")
+    return problems
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
+    "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
 }
 
 
