@@ -477,6 +477,27 @@ export function computeEdgeLabelBounds(
 // Public: node label placement
 // ---------------------------------------------------------------------------
 
+/**
+ * A default label box for `node`, derived only from its own geometry and
+ * text -- no flow-direction or collision information required. Used both
+ * as solveLabelPlacement's last-resort default and, before routing runs, as
+ * a provisional obstacle so routes can avoid the space a label will very
+ * likely occupy (see #30). The real, collision-aware box solveLabelPlacement
+ * computes once routes exist may differ; this is a heuristic reservation,
+ * not a guarantee.
+ */
+export function estimateDefaultLabelBounds(node: NodeLayout, preferredTop = false): LabelBounds {
+  const name = node.element.name || "";
+  const isGateway = node.element.$type.endsWith("Gateway");
+  const defaultW = 90;
+  const defaultLines = estimateTextLines(name, defaultW);
+  const defaultH = defaultLines === 1 ? (isGateway ? 14 : 20) : defaultLines === 2 ? 27 : defaultLines * 14;
+  const y = preferredTop
+    ? Math.round(node.y - defaultH - NODE_LABEL_GAP)
+    : Math.round(node.y + node.height + NODE_LABEL_GAP);
+  return { x: Math.round(node.centerX - defaultW / 2), y, width: defaultW, height: defaultH };
+}
+
 export function solveLabelPlacement(
   node: NodeLayout,
   edgeWaypoints: Map<string, Array<{ x: number; y: number }>>,
@@ -652,21 +673,8 @@ export function solveLabelPlacement(
     }
   }
   if (!chosen) {
-    const defaultW = 90;
-    const defaultLines = estimateTextLines(name, defaultW);
-    const defaultH =
-      defaultLines === 1 ? (isGateway ? 14 : 20) : defaultLines === 2 ? 27 : defaultLines * 14;
-    const defaultGap = NODE_LABEL_GAP;
-    const defaultY = preferredTop
-      ? Math.round(node.y - defaultH - defaultGap)
-      : Math.round(node.y + node.height + defaultGap);
-    chosen = {
-      x: Math.round(node.centerX - defaultW / 2),
-      y: defaultY,
-      width: defaultW,
-      height: defaultH,
-      lines: defaultLines,
-    };
+    const fallbackBounds = estimateDefaultLabelBounds(node, preferredTop);
+    chosen = { ...fallbackBounds, lines: estimateTextLines(name, fallbackBounds.width) };
   }
 
   return { x: chosen.x, y: chosen.y, width: chosen.width, height: chosen.height };

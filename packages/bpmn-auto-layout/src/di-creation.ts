@@ -704,6 +704,11 @@ function buildProcessShapesAndEdges(
     }
   }
 
+  // Keyed by node id, so the post-label re-repair pass below can exclude a
+  // flow's own endpoint labels without needing every LabelBounds to carry
+  // an owner reference.
+  const nodeLabelBounds = new Map<string, LabelBounds>();
+
   // 2. Shape DI for each node with collision-free labels
   for (const [id, node] of shiftedNodes.entries()) {
     const isMarkerVisible = node.element.$type.endsWith("Gateway") ? true : undefined;
@@ -736,6 +741,7 @@ function buildProcessShapesAndEdges(
         containerBoundsFor(node),
       );
       placedLabels.push(labelBounds);
+      nodeLabelBounds.set(id, labelBounds);
       shapeAttrs.label = namedLabel(
         labelBounds.x,
         labelBounds.y,
@@ -759,10 +765,64 @@ function buildProcessShapesAndEdges(
         containerBoundsFor(node),
       );
       placedLabels.push(labelBounds);
+      nodeLabelBounds.set(id, labelBounds);
       shapeAttrs.label = namedLabel(labelBounds.x, labelBounds.y, labelBounds.width, labelBounds.height);
     }
 
     elements.push(moddle.create("bpmndi:BPMNShape", shapeAttrs));
+  }
+
+  // Re-repair any route that ended up crossing a label placed after it was
+  // routed (§2: paths shall avoid labels). Routes are chosen before labels
+  // exist, so this is deliberately reactive rather than reserving
+  // speculative label space up front for every route search -- that
+  // alternative was tried and rejected: it perturbed routes that were
+  // already correct, including one case that started cutting through an
+  // expanded subprocess it had previously avoided cleanly (see #30).
+  for (const flow of shiftedLayout.allFlows) {
+    const waypoints = edgeWaypoints.get(flow.id);
+    if (!waypoints) continue;
+    const excluded = new Set<LabelBounds>();
+    const ownEdgeLabel = edgeLabelBounds.get(flow.id);
+    if (ownEdgeLabel) excluded.add(ownEdgeLabel);
+    const srcLabel = nodeLabelBounds.get(flow.sourceRef?.id);
+    if (srcLabel) excluded.add(srcLabel);
+    const tgtLabel = nodeLabelBounds.get(flow.targetRef?.id);
+    if (tgtLabel) excluded.add(tgtLabel);
+    const otherLabels = placedLabels.filter((label) => !excluded.has(label));
+    if (otherLabels.length === 0) continue;
+
+    const labelObstacles: NodeLayout[] = otherLabels.map((label, index) => ({
+      id: `label-avoid-${flow.id}-${index}`,
+      element: { $type: "bpmn:LabelObstacle" },
+      col: 0,
+      track: 0,
+      ...label,
+      centerX: label.x + label.width / 2,
+      centerY: label.y + label.height / 2,
+    }));
+    const layoutWithLabels: ProcessLayoutResult = {
+      ...shiftedLayout,
+      containerObstacles: [...(shiftedLayout.containerObstacles ?? []), ...labelObstacles],
+    };
+    const beforeWithLabels = countRouteHits(waypoints, layoutWithLabels, flow, edgeWaypoints);
+    if (beforeWithLabels === 0) continue;
+
+    // A route may never be adopted here just for crossing fewer labels while
+    // crossing more shapes/edges than before -- §8 ranks no-overlap above
+    // label placement, so this pass may only trade a label crossing for
+    // nothing worse, never for a new or additional shape/edge crossing.
+    const beforeShapeHits = countRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
+    const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
+    const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
+    const repaired = repairSegmentCollisions(waypoints, layoutWithLabels, flow, edgeWaypoints, routingPolicy);
+    if (
+      validateConnectionPoints(repaired, src, tgt) &&
+      countRouteHits(repaired, layoutWithLabels, flow, edgeWaypoints) < beforeWithLabels &&
+      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits
+    ) {
+      edgeWaypoints.set(flow.id, snapRouteWaypoints(ensureOrthogonalWaypoints(repaired), opts.gridSize));
+    }
   }
 
   // 3. Edge DI for each sequence flow

@@ -129,6 +129,13 @@
       "rule": "Both the channel-span-recording pass and the post-repair edge-vs-edge avoidance pass iterate flows in orderFlowsForRouting's order -- ascending structural span (column + track distance between endpoints), then source id, then target id -- instead of source-document order, so inserting an unrelated sequence flow earlier in the XML cannot renumber or re-route flows that were already fine. The post-repair pass also skips re-running repair on a route that already has zero obstacle hits (countRouteHits) and passes validateConnectionPoints, so a route is never perturbed by an obstacle set that changed after it was already correct."
     },
     {
+      "id": "routing.avoids-labels",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/di-creation.ts:772-826"],
+      "rule": "After every node and edge label is placed, each sequence flow's final route is re-checked against every *other* placed label (excluding its own edge label and its own source/target node labels) using the same obstacle/hit-counting machinery repairSegmentCollisions already uses. A route that crosses one is re-repaired with those labels added as one-off obstacles, but the repaired route is adopted only if it both reduces label hits and does not increase shape/edge hits against the original (label-free) obstacle set -- §8 ranks no-overlap above label avoidance, so this pass may trade a label crossing for nothing worse, never for a new or larger shape/edge crossing.",
+      "note": "This is deliberately reactive (fix confirmed crossings after labels exist) rather than reserving speculative label space before every route is chosen. The speculative-reservation approach was implemented and rejected during development: it perturbed the candidate route search broadly enough that a route which had cleanly detoured around an expanded subprocess started cutting through it and one of its children instead, in a fixture with no label anywhere near that detour. The current pass is more conservative and only found no candidate for a handful of already-crowded label/edge crossings, which the label-search-widening and hard-constraint work (#16) also could not resolve for the same crowded positions."
+    },
+    {
       "id": "feedback.geometry-diagnostics",
       "label": "quality-gate",
       "source_lines": ["tools/bpmn_feedback.py:923-952", "tools/bpmn_feedback.py:1078-1184", "tools/bpmn_feedback.py:1545-1580"],
