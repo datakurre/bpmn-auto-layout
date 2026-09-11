@@ -21,7 +21,7 @@ import type { ResolvedLayoutOptions } from "./element-dimensions";
 import { resolveRoutingPolicy, isOrthogonal } from "./layout-policy";
 import { planContainerScopedChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
-import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, validateConnectionPoints } from "./collision-repair";
+import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, findRouteHits, validateConnectionPoints } from "./collision-repair";
 import { fanOutAttachPoints, ensureOrthogonalWaypoints } from "./label-placement";
 import { warn, type LayoutWarning } from "./layout-warnings";
 import { ROUTE_DEPARTURE_GAP, CHANNEL_LANE_GAP } from "./element-dimensions";
@@ -395,74 +395,118 @@ export function routeProcessFlows(
     }
   }
 
+  return edgeWaypoints;
+}
+
+/**
+ * Terminal invariant checks (§8 priority levels 2-3), run once against the
+ * geometry that will actually be serialized.
+ *
+ * This used to run inline at the end of routeProcessFlows, against the
+ * edgeWaypoints it had just produced. But routeProcessFlows runs *before*
+ * label placement, and di-creation.ts's label re-repair pass can rewrite a
+ * flow's waypoints afterward to avoid a label -- so a route flagged here
+ * could be pulled away from the very obstacle it was "hitting" by the time
+ * it ships, and a route that starts clean here could be moved into a new
+ * collision that nothing ever re-checks. The result (#51): warnings not
+ * reproducible from the shipped DI, on both sides (false positives *and*
+ * unreported real hits). Callers must invoke this once, after every pass
+ * that can still move a waypoint -- di-creation.ts does so after its label
+ * re-repair loop, using the same edgeWaypoints Map that gets serialized.
+ *
+ * Node shapes themselves never move after node-placement, so the
+ * SHAPE_OVERLAPS_SHAPE check (which only reads `layout.nodes`, not
+ * `edgeWaypoints`) has no equivalent timing hazard -- it stays here for
+ * cohesion, not because it needs the later call site.
+ */
+export function checkTerminalRouteInvariants(
+  layout: ProcessLayoutResult,
+  edgeWaypoints: Map<string, RoutePoint[]>,
+  warnings: LayoutWarning[] | undefined,
+): void {
+  if (!warnings) return;
   // repairSegmentCollisions can return its best candidate even when that
   // candidate still has obstacle hits (no repair strategy reached zero) --
   // previously a silent degradation. Surface it: check every final route
   // once against the same obstacle set repair uses, and warn on whatever
-  // still overlaps something (#32).
-  if (warnings) {
-    for (const flow of layout.allFlows) {
-      const points = edgeWaypoints.get(flow.id);
-      if (!points) continue;
-      if (countRouteHits(points, layout, flow, edgeWaypoints) > 0) {
-        warn(
-          warnings,
-          "ROUTE_INTERSECTS_OBSTACLE",
-          flow.id,
-          `sequence flow ${flow.id}'s final route still overlaps a node, container, or another route after every repair attempt`,
-        );
-      }
-      // Priority 3 (orthogonal-routing): every earlier pass already builds
-      // orthogonal polylines, but nothing re-checks the geometry that
-      // actually ships -- a later pass rewriting a route (the label
-      // re-repair pass, a fallback) could reintroduce a diagonal segment
-      // without anything noticing (#42).
-      if (!isOrthogonal(points)) {
-        warn(warnings, "ROUTE_NOT_ORTHOGONAL", flow.id, `sequence flow ${flow.id}'s final route has a non-orthogonal segment`);
-      }
+  // still overlaps something (#32), naming what it hit so the warning is a
+  // one-line read instead of an investigation (#51).
+  for (const flow of layout.allFlows) {
+    const points = edgeWaypoints.get(flow.id);
+    if (!points) continue;
+    if (countRouteHits(points, layout, flow, edgeWaypoints) > 0) {
+      const hits = findRouteHits(points, layout, flow, edgeWaypoints);
+      const obstacles = [...new Set(hits.map((hit) => `${describeObstacleKind(hit.obstacleType)} ${hit.obstacleId}`))];
+      warn(
+        warnings,
+        "ROUTE_INTERSECTS_OBSTACLE",
+        flow.id,
+        `sequence flow ${flow.id}'s final route still overlaps ${obstacles.join(", ")} after every repair attempt`,
+      );
     }
-    // Priority 2 (no-overlaps): no two node shapes may overlap. A
-    // subprocess's own children sit inside its bounds by design, so a pair
-    // is only a violation when neither is an ancestor container of the
-    // other.
-    const isAncestor = (ancestorId: string, node: NodeLayout): boolean => {
-      let current: NodeLayout | undefined = node;
-      while (current?.containerId) {
-        if (current.containerId === ancestorId) return true;
-        current = layout.nodes.get(current.containerId);
-      }
-      return false;
-    };
-    // A boundary event is required by BPMN to straddle its host activity's
-    // border, so that overlap is correct geometry, not a defect -- exactly
-    // the exemption #20 gave the Python metric (tools/bpmn_feedback.py),
-    // ported here so the engine's own terminal check stops reintroducing
-    // that false positive (#49).
-    const isBoundaryHostPair = (a: NodeLayout, b: NodeLayout): boolean => {
-      const aHost = a.element?.$type === "bpmn:BoundaryEvent" ? a.element.attachedToRef?.id : undefined;
-      const bHost = b.element?.$type === "bpmn:BoundaryEvent" ? b.element.attachedToRef?.id : undefined;
-      return aHost === b.id || bHost === a.id;
-    };
-    const boxOverlapArea = (a: NodeLayout, b: NodeLayout): number => {
-      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
-      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
-      return w > 0 && h > 0 ? w * h : 0;
-    };
-    const nodes = [...layout.nodes.values()];
-    for (let i = 0; i < nodes.length; i += 1) {
-      for (let j = i + 1; j < nodes.length; j += 1) {
-        const a = nodes[i]!;
-        const b = nodes[j]!;
-        if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
-        if (isBoundaryHostPair(a, b)) continue;
-        if (boxOverlapArea(a, b) > 0) {
-          warn(warnings, "SHAPE_OVERLAPS_SHAPE", a.id, `shape ${a.id} overlaps shape ${b.id}`);
-        }
+    // Priority 3 (orthogonal-routing): every earlier pass already builds
+    // orthogonal polylines, but nothing re-checks the geometry that
+    // actually ships -- a later pass rewriting a route (the label
+    // re-repair pass, a fallback) could reintroduce a diagonal segment
+    // without anything noticing (#42).
+    if (!isOrthogonal(points)) {
+      warn(warnings, "ROUTE_NOT_ORTHOGONAL", flow.id, `sequence flow ${flow.id}'s final route has a non-orthogonal segment`);
+    }
+  }
+  // Priority 2 (no-overlaps): no two node shapes may overlap. A
+  // subprocess's own children sit inside its bounds by design, so a pair
+  // is only a violation when neither is an ancestor container of the
+  // other.
+  const isAncestor = (ancestorId: string, node: NodeLayout): boolean => {
+    let current: NodeLayout | undefined = node;
+    while (current?.containerId) {
+      if (current.containerId === ancestorId) return true;
+      current = layout.nodes.get(current.containerId);
+    }
+    return false;
+  };
+  // A boundary event is required by BPMN to straddle its host activity's
+  // border, so that overlap is correct geometry, not a defect -- exactly
+  // the exemption #20 gave the Python metric (tools/bpmn_feedback.py),
+  // ported here so the engine's own terminal check stops reintroducing
+  // that false positive (#49).
+  const isBoundaryHostPair = (a: NodeLayout, b: NodeLayout): boolean => {
+    const aHost = a.element?.$type === "bpmn:BoundaryEvent" ? a.element.attachedToRef?.id : undefined;
+    const bHost = b.element?.$type === "bpmn:BoundaryEvent" ? b.element.attachedToRef?.id : undefined;
+    return aHost === b.id || bHost === a.id;
+  };
+  const boxOverlapArea = (a: NodeLayout, b: NodeLayout): number => {
+    const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+    const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+    return w > 0 && h > 0 ? w * h : 0;
+  };
+  const nodes = [...layout.nodes.values()];
+  for (let i = 0; i < nodes.length; i += 1) {
+    for (let j = i + 1; j < nodes.length; j += 1) {
+      const a = nodes[i]!;
+      const b = nodes[j]!;
+      if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
+      if (isBoundaryHostPair(a, b)) continue;
+      if (boxOverlapArea(a, b) > 0) {
+        warn(warnings, "SHAPE_OVERLAPS_SHAPE", a.id, `shape ${a.id} overlaps shape ${b.id}`);
       }
     }
   }
+}
 
-  return edgeWaypoints;
+/** Human-readable label for a route obstacle's synthetic/real element type,
+ * used to make a ROUTE_INTERSECTS_OBSTACLE message name what it hit (#51). */
+function describeObstacleKind(elementType: string): string {
+  switch (elementType) {
+    case "bpmn:RouteObstacle":
+      return "route";
+    case "bpmn:LabelObstacle":
+      return "label";
+    case "bpmn:ContainerBoundary":
+      return "container";
+    default:
+      return "shape";
+  }
 }
 
 export function snapRouteWaypoints(points: RoutePoint[], gridSize: number): RoutePoint[] {
