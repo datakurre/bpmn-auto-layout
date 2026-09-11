@@ -17,7 +17,7 @@ import {
   participantBoundaryObstacles,
   leafLaneBoundsByNodeId,
 } from "./lane-layout";
-import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
+import { repairSegmentCollisions, countRouteHits, countShapeRouteHits, validateConnectionPoints } from "./collision-repair";
 import { routeProcessFlows, snapRouteWaypoints, dedupeConsecutivePoints } from "./process-routing";
 import type { LayoutWarning } from "./layout-warnings";
 import {
@@ -561,13 +561,22 @@ function buildProcessShapesAndEdges(
     // label placement, so this pass may only trade a label crossing for
     // nothing worse, never for a new or additional shape/edge crossing.
     const beforeShapeHits = countRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
+    // countRouteHits blends real-shape hits together with edge-vs-edge and
+    // container hits into one number, so "no worse than before" against it
+    // alone lets this pass trade away a label crossing for a *new* shape
+    // crossing as long some other component of the blend improved enough to
+    // keep the total flat or lower -- exactly the kind of priority-order
+    // violation #42 exists to prevent. Track real shape hits (§8 priority 2)
+    // separately and never let this label-driven repair increase them (#41).
+    const beforeRealShapeHits = countShapeRouteHits(waypoints, shiftedLayout, flow, edgeWaypoints);
     const src = shiftedLayout.nodes.get(flow.sourceRef?.id);
     const tgt = shiftedLayout.nodes.get(flow.targetRef?.id);
     const repaired = repairSegmentCollisions(waypoints, layoutWithLabels, flow, edgeWaypoints, routingPolicy);
     if (
       validateConnectionPoints(repaired, src, tgt) &&
       countRouteHits(repaired, layoutWithLabels, flow, edgeWaypoints) < beforeWithLabels &&
-      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits
+      countRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeShapeHits &&
+      countShapeRouteHits(repaired, shiftedLayout, flow, edgeWaypoints) <= beforeRealShapeHits
     ) {
       edgeWaypoints.set(flow.id, snapRouteWaypoints(ensureOrthogonalWaypoints(repaired), opts.gridSize));
     }

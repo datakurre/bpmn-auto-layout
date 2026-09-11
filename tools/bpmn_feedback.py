@@ -1353,11 +1353,41 @@ def check_gateway_bypass_avoids_sibling(root: ET.Element) -> list[str]:
     return problems
 
 
+def check_no_degenerate_waypoints(root: ET.Element) -> list[str]:
+    """Pins #46: no emitted edge may have two consecutive waypoints at (or
+    within rounding of) the same point. A repeated point is a zero-length
+    segment -- it contributes no geometry, inflates total_bends for free, and
+    passes the orthogonal check incidentally rather than by being a real
+    axis-aligned segment."""
+    problems: list[str] = []
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            for a, b in zip(points, points[1:]):
+                if abs(a[0] - b[0]) < 0.5 and abs(a[1] - b[1]) < 0.5:
+                    problems.append(f"{edge.get('bpmnElement')} has a duplicated waypoint at {a}")
+    return problems
+
+
+def check_gateway_loop_bypasses_sibling_without_degenerate_waypoints(root: ET.Element) -> list[str]:
+    """Pins #41 and #46 together: a gateway's forward branch *and* its
+    loop-back both route past a same-track sibling sitting directly between
+    them, and neither route may ship a duplicated waypoint while doing so.
+    Filed as one fixture because both defects were reached through the same
+    fallback/reassert code path and were only independently observable, not
+    independently caused."""
+    return check_gateway_bypass_avoids_sibling(root) + check_no_degenerate_waypoints(root)
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
+    "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
 }
 
 

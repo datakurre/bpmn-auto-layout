@@ -486,6 +486,39 @@ export function countRouteHits(
   return n;
 }
 
+/**
+ * Synthetic obstacle types layered onto the real node set by routeObstacles:
+ * other flows' already-placed segments and labels. They matter for their
+ * own metrics (edge crossings, label intersections) but are not BPMN shapes
+ * -- a route search that insists on clearing all of them alongside real
+ * shapes can reject every candidate in a dense diagram even once it has
+ * cleared every actual node (#41). Container boundaries are deliberately
+ * left out of this set: crossing a pool/lane border is still a real
+ * containment violation, not routing noise.
+ */
+const SYNTHETIC_OBSTACLE_TYPES = new Set(["bpmn:RouteObstacle", "bpmn:LabelObstacle"]);
+
+/**
+ * Like countRouteHits, but only against real BPMN node shapes and container
+ * boundaries -- not other flows' path segments or labels. Lets a route
+ * search target the specific, unambiguous requirement ("this edge may not
+ * cut through a shape") without also having to out-compete every other edge
+ * converging on the same crowded gateway for the same channel (#41).
+ */
+export function countShapeRouteHits(
+  points: Array<{ x: number; y: number }>,
+  layout: ProcessLayoutResult,
+  flow: any,
+  blockedPaths: Map<string, Array<{ x: number; y: number }>> = new Map(),
+): number {
+  const obstacles = routeObstacles(layout, flow, blockedPaths).filter(
+    (o) => !SYNTHETIC_OBSTACLE_TYPES.has(o.element?.$type as string),
+  );
+  let n = 0;
+  for (let i = 0; i < points.length - 1; i += 1) n += segmentHitCount(points[i]!, points[i + 1]!, obstacles);
+  return n;
+}
+
 export function repairSegmentCollisions(
   waypoints: Array<{ x: number; y: number }>,
   layout: ProcessLayoutResult,
