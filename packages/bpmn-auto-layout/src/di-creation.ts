@@ -21,6 +21,61 @@ import {
   type LabelBounds,
 } from "./label-placement";
 
+/**
+ * Minimum distance the finished plane's content is guaranteed to keep from
+ * the canvas origin. Diagram-js/bpmn-js render fine with negative
+ * coordinates, but several internal passes (label placement's `x < 0` /
+ * `y < 0` filters) treat the origin as a hard boundary, so keeping the
+ * output non-negative avoids surprising a downstream consumer that makes
+ * the same assumption.
+ */
+const CANVAS_MARGIN = 10;
+
+/**
+ * Translate every shape, label, and edge waypoint in `planeElements` so the
+ * minimum x/y across the whole plane is at least CANVAS_MARGIN. A pure
+ * translation — it cannot disturb any relative geometry (routing, label
+ * placement, lane bands, …) already established for this plane, so it is
+ * always safe to apply last, right before the plane is serialized.
+ */
+function normalizePlaneOrigin(planeElements: any[]): void {
+  let minX = Infinity;
+  let minY = Infinity;
+  const bounds: any[] = [];
+  const waypointArrays: any[][] = [];
+  for (const element of planeElements) {
+    if (element.bounds) bounds.push(element.bounds);
+    if (element.label?.bounds) bounds.push(element.label.bounds);
+    if (element.waypoint) waypointArrays.push(element.waypoint);
+  }
+  for (const box of bounds) {
+    minX = Math.min(minX, box.x);
+    minY = Math.min(minY, box.y);
+  }
+  for (const points of waypointArrays) {
+    for (const point of points) {
+      minX = Math.min(minX, point.x);
+      minY = Math.min(minY, point.y);
+    }
+  }
+  if (!Number.isFinite(minX) || !Number.isFinite(minY)) return;
+
+  const shiftX = minX < CANVAS_MARGIN ? CANVAS_MARGIN - minX : 0;
+  const shiftY = minY < CANVAS_MARGIN ? CANVAS_MARGIN - minY : 0;
+  if (shiftX === 0 && shiftY === 0) return;
+
+  for (const box of bounds) {
+    box.x += shiftX;
+    box.y += shiftY;
+  }
+  for (const points of waypointArrays) {
+    for (const point of points) {
+      point.x += shiftX;
+      point.y += shiftY;
+    }
+  }
+}
+
 function snapRouteWaypoints(
   points: Array<{ x: number; y: number }>,
   gridSize: number,
@@ -256,6 +311,8 @@ export function createCollaborationDi(
     }
     planeElements.push(moddle.create("bpmndi:BPMNEdge", edgeAttrs));
   }
+
+  normalizePlaneOrigin(planeElements);
 
   root.diagrams.push(
     moddle.create("bpmndi:BPMNDiagram", {
@@ -635,6 +692,8 @@ export function createProcessDi(
   for (const el of buildProcessShapesAndEdges(moddle, process, layout, opts)) {
     planeElements.push(el);
   }
+
+  normalizePlaneOrigin(planeElements);
 
   const plane = moddle.create("bpmndi:BPMNPlane", {
     id: `BPMNPlane_${process.id}`,
