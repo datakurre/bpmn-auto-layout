@@ -18,12 +18,13 @@
 
 import type { NodeLayout, ProcessLayoutResult } from "./layout-types";
 import type { ResolvedLayoutOptions } from "./element-dimensions";
-import { resolveRoutingPolicy } from "./layout-policy";
+import { resolveRoutingPolicy, isOrthogonal } from "./layout-policy";
 import { planContainerScopedChannels } from "./channel-planning";
 import { computeWaypoints, channelY } from "./edge-routing";
 import { repairSegmentCollisions, countRouteHits, validateConnectionPoints } from "./collision-repair";
 import { fanOutAttachPoints, ensureOrthogonalWaypoints } from "./label-placement";
 import { warn, type LayoutWarning } from "./layout-warnings";
+import { ROUTE_DEPARTURE_GAP, CHANNEL_LANE_GAP } from "./element-dimensions";
 
 export type RoutePoint = { x: number; y: number };
 
@@ -237,22 +238,54 @@ export function routeProcessFlows(
       .map((candidate) => layout.nodes.get(candidate.targetRef?.id))
       .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
     if (branches.length === 0) continue;
-    const channel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
-    const candidate = [
+    // Depart the gateway's right edge and arrive at the target's left edge
+    // horizontally before turning toward the channel -- turning immediately
+    // at the boundary reads as sliding along the shape's own edge rather
+    // than leaving it, and fails validateConnectionPoints's departure check
+    // (#41).
+    const gap = Math.min(ROUTE_DEPARTURE_GAP, Math.max(4, (tgt.x - (src.x + src.width)) / 4));
+    const buildCandidate = (channelValue: number): RoutePoint[] => [
       { x: src.x + src.width, y: src.centerY },
-      { x: src.x + src.width, y: channel },
-      { x: tgt.x, y: channel },
+      { x: src.x + src.width + gap, y: src.centerY },
+      { x: src.x + src.width + gap, y: channelValue },
+      { x: tgt.x - gap, y: channelValue },
+      { x: tgt.x - gap, y: tgt.centerY },
       { x: tgt.x, y: tgt.centerY },
     ];
-    if (validateConnectionPoints(candidate, src, tgt)) {
-      edgeWaypoints.set(flow.id, candidate);
+    // validateConnectionPoints only checks that the endpoints attach to the
+    // right side of each node -- it says nothing about what the channel
+    // segment in between passes through, so a route that "validates" can
+    // still cut straight through the very node it exists to bypass (#41).
+    // countRouteHits is what actually tells us the channel is clear. The
+    // channel plan hands back one default lane for a flow it never recorded
+    // a request for (as this one didn't, at the point the plan was built),
+    // so when that lane is already crowded, try the next few lanes out
+    // before falling back to per-segment repair.
+    const baseChannel = channelY(layout, flow, "below", src.centerX, tgt.centerX);
+    let accepted: RoutePoint[] | null = null;
+    for (let lane = 0; lane < 6; lane += 1) {
+      const candidate = buildCandidate(baseChannel + lane * CHANNEL_LANE_GAP);
+      if (
+        validateConnectionPoints(candidate, src, tgt) &&
+        countRouteHits(candidate, layout, flow, edgeWaypoints) === 0
+      ) {
+        accepted = candidate;
+        break;
+      }
+    }
+    if (accepted) {
+      edgeWaypoints.set(flow.id, accepted);
       continue;
     }
     // The channel route can run through a boundary event or subprocess;
-    // repair it like every other route, and if it still does not validate,
-    // keep the previous (already validated) route rather than ship it.
-    const repaired = repairSegmentCollisions(candidate, layout, flow, edgeWaypoints, routingPolicy);
-    if (validateConnectionPoints(repaired, src, tgt)) {
+    // repair it like every other route, and if it still does not validate
+    // or is still not hit-free, keep the previous (already validated)
+    // route rather than ship it.
+    const repaired = repairSegmentCollisions(buildCandidate(baseChannel), layout, flow, edgeWaypoints, routingPolicy);
+    if (
+      validateConnectionPoints(repaired, src, tgt) &&
+      countRouteHits(repaired, layout, flow, edgeWaypoints) === 0
+    ) {
       edgeWaypoints.set(flow.id, repaired);
     }
   }
@@ -273,6 +306,42 @@ export function routeProcessFlows(
           flow.id,
           `sequence flow ${flow.id}'s final route still overlaps a node, container, or another route after every repair attempt`,
         );
+      }
+      // Priority 3 (orthogonal-routing): every earlier pass already builds
+      // orthogonal polylines, but nothing re-checks the geometry that
+      // actually ships -- a later pass rewriting a route (the label
+      // re-repair pass, a fallback) could reintroduce a diagonal segment
+      // without anything noticing (#42).
+      if (!isOrthogonal(points)) {
+        warn(warnings, "ROUTE_NOT_ORTHOGONAL", flow.id, `sequence flow ${flow.id}'s final route has a non-orthogonal segment`);
+      }
+    }
+    // Priority 2 (no-overlaps): no two node shapes may overlap. A
+    // subprocess's own children sit inside its bounds by design, so a pair
+    // is only a violation when neither is an ancestor container of the
+    // other.
+    const isAncestor = (ancestorId: string, node: NodeLayout): boolean => {
+      let current: NodeLayout | undefined = node;
+      while (current?.containerId) {
+        if (current.containerId === ancestorId) return true;
+        current = layout.nodes.get(current.containerId);
+      }
+      return false;
+    };
+    const boxOverlapArea = (a: NodeLayout, b: NodeLayout): number => {
+      const w = Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x);
+      const h = Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y);
+      return w > 0 && h > 0 ? w * h : 0;
+    };
+    const nodes = [...layout.nodes.values()];
+    for (let i = 0; i < nodes.length; i += 1) {
+      for (let j = i + 1; j < nodes.length; j += 1) {
+        const a = nodes[i]!;
+        const b = nodes[j]!;
+        if (isAncestor(a.id, b) || isAncestor(b.id, a)) continue;
+        if (boxOverlapArea(a, b) > 0) {
+          warn(warnings, "SHAPE_OVERLAPS_SHAPE", a.id, `shape ${a.id} overlaps shape ${b.id}`);
+        }
       }
     }
   }

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { routeProcessFlows } from "../process-routing";
 import { DEFAULT_OPTIONS } from "../element-dimensions";
 import type { NodeLayout, ProcessLayoutResult } from "../layout-types";
+import type { LayoutWarning } from "../layout-warnings";
 
 interface NodeSpec {
   id: string;
@@ -88,5 +89,46 @@ test("routeProcessFlows returns a direct two-point route when nothing obstructs 
       { x: 300, y: 140 },
     ],
     `expected a plain 2-point route, got ${JSON.stringify(route)}`,
+  );
+});
+
+// The terminal invariant pass (#42) re-checks the *finished* layout as a
+// whole rather than trusting that whichever pass produced a piece of
+// geometry got it right -- the #41 regression was exactly a route that was
+// fine when computed and wrong by the time routing finished, with nothing
+// noticing. These tests exercise that pass directly against a hand-built
+// layout, the same way the routing tests above do.
+test("routeProcessFlows warns when two unrelated shapes overlap, tagged with their §8 priority level", () => {
+  const a = node({ id: "A", x: 0, y: 0, w: 100, h: 80, track: 0, col: 0 });
+  const b = node({ id: "B", x: 50, y: 0, w: 100, h: 80, track: 0, col: 1 });
+  const nodes = new Map<string, NodeLayout>([
+    [a.id, a],
+    [b.id, b],
+  ]);
+  const layout: ProcessLayoutResult = { nodes, allFlows: [] };
+
+  const warnings: LayoutWarning[] = [];
+  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+
+  const overlap = warnings.find((w) => w.code === "SHAPE_OVERLAPS_SHAPE");
+  assert.ok(overlap, `expected a SHAPE_OVERLAPS_SHAPE warning, got ${JSON.stringify(warnings)}`);
+  assert.equal(overlap!.priorityLevel, 2, "no-overlaps is §8 priority level 2");
+});
+
+test("routeProcessFlows does not warn about a subprocess containing its own child", () => {
+  const outer = node({ id: "Outer", type: "bpmn:SubProcess", x: 0, y: 0, w: 300, h: 200, track: 0, col: 0 });
+  const child: NodeLayout = { ...node({ id: "Child", x: 20, y: 20, w: 100, h: 80, track: 0, col: 0 }), isSubProcessChild: true, containerId: "Outer" };
+  const nodes = new Map<string, NodeLayout>([
+    [outer.id, outer],
+    [child.id, child],
+  ]);
+  const layout: ProcessLayoutResult = { nodes, allFlows: [] };
+
+  const warnings: LayoutWarning[] = [];
+  routeProcessFlows(layout, DEFAULT_OPTIONS, warnings);
+
+  assert.ok(
+    !warnings.some((w) => w.code === "SHAPE_OVERLAPS_SHAPE"),
+    `a subprocess containing its own child is not an overlap: ${JSON.stringify(warnings)}`,
   );
 });

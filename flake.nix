@@ -92,6 +92,67 @@
         }
       );
 
+      # `nix flake check -L` -- AGENTS.md tells contributors to run this, but
+      # until now it evaluated no checks at all (#44). selftest/regression
+      # run the persisted-fixture and pinned-invariant checks from
+      # tools/bpmn_feedback.py against a freshly built engine, entirely
+      # inside the sandboxed check build (no network beyond the FOD
+      # npm-deps fetch the `default`/`bpmn-feedback` packages already need).
+      # The TypeScript unit suite (`npm test`) is deliberately not one of
+      # these checks: its test-helpers.ts locates fixtures/ by walking a
+      # fixed number of parent directories up from the compiled test file,
+      # which assumes the repo's own packages/bpmn-auto-layout nesting --
+      # true when run from a checkout, not true of how nix stages a `src`
+      # derivation's directory (which drops that outer nesting). It runs in
+      # CI directly against a checkout instead (.github/workflows/ci.yml),
+      # where that assumption holds.
+      #
+      # The wider quality gate (`bpmn-feedback report` + `check`, currently
+      # ~70 findings across the fixture corpus) is intentionally not one of
+      # these checks either: nix checks are pass/fail with no partial-credit
+      # reporting, and failing it here would make `nix flake check`
+      # permanently red. It runs non-blocking in CI instead until enough of
+      # those findings are fixed to flip it to blocking with a ratchet, per
+      # the issue's own suggested order.
+      checks = forAllSystems (
+        pkgs:
+        let
+          layoutCli = self.packages.${pkgs.stdenv.hostPlatform.system}.default;
+          feedback = self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-feedback;
+        in
+        {
+          selftest =
+            pkgs.runCommand "bpmn-auto-layout-selftest"
+              {
+                nativeBuildInputs = [
+                  layoutCli
+                  feedback
+                ];
+              }
+              ''
+                cp -r ${./fixtures} ./fixtures
+                chmod -R +w ./fixtures
+                bpmn-feedback selftest --layout-command bpmn-auto-layout
+                touch $out
+              '';
+
+          regression =
+            pkgs.runCommand "bpmn-auto-layout-regression"
+              {
+                nativeBuildInputs = [
+                  layoutCli
+                  feedback
+                ];
+              }
+              ''
+                cp -r ${./fixtures} ./fixtures
+                chmod -R +w ./fixtures
+                bpmn-feedback regression --layout-command bpmn-auto-layout
+                touch $out
+              '';
+        }
+      );
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  unit-tests:
+    name: TypeScript unit tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/bpmn-auto-layout
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  flake-check:
+    name: nix flake check (selftest, regression)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      - run: nix flake check -L
+
+  quality-gate:
+    name: Layout quality gate (non-blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: cachix/install-nix-action@v27
+        with:
+          extra_nix_config: |
+            experimental-features = nix-command flakes
+      # Not a required check yet (#44): the fixture corpus currently has
+      # ~70 findings, mostly pre-existing lane/subprocess containment
+      # issues (§8 priority level 1) unrelated to any single change. This
+      # step keeps the count visible on every PR -- continue-on-error
+      # means a regression here shows as a warning annotation instead of
+      # a red X, so the gate can be tightened fixture-by-fixture without
+      # blocking unrelated work in the meantime. Flip continue-on-error to
+      # false once priority 1-2 findings are cleared.
+      - name: Report and check layout quality
+        continue-on-error: true
+        run: |
+          nix develop --command python3 tools/bpmn_feedback.py \
+            report fixtures/*.bpmn
+          nix develop --command python3 tools/bpmn_feedback.py check
