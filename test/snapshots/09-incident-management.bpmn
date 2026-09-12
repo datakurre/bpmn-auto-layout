@@ -161,8 +161,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Ready_Dev_di" bpmnElement="F_Ready_Dev">
         <di:waypoint x="1001" y="345" />
-        <di:waypoint x="1001" y="380" />
-        <di:waypoint x="1111" y="380" />
+        <di:waypoint x="1136" y="345" />
+        <di:waypoint x="1136" y="355" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_To_Dev_di" bpmnElement="F_To_Dev">
         <di:waypoint x="1161" y="380" />
@@ -171,8 +171,8 @@
       <bpmndi:BPMNEdge id="F_QA_Fail_di" bpmnElement="F_QA_Fail">
         <di:waypoint x="1591" y="645" />
         <di:waypoint x="1591" y="700" />
-        <di:waypoint x="1091" y="700" />
-        <di:waypoint x="1091" y="380" />
+        <di:waypoint x="1056" y="700" />
+        <di:waypoint x="1056" y="380" />
         <di:waypoint x="1111" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_OK_di" bpmnElement="F_QA_OK">

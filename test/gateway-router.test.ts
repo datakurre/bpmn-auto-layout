@@ -253,6 +253,219 @@ describe('gateway-router', () => {
       const ptsBelow = routeMap.get('Flow_Below')!;
       expect(ptsBelow[0]).toEqual({ x: 250, y: 225 });
     });
+
+    it('routes to targetPort top directly when corridor is clear', () => {
+      const tgt: Bounds = { x: 400, y: 300, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_TopTarget' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_TopTarget')!;
+      expect(pts).toHaveLength(3);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[1]).toEqual({ x: 425, y: 225 });
+      expect(pts[2]).toEqual({ x: 425, y: 300 });
+    });
+
+    it('routes to targetPort top with collinear exitY and entryY', () => {
+      const tgt: Bounds = { x: 400, y: 225, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_CollinearTop' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_CollinearTop')!;
+      expect(pts).toHaveLength(2);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[1]).toEqual({ x: 425, y: 225 });
+    });
+
+    it('routes to targetPort top via stepped path when direct corridor is obstructed above target', () => {
+      const tgt: Bounds = { x: 400, y: 300, width: 50, height: 50 };
+      const obstacle: Bounds = { x: 400, y: 50, width: 50, height: 200 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_SteppedTop' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, obstacle],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_SteppedTop')!;
+      expect(pts).toHaveLength(5);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[4]).toEqual({ x: 425, y: 300 });
+    });
+
+    it('routes to targetPort top via stepped path without obstacle above target and entryX - exitX <= 100', () => {
+      const tgt: Bounds = { x: 300, y: 300, width: 50, height: 50 };
+      const blocker: Bounds = { x: 305, y: 220, width: 10, height: 20 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_SteppedTopNarrow' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_SteppedTopNarrow')!;
+      expect(pts).toHaveLength(5);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      // entryX = 325, exitX = 250, entryX - exitX = 75 <= 100 -> stepX = 295
+      expect(pts[1]).toEqual({ x: 295, y: 225 });
+      // no obstacle above target -> gapY = entryY - 30 = 270
+      expect(pts[2]).toEqual({ x: 295, y: 270 });
+      expect(pts[3]).toEqual({ x: 325, y: 270 });
+      expect(pts[4]).toEqual({ x: 325, y: 300 });
+    });
+
+    it('falls back to direct path when both direct and stepped corridors to target top are blocked', () => {
+      const tgt: Bounds = { x: 400, y: 300, width: 50, height: 50 };
+      const blocker1: Bounds = { x: 400, y: 50, width: 50, height: 200 };
+      const blocker2: Bounds = { x: 250, y: 260, width: 100, height: 30 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_BlockedTop' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker1, blocker2],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_BlockedTop')!;
+      expect(pts).toHaveLength(3);
+    });
+
+    it('routes from bottomFlow to targetPort top', () => {
+      const tgt: Bounds = { x: 400, y: 325, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_BottomToTop' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+      });
+      const pts = routeMap.get('Flow_BottomToTop')!;
+      expect(pts[0]).toEqual({ x: 225, y: 250 });
+      expect(pts[2]).toEqual({ x: 425, y: 325 });
+    });
+
+    it('routes to targetPort bottom directly when corridor is clear', () => {
+      const tgt: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_BottomTarget' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_BottomTarget')!;
+      expect(pts).toHaveLength(3);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[2]).toEqual({ x: 425, y: 150 });
+    });
+
+    it('routes to targetPort bottom with collinear exitY and entryY', () => {
+      const tgt: Bounds = { x: 400, y: 175, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_CollinearBottom' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_CollinearBottom')!;
+      expect(pts).toHaveLength(2);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[1]).toEqual({ x: 425, y: 225 });
+    });
+
+    it('routes to targetPort bottom via stepped path when direct corridor is obstructed below target', () => {
+      const tgt: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const obstacle: Bounds = { x: 400, y: 180, width: 50, height: 100 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_SteppedBottom' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, obstacle],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_SteppedBottom')!;
+      expect(pts).toHaveLength(5);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[4]).toEqual({ x: 425, y: 150 });
+    });
+
+    it('routes to targetPort bottom via stepped path without obstacle below target and entryX - exitX <= 100', () => {
+      const tgt: Bounds = { x: 300, y: 100, width: 50, height: 50 };
+      const blocker: Bounds = { x: 305, y: 220, width: 10, height: 20 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_SteppedBottomNarrow' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_SteppedBottomNarrow')!;
+      expect(pts).toHaveLength(5);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      // entryX = 325, exitX = 250, entryX - exitX = 75 <= 100 -> stepX = 295
+      expect(pts[1]).toEqual({ x: 295, y: 225 });
+      // no obstacle below target -> gapY = entryY + 30 = 150 + 30 = 180
+      expect(pts[2]).toEqual({ x: 295, y: 180 });
+      expect(pts[3]).toEqual({ x: 325, y: 180 });
+      expect(pts[4]).toEqual({ x: 325, y: 150 });
+    });
+
+    it('falls back to direct path when both direct and stepped corridors to target bottom are blocked', () => {
+      const tgt: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const blocker1: Bounds = { x: 400, y: 180, width: 50, height: 100 };
+      const blocker2: Bounds = { x: 250, y: 160, width: 100, height: 30 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_BlockedBottom' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker1, blocker2],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_BlockedBottom')!;
+      expect(pts).toHaveLength(3);
+    });
+
+    it('routes from topFlow to targetPort bottom', () => {
+      const tgt: Bounds = { x: 400, y: 75, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_TopToBottom' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+      });
+      const pts = routeMap.get('Flow_TopToBottom')!;
+      expect(pts[0]).toEqual({ x: 225, y: 200 });
+      expect(pts[2]).toEqual({ x: 425, y: 125 });
+    });
   });
 
   describe('routeGatewayIncomingEdges', () => {
@@ -473,6 +686,17 @@ describe('gateway-router', () => {
 
       const ptsBelow = routes.get('Flow_Below')!;
       expect(ptsBelow[3]).toEqual({ x: 200, y: 225 }); // enters Left because feedback disabled bottom
+    });
+
+    it('handles backward feedback edge with undefined allBounds', () => {
+      const srcBack: Bounds = { x: 300, y: 185, width: 100, height: 80 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_BackNoBounds' }, sourceBounds: srcBack, isFeedback: true },
+      ];
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+      });
+      expect(routes.get('Flow_BackNoBounds')).toBeDefined();
     });
   });
 });

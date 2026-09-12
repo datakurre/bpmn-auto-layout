@@ -12,12 +12,14 @@ describe('Iteration 4: Cycles & Loops', () => {
       .addExclusiveGateway('Gate_Merge_A', 'Merge')
       .addTask('Task_A', 'Draft Document')
       .addTask('Task_B', 'Review Document')
+      .addExclusiveGateway('Gate_Approved', 'Approved?')
       .addEndEvent('End_1', 'Published')
       .addSequenceFlow('Flow_1', 'Start_1', 'Gate_Merge_A')
       .addSequenceFlow('Flow_To_A', 'Gate_Merge_A', 'Task_A')
       .addSequenceFlow('Flow_2', 'Task_A', 'Task_B')
-      .addSequenceFlow('Flow_Loop', 'Task_B', 'Gate_Merge_A')
-      .addSequenceFlow('Flow_3', 'Task_B', 'End_1');
+      .addSequenceFlow('Flow_To_Decision', 'Task_B', 'Gate_Approved')
+      .addSequenceFlow('Flow_Approve', 'Gate_Approved', 'End_1')
+      .addSequenceFlow('Flow_Loop', 'Gate_Approved', 'Gate_Merge_A');
 
     const inputXml = await builder.toXml();
     const resultXml = await layoutProcess(inputXml);

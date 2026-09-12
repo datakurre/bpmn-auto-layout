@@ -120,7 +120,7 @@ function extractNodeToLaneMap(scopeElement: any): Map<string, number> | undefine
   return nodeToLane;
 }
 
-interface ScopeRouteContext {
+export interface ScopeRouteContext {
   regularNodes: any[];
   boundaryEvents: any[];
   boundsMap: Map<string, Bounds>;
@@ -137,11 +137,108 @@ function getRefId(ref: any): string | undefined {
   return ref?.id || ref;
 }
 
+export interface IncomingFlowCandidate {
+  flow: any;
+  sourceBounds: Bounds;
+  isFeedback?: boolean;
+}
+
+export function assignMergeIncomingPorts(
+  flows: IncomingFlowCandidate[],
+  gwBounds: Bounds
+): Map<string, 'top' | 'bottom' | 'left'> {
+  const ports = new Map<string, 'top' | 'bottom' | 'left'>();
+  const gwCenterY = gwBounds.y + gwBounds.height / 2;
+
+  const forwardFlows: IncomingFlowCandidate[] = [];
+  for (const f of flows) {
+    const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gwBounds.x;
+    if (f.isFeedback || isBackwards) {
+      ports.set(f.flow.id, 'left');
+    } else {
+      forwardFlows.push(f);
+    }
+  }
+
+  const above: IncomingFlowCandidate[] = [];
+  const below: IncomingFlowCandidate[] = [];
+  const center: IncomingFlowCandidate[] = [];
+
+  for (const f of forwardFlows) {
+    const srcCenterY = f.sourceBounds.y + f.sourceBounds.height / 2;
+    const diff = srcCenterY - gwCenterY;
+    if (diff < -2) {
+      above.push(f);
+    } else if (diff > 2) {
+      below.push(f);
+    } else {
+      center.push(f);
+    }
+  }
+
+  above.sort((a, b) => b.sourceBounds.x - a.sourceBounds.x);
+  below.sort((a, b) => b.sourceBounds.x - a.sourceBounds.x);
+
+  if (above.length > 0) {
+    const topFlow = above.shift()!;
+    ports.set(topFlow.flow.id, 'top');
+  }
+  if (below.length > 0) {
+    const bottomFlow = below.shift()!;
+    ports.set(bottomFlow.flow.id, 'bottom');
+  }
+  for (const f of [...center, ...above, ...below]) {
+    ports.set(f.flow.id, 'left');
+  }
+
+  return ports;
+}
+
+export function computeMergeTargetPorts(
+  sequenceFlows: any[],
+  gatewaySet: Set<string>,
+  ctx: ScopeRouteContext
+): Map<string, 'top' | 'bottom' | 'left'> {
+  const targetPortMap = new Map<string, 'top' | 'bottom' | 'left'>();
+
+  const gwIncomingMap = new Map<string, IncomingFlowCandidate[]>();
+  for (const flow of sequenceFlows) {
+    const tgtId = getRefId(flow.targetRef);
+    const srcId = getRefId(flow.sourceRef);
+    if (tgtId && gatewaySet.has(tgtId)) {
+      const srcBounds = ctx.boundsMap.get(srcId!);
+      if (srcBounds) {
+        const list = gwIncomingMap.get(tgtId) || [];
+        list.push({
+          flow,
+          sourceBounds: srcBounds,
+          isFeedback: ctx.feedbackEdges?.has(flow.id),
+        });
+        gwIncomingMap.set(tgtId, list);
+      }
+    }
+  }
+
+  for (const [gwId, incomingFlows] of gwIncomingMap.entries()) {
+    if (incomingFlows.length <= 1) {
+      continue;
+    }
+    const gwBounds = ctx.boundsMap.get(gwId)!;
+    const ports = assignMergeIncomingPorts(incomingFlows, gwBounds);
+    for (const [flowId, port] of ports.entries()) {
+      targetPortMap.set(flowId, port);
+    }
+  }
+
+  return targetPortMap;
+}
+
 function partitionScopeFlows(
   sequenceFlows: any[],
   gatewaySet: Set<string>,
   ctx: ScopeRouteContext
 ): PartitionedFlows {
+  const targetPortMap = computeMergeTargetPorts(sequenceFlows, gatewaySet, ctx);
   const gatewayOutgoingFlows = new Map<string, GatewayFlowInfo[]>();
   const gatewayIncomingFlows = new Map<string, GatewayIncomingFlowInfo[]>();
   const otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }> = [];
@@ -159,6 +256,7 @@ function partitionScopeFlows(
           flow,
           targetBounds: tgtBounds,
           isFeedback: ctx.feedbackEdges?.has(flow.id),
+          targetPort: targetPortMap.get(flow.id),
         });
         gatewayOutgoingFlows.set(srcId!, list);
       } else if (gatewaySet.has(tgtId!)) {
@@ -222,6 +320,10 @@ function routeAllGatewayOutgoingFlows(
     for (const f of flows) {
       const waypoints = routeMap.get(f.flow.id)!;
       edges.push({ element: f.flow, waypoints });
+      const tgtId = getRefId(f.flow.targetRef);
+      if (tgtId && f.targetPort) {
+        getUsedPorts(ctx.usedPortsMap, tgtId).add(f.targetPort);
+      }
     }
   }
 

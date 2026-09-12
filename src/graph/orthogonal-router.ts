@@ -38,6 +38,30 @@ interface FeedbackRouteContext {
   allBounds?: Bounds[];
 }
 
+function getClearTargetStepX(tgt: Bounds, channelY: number, obstacles: Bounds[]): number {
+  let stepX = tgt.x - 20;
+  const tgtLeftY = Math.round(tgt.y + tgt.height / 2);
+  const minY = Math.min(tgtLeftY, channelY);
+  const maxY = Math.max(tgtLeftY, channelY);
+
+  let minObstacleX = Infinity;
+  for (const b of obstacles) {
+    if (b === tgt) {
+      continue;
+    }
+    if (stepX > b.x && stepX < b.x + b.width) {
+      if (Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)) {
+        minObstacleX = Math.min(minObstacleX, b.x);
+      }
+    }
+  }
+
+  if (minObstacleX < Infinity) {
+    stepX = minObstacleX - 30;
+  }
+  return stepX;
+}
+
 function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteContext): Point[] {
   const srcBottom: Point = {
     x: Math.round(src.x + src.width / 2),
@@ -69,7 +93,7 @@ function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteCo
 
   if (tgtBlocked) {
     const tgtLeft: Point = { x: tgt.x, y: Math.round(tgt.y + tgt.height / 2) };
-    const tgtStepX = tgt.x - 20;
+    const tgtStepX = getClearTargetStepX(tgt, ctx.channelY, ctx.allBounds!);
     waypoints.push({ x: tgtStepX, y: ctx.channelY }, { x: tgtStepX, y: tgtLeft.y }, tgtLeft);
   } else {
     waypoints.push({ x: tgtBottom.x, y: ctx.channelY }, tgtBottom);
