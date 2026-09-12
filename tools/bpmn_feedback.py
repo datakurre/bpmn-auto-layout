@@ -2238,6 +2238,60 @@ def check_gateway_straight_continuation_is_direct(root: ET.Element) -> list[str]
     return [f"{flow_id} has no BPMNEdge in the laid-out diagram"]
 
 
+def check_loop_back_diamond_picks_the_named_retry_edge(root: ET.Element) -> list[str]:
+    """Pins #68: two branches fork from Gateway_Fork and converge at
+    Gateway_Join, and Join has an extra edge back to one branch (the named
+    "retry" flow, Flow_Join_Validate) -- a genuine two-cycle-sharing-an-edge
+    case where detectBackEdges' plain DFS could equally mark either
+    Flow_Join_Validate or Flow_Validate_Join as the back edge, depending on
+    which fork branch is explored first (itself a function of BPMN document
+    order, per #68). This fixture's flow order currently makes the DFS
+    explore Task_Validate before Task_Prepare, so Task_Validate is fully
+    visited by the time Join's retry edge is considered, and the modeller's
+    own backward-drawn edge is the one marked back -- the sensible pick:
+    Task_Validate stays on the forward spine ahead of Gateway_Join, and the
+    retry edge routes directly back over a short span. Reversing the fork's
+    branch order (confirmed empirically, not pinned here since fixtures
+    pin invariants worth keeping rather than known bad output) instead
+    makes the DFS mark the branch's own forward completion edge as the back
+    edge, which relocates Task_Validate past Gateway_Join entirely and
+    produces a self-crossing route. See docs/bpmn-layout-rules.json's
+    layout.spine.selection entry for the full finding."""
+    problems: list[str] = []
+    bounds_by_element: dict[str, tuple[float, float, float, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            bounds = shape.find(q("dc", "Bounds"))
+            if element_id and bounds is not None:
+                bounds_by_element[element_id] = (
+                    float(bounds.get("x", "0")),
+                    float(bounds.get("y", "0")),
+                    float(bounds.get("width", "0")),
+                    float(bounds.get("height", "0")),
+                )
+    validate = bounds_by_element.get("Task_Validate")
+    join = bounds_by_element.get("Gateway_Join")
+    if not validate or not join:
+        return ["Task_Validate or Gateway_Join has no BPMNShape in the laid-out diagram"]
+    if validate[0] >= join[0]:
+        problems.append(
+            f"Task_Validate (x={validate[0]}) is not positioned before Gateway_Join (x={join[0]}) -- "
+            "the retry edge's back-edge choice appears to have flipped",
+        )
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            if edge.get("bpmnElement") != "Flow_Join_Validate":
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            if len(points) > 2:
+                problems.append(f"Flow_Join_Validate expected a direct route, got {len(points)} points: {points}")
+    return problems
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
@@ -2245,6 +2299,7 @@ REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
     "gateway-straight-continuation.bpmn": check_gateway_straight_continuation_is_direct,
+    "loop-back-diamond-choice.bpmn": check_loop_back_diamond_picks_the_named_retry_edge,
 }
 
 
