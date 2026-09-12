@@ -600,6 +600,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
             (outer["y"] + outer["height"]) - (inner["y"] + inner["height"]),
         )
 
+    # Container aspect ratio (#67): how far a subprocess's width:height
+    # strays from a usable diagram. A ratio far above LANDSCAPE_A4_RATIO
+    # (297/210 ~= 1.41) means the container reads as a bar, not a box.
+    subprocess_aspect_ratios: list[float] = []
+    for shape in shapes:
+        if shape["type"] != "subProcess":
+            continue
+        bounds = shape["bounds"]  # type: ignore[index]
+        height = bounds["height"]  # type: ignore[index]
+        if height > 0:
+            subprocess_aspect_ratios.append(bounds["width"] / height)  # type: ignore[index]
+    subprocess_max_aspect_ratio = round(max(subprocess_aspect_ratios), 2) if subprocess_aspect_ratios else None
+    subprocess_aspect_ratio_violations = sum(1 for ratio in subprocess_aspect_ratios if ratio > 8)
+
     node_containment_violations = 0
     node_containment_violation_details: list[dict[str, str]] = []
     padding_by_type: dict[str, list[float]] = {}
@@ -979,6 +993,8 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "canvas_area": round(canvas["width"] * canvas["height"], 2),
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
+            "subprocess_max_aspect_ratio": subprocess_max_aspect_ratio,
+            "subprocess_aspect_ratio_violations": subprocess_aspect_ratio_violations,
             "node_containment_violations": node_containment_violations,
             "node_containment_violation_details": node_containment_violation_details,
             "label_containment_violations": label_containment_violations,
@@ -2360,12 +2376,53 @@ def check_boundary_branch_successor_is_direct(root: ET.Element) -> list[str]:
     return [f"{flow_id} has no BPMNEdge in the laid-out diagram"]
 
 
+def check_subprocess_wraps_within_width_budget(root: ET.Element) -> list[str]:
+    """Pins #67: a subprocess with enough children to run past
+    SUBPROCESS_MAX_ASPECT_RATIO must wrap its spine onto additional track
+    rows instead of extending indefinitely -- 14 tasks in a single-file
+    chain would otherwise produce roughly a 3000x200 container (15:1).
+    Asserts SubProcess_1's own width:height ratio is at or below 8 (the
+    threshold #67 measured the corpus against) and that all 14 tasks plus
+    the inner start/end events fall fully inside its bounds."""
+    problems: list[str] = []
+    bounds_by_element: dict[str, tuple[float, float, float, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            bounds = shape.find(q("dc", "Bounds"))
+            if element_id and bounds is not None:
+                bounds_by_element[element_id] = (
+                    float(bounds.get("x", "0")),
+                    float(bounds.get("y", "0")),
+                    float(bounds.get("width", "0")),
+                    float(bounds.get("height", "0")),
+                )
+    container = bounds_by_element.get("SubProcess_1")
+    if not container:
+        return ["SubProcess_1 has no BPMNShape in the laid-out diagram"]
+    cx, cy, cw, ch = container
+    ratio = cw / ch if ch else float("inf")
+    if ratio > 8:
+        problems.append(f"SubProcess_1 has width:height ratio {ratio:.2f}, expected <= 8 (it should have wrapped)")
+    child_ids = ["Sub_Start", "Sub_End"] + [f"Task_{i}" for i in range(1, 15)]
+    for child_id in child_ids:
+        child = bounds_by_element.get(child_id)
+        if not child:
+            problems.append(f"{child_id} has no BPMNShape in the laid-out diagram")
+            continue
+        nx, ny, nw, nh = child
+        if nx < cx or ny < cy or nx + nw > cx + cw or ny + nh > cy + ch:
+            problems.append(f"{child_id} (x={nx}..{nx + nw}, y={ny}..{ny + nh}) falls outside SubProcess_1's bounds")
+    return problems
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "lane-branch-membership.bpmn": check_lane_branch_lands_in_its_own_band,
     "boundary-branch-stays-with-host.bpmn": check_boundary_branch_successor_is_direct,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
+    "subprocess-width-budget-wraps.bpmn": check_subprocess_wraps_within_width_budget,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
     "gateway-straight-continuation.bpmn": check_gateway_straight_continuation_is_direct,

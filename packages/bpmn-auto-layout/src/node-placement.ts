@@ -337,6 +337,7 @@ function buildTrackColMapsWithDim(
   colWidth: number,
   dimensionOf: (node: any) => { width: number; height: number } = getElementDimensions,
   preferredTracks: Map<string, number> = new Map(),
+  widthBudgetCols?: number,
 ): { nodeTrack: Map<string, number>; nodeCol: Map<string, number> } {
   const nodeTrack = new Map<string, number>();
   const nodeCol = new Map<string, number>();
@@ -357,11 +358,20 @@ function buildTrackColMapsWithDim(
     }
   }
 
-  // Assign spine nodes to track 0
+  // Assign spine nodes to track 0, wrapping onto a fresh row of tracks
+  // whenever a width budget is given and the spine would otherwise exceed
+  // it -- the one new placement capability #67 asks for, so a subprocess
+  // budgeted by its parent grows taller instead of arbitrarily wide. A
+  // lane hint always wins over the wrapped row's track (#65 is a hard
+  // constraint); WRAP_ROW_TRACK_GAP tracks separate each wrapped row from
+  // the next so a typical single level of branch fan-out above or below a
+  // row does not collide with its neighbor.
+  const WRAP_ROW_TRACK_GAP = 3;
   let col = 0;
+  let wrapRow = 0;
   for (let index = 0; index < spineNodeIds.length; index += 1) {
     const id = spineNodeIds[index]!;
-    nodeTrack.set(id, preferredTracks.get(id) ?? 0);
+    nodeTrack.set(id, preferredTracks.get(id) ?? wrapRow * WRAP_ROW_TRACK_GAP);
     nodeCol.set(id, col);
     const node = nodesById.get(id);
     const dim = dimensionOf(node);
@@ -369,8 +379,18 @@ function buildTrackColMapsWithDim(
       index + 1 < spineNodeIds.length ? nodesById.get(spineNodeIds[index + 1]!) : undefined;
     if (next) {
       const nextWidth = dimensionOf(next).width;
-      col +=
+      const step =
         dim.width / (2 * colWidth) + DEFAULT_FLOW_GAP / colWidth + nextWidth / (2 * colWidth);
+      if (
+        widthBudgetCols !== undefined &&
+        col + step > widthBudgetCols &&
+        !preferredTracks.has(id)
+      ) {
+        col = 0;
+        wrapRow += 1;
+      } else {
+        col += step;
+      }
     }
   }
 
@@ -550,13 +570,77 @@ const SUBPROCESS_PAD_H = 40;
 const SUBPROCESS_PAD_V = 30;
 
 /**
- * Recursively compute the layout of a subprocess's children, derive the
- * container size from the resulting bounding box, and install all child
- * NodeLayout entries (with isSubProcessChild=true) into the parent's
- * layoutNodes map at their absolute canvas positions.
+ * Beyond this width:height ratio, a subprocess's children are laid out
+ * again with a width budget so the spine wraps onto additional rows of
+ * tracks instead of running on indefinitely (#67). Chosen from the
+ * evidence in #67: worst offenders in the corpus ran 20-27:1, the next
+ * tier down sat at 8.5:1, so this sits above ordinary wide-but-reasonable
+ * subprocesses and below the cases that actually motivated the issue.
+ */
+const SUBPROCESS_MAX_ASPECT_RATIO = 6;
+
+/**
+ * Lay out a subprocess's children once, unbudgeted. If the result would
+ * exceed SUBPROCESS_MAX_ASPECT_RATIO, derive a width budget that targets
+ * LANDSCAPE_A4_RATIO from that same layout's content area and lay out
+ * again with the budget applied, so the spine wraps instead of extending.
+ * Computed once per subprocess and the result is shared by both call sites
+ * that used to independently recompute the same layout (#67).
+ */
+function layoutSubprocessBudgeted(
+  node: any,
+  opts: ResolvedLayoutOptions,
+): { result: ProcessLayoutResult | undefined; width: number; height: number } {
+  const childNodes = (node.flowElements || []).filter(
+    (el: any) => el.$type !== "bpmn:SequenceFlow",
+  );
+  if (childNodes.length === 0) {
+    return { result: undefined, width: 360, height: 200 };
+  }
+
+  const bbox = (nodes: NodeLayout[]) => ({
+    minX: Math.min(...nodes.map((n) => n.x)),
+    minY: Math.min(...nodes.map((n) => n.y)),
+    maxX: Math.max(...nodes.map((n) => n.x + n.width)),
+    maxY: Math.max(...nodes.map((n) => n.y + n.height)),
+  });
+
+  let result = computeProcessLayout(node, opts);
+  let placed = Array.from(result.nodes.values());
+  if (placed.length === 0) {
+    return { result: undefined, width: 360, height: 200 };
+  }
+  let box = bbox(placed);
+  let contentW = box.maxX - box.minX;
+  let contentH = box.maxY - box.minY;
+
+  if (contentH > 0 && contentW / contentH > SUBPROCESS_MAX_ASPECT_RATIO) {
+    const widthBudget = Math.sqrt(contentW * contentH * LANDSCAPE_A4_RATIO);
+    const wrapped = computeProcessLayout(node, opts, widthBudget);
+    const wrappedPlaced = Array.from(wrapped.nodes.values());
+    if (wrappedPlaced.length > 0) {
+      result = wrapped;
+      placed = wrappedPlaced;
+      box = bbox(placed);
+      contentW = box.maxX - box.minX;
+      contentH = box.maxY - box.minY;
+    }
+  }
+
+  return {
+    result,
+    width: Math.max(360, contentW + SUBPROCESS_PAD_H * 2),
+    height: Math.max(200, contentH + SUBPROCESS_PAD_V * 2),
+  };
+}
+
+/**
+ * Install a subprocess's already-computed child layout (from
+ * layoutSubprocessBudgeted) into the parent's layoutNodes map at absolute
+ * canvas positions, with isSubProcessChild=true.
  *
- * Returns the computed { width, height } of the subprocess container so that
- * the caller can place the outer node with the correct size.
+ * Returns the container's { width, height } so that the caller can place
+ * the outer node with the correct size.
  */
 function layoutSubProcessChildrenRecursive(
   node: any,
@@ -565,16 +649,11 @@ function layoutSubProcessChildrenRecursive(
   track: number,
   layoutNodes: Map<string, NodeLayout>,
   opts: ResolvedLayoutOptions,
+  subResult: ProcessLayoutResult | undefined,
 ): { width: number; height: number } {
-  const childNodes = (node.flowElements || []).filter(
-    (el: any) => el.$type !== "bpmn:SequenceFlow",
-  );
-  if (childNodes.length === 0) {
+  if (!subResult) {
     return { width: 360, height: 200 };
   }
-
-  // Run the full layout algorithm on the subprocess's children in local coords.
-  const subResult = computeProcessLayout(node, opts);
 
   // Determine bounding box of all child nodes in local layout coordinates.
   const placed = Array.from(subResult.nodes.values());
@@ -794,6 +873,7 @@ function placeBoundaryBranchesAbove(
 export function computeProcessLayout(
   process: any,
   opts: ResolvedLayoutOptions,
+  widthBudget?: number,
 ): ProcessLayoutResult {
   const allFlowElements: any[] = process.flowElements || [];
   const topNodes = allFlowElements.filter((el) => el.$type !== "bpmn:SequenceFlow");
@@ -814,31 +894,16 @@ export function computeProcessLayout(
   }
 
   // 0. Pre-compute subprocess child layouts so their sizes are available for
-  //    column/track assignment and track-clearance calculation.
-  //    These will be re-applied (at absolute coords) after the outer layout.
+  //    column/track assignment and track-clearance calculation. The full
+  //    ProcessLayoutResult is cached here and reused by the absolute-coordinate
+  //    install pass (step 5) instead of being recomputed there (#67).
   const subprocessSizes = new Map<string, { width: number; height: number }>();
+  const subprocessLayouts = new Map<string, ProcessLayoutResult>();
   for (const node of topNodes) {
     if (node.$type === "bpmn:SubProcess") {
-      const childNodes = (node.flowElements || []).filter(
-        (el: any) => el.$type !== "bpmn:SequenceFlow",
-      );
-      if (childNodes.length === 0) {
-        subprocessSizes.set(node.id, { width: 360, height: 200 });
-        continue;
-      }
-      const subResult = computeProcessLayout(node, opts);
-      const placed = Array.from(subResult.nodes.values());
-      if (placed.length === 0) {
-        subprocessSizes.set(node.id, { width: 360, height: 200 });
-        continue;
-      }
-      const minX = Math.min(...placed.map((n) => n.x));
-      const minY = Math.min(...placed.map((n) => n.y));
-      const maxX = Math.max(...placed.map((n) => n.x + n.width));
-      const maxY = Math.max(...placed.map((n) => n.y + n.height));
-      const containerW = Math.max(360, (maxX - minX) + SUBPROCESS_PAD_H * 2);
-      const containerH = Math.max(200, (maxY - minY) + SUBPROCESS_PAD_V * 2);
-      subprocessSizes.set(node.id, { width: containerW, height: containerH });
+      const { result, width, height } = layoutSubprocessBudgeted(node, opts);
+      subprocessSizes.set(node.id, { width, height });
+      if (result) subprocessLayouts.set(node.id, result);
     }
   }
 
@@ -870,6 +935,7 @@ export function computeProcessLayout(
     opts.colWidth,
     effectiveDim,
     laneOrderIndex,
+    widthBudget !== undefined ? widthBudget / opts.colWidth : undefined,
   );
 
   // 4. Compute pixel coordinates
@@ -947,6 +1013,7 @@ export function computeProcessLayout(
       track,
       layoutNodes,
       opts,
+      subprocessLayouts.get(node.id),
     );
   }
 
