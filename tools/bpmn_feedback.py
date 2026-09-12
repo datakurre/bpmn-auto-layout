@@ -197,6 +197,37 @@ def segment_intersects_box(a: tuple[float, float], b: tuple[float, float], box: 
     return False
 
 
+def is_monotonic_lane_crossing(
+    points: list[tuple[float, float]],
+    candidate_bounds: dict[str, float],
+    source_container_bounds: dict[str, float],
+    target_container_bounds: dict[str, float],
+    tolerance: float = 0.5,
+) -> bool:
+    """Whether a route between two different lanes/pools may cross
+    `candidate_bounds` -- a container neither endpoint belongs to -- because
+    it sits strictly between the endpoints' own containers and the route's
+    full extent never strays outside the corridor spanning them. Lanes are
+    stacked bands (this engine only stacks them along y); a route connecting
+    lane 1 to lane 3 has no geometry that avoids lane 2 in between, and that
+    is monotonic traversal to its own two endpoints, not an excursion into
+    someone else's territory (#64; #11 is the real excursion case this
+    exemption must not also swallow -- checked below by bounding the route
+    to the corridor, not just checking the candidate's position)."""
+    lo = min(source_container_bounds["y"], target_container_bounds["y"])
+    hi = max(
+        source_container_bounds["y"] + source_container_bounds["height"],
+        target_container_bounds["y"] + target_container_bounds["height"],
+    )
+    candidate_lo = candidate_bounds["y"]
+    candidate_hi = candidate_lo + candidate_bounds["height"]
+    if candidate_lo < lo - tolerance or candidate_hi > hi + tolerance:
+        return False  # not actually between the endpoints' own containers
+    route_lo = min(p[1] for p in points)
+    route_hi = max(p[1] for p in points)
+    return route_lo >= lo - tolerance and route_hi <= hi + tolerance
+
+
 def point_within(point: tuple[float, float], box: dict[str, float], tolerance: float = 0.5) -> bool:
     x, y = point
     return (
@@ -339,6 +370,20 @@ def subprocess_parents(root: ET.Element) -> dict[str, str | None]:
     for process in root.findall(q("bpmn", "process")):
         visit(process, None)
     return parents
+
+
+def subprocess_ancestors(element_id: str | None, element_parents: dict[str, str | None]) -> set[str]:
+    """Every expanded-subprocess ancestor of `element_id`, at any nesting
+    depth -- subprocess_parents only records the immediate one (#64). Walks
+    up the same map subprocess_parents already builds: element_parents maps
+    a subprocess itself to *its* immediate parent, so repeatedly following
+    it from a leaf reconstructs the full chain for free."""
+    ancestors: set[str] = set()
+    current = element_parents.get(element_id) if element_id else None
+    while current and current not in ancestors:
+        ancestors.add(current)
+        current = element_parents.get(current)
+    return ancestors
 
 
 def lane_owners(root: ET.Element) -> dict[str, str]:
@@ -674,6 +719,15 @@ def collect_metrics(path: Path) -> dict[str, object]:
         if kind == "participant":
             return element_participant.get(endpoint) == container_id
         return False
+
+    def endpoint_container_id(kind: str, endpoint: str | None) -> str | None:
+        if not endpoint:
+            return None
+        if kind == "lane":
+            return element_lane.get(endpoint)
+        if kind == "participant":
+            return element_participant.get(endpoint)
+        return None
     for edge in edges:
         source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
         source = shapes_by_plane_target.get((edge["plane"], source_id))
@@ -765,7 +819,16 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 container_id = str(container["bpmnElement"])
                 if container_id in endpoints:
                     continue
-                owned = [element_parents.get(endpoint) == container_id for endpoint in endpoints if endpoint]
+                # A descendant at *any* depth is internal to this container,
+                # not just an immediate child -- element_parents only records
+                # the immediate parent, so this walks the chain (#64). Each
+                # ancestor level still gets its own bounds check below (the
+                # loop visits every subprocess shape), so the nearest
+                # container -- the one that actually bounds the edge -- is
+                # the one whose check can actually fail.
+                owned = [
+                    container_id in subprocess_ancestors(endpoint, element_parents) for endpoint in endpoints if endpoint
+                ]
                 if owned and all(owned):
                     # Wholly internal to this container: every waypoint must
                     # still stay inside it -- a route between two of its own
@@ -803,10 +866,25 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 if any(container_owns_endpoint(kind, container_id, endpoint) for endpoint in endpoints):
                     continue
                 if segment_intersects_box(a, b, container["bounds"]):  # type: ignore[arg-type]
-                    edge_container_intersections += 1
-                    edge_container_intersection_details.append(
-                        {"edge": str(edge["bpmnElement"]), "container": container_id}
+                    source_container_id = endpoint_container_id(kind, source_id)
+                    target_container_id = endpoint_container_id(kind, target_id)
+                    source_container = (
+                        shapes_by_plane_id.get((edge["plane"], source_container_id)) if source_container_id else None
                     )
+                    target_container = (
+                        shapes_by_plane_id.get((edge["plane"], target_container_id)) if target_container_id else None
+                    )
+                    exempt = bool(source_container and target_container) and is_monotonic_lane_crossing(
+                        points,  # type: ignore[arg-type]
+                        container["bounds"],  # type: ignore[arg-type]
+                        source_container["bounds"],  # type: ignore[index,arg-type]
+                        target_container["bounds"],  # type: ignore[index,arg-type]
+                    )
+                    if not exempt:
+                        edge_container_intersections += 1
+                        edge_container_intersection_details.append(
+                            {"edge": str(edge["bpmnElement"]), "container": container_id}
+                        )
         if points and len(points) >= 2 and source_bounds and target_bounds:
             source_side = attach_side(points[0], source_bounds)
             target_side = attach_side(points[-1], target_bounds)
@@ -2347,6 +2425,94 @@ def metric_selftests() -> None:
         )
     )["layout"]
     expect("node_containment_violations (subprocess child overflows its bounds)", layout["node_containment_violations"], 1)
+
+    # edge_container_intersections (#64): a depth-2 nested subprocess. An
+    # edge wholly inside the *inner* subprocess must not be reported against
+    # the *outer* one just because subprocess_parents only ever recorded the
+    # immediate parent -- the inner container sits entirely inside the outer
+    # one, so the edge trivially satisfies the outer container's own bounds
+    # check too.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:subProcess id="Outer" name="Outer">\n'
+            '      <bpmn:subProcess id="Inner" name="Inner">\n'
+            '        <bpmn:task id="A" name="A" />\n        <bpmn:task id="B" name="B" />\n'
+            '        <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n'
+            "      </bpmn:subProcess>\n"
+            "    </bpmn:subProcess>\n",
+            '      <bpmndi:BPMNShape id="Outer_di" bpmnElement="Outer"><dc:Bounds x="0" y="0" width="400" height="300" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Inner_di" bpmnElement="Inner"><dc:Bounds x="50" y="50" width="300" height="150" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="80" y="80" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="220" y="80" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="180" y="120" />\n        <di:waypoint x="220" y="120" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect(
+        "edge_container_intersections (depth-2 nesting: inner edge correctly inside both containers)",
+        layout["edge_container_intersections"],
+        0,
+    )
+
+    # edge_container_intersections (#64): three stacked lanes, a flow from
+    # lane 1 to lane 3. Lane 2 sits strictly between them and the route never
+    # strays outside the corridor spanning lanes 1-3 -- monotonic traversal
+    # to its own two endpoints, not an excursion into lane 2's territory.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:laneSet id="LaneSet">\n'
+            '      <bpmn:lane id="Lane1" name="Lane1"><bpmn:flowNodeRef>A</bpmn:flowNodeRef></bpmn:lane>\n'
+            '      <bpmn:lane id="Lane2" name="Lane2" />\n'
+            '      <bpmn:lane id="Lane3" name="Lane3"><bpmn:flowNodeRef>C</bpmn:flowNodeRef></bpmn:lane>\n'
+            "    </bpmn:laneSet>\n"
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="C" name="C" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="C" />\n',
+            '      <bpmndi:BPMNShape id="Lane1_di" bpmnElement="Lane1"><dc:Bounds x="0" y="0" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Lane2_di" bpmnElement="Lane2"><dc:Bounds x="0" y="100" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Lane3_di" bpmnElement="Lane3"><dc:Bounds x="0" y="200" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="20" y="10" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="20" y="210" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="70" y="90" />\n        <di:waypoint x="70" y="210" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect(
+        "edge_container_intersections (flow spans lane 1 to lane 3, monotonic through lane 2)",
+        layout["edge_container_intersections"],
+        0,
+    )
+
+    # Same three lanes, but the route from lane 1 to lane 3 detours below
+    # lane 3's own bottom edge before coming back -- a real excursion, not
+    # monotonic traversal, and must still be caught (#64's own caution: this
+    # exemption must not swallow #11's real case).
+    excursion_layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:laneSet id="LaneSet">\n'
+            '      <bpmn:lane id="Lane1" name="Lane1"><bpmn:flowNodeRef>A</bpmn:flowNodeRef></bpmn:lane>\n'
+            '      <bpmn:lane id="Lane2" name="Lane2" />\n'
+            '      <bpmn:lane id="Lane3" name="Lane3"><bpmn:flowNodeRef>C</bpmn:flowNodeRef></bpmn:lane>\n'
+            "    </bpmn:laneSet>\n"
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="C" name="C" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="C" />\n',
+            '      <bpmndi:BPMNShape id="Lane1_di" bpmnElement="Lane1"><dc:Bounds x="0" y="0" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Lane2_di" bpmnElement="Lane2"><dc:Bounds x="0" y="100" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Lane3_di" bpmnElement="Lane3"><dc:Bounds x="0" y="200" width="400" height="100" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="20" y="10" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="20" y="210" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="70" y="90" />\n        <di:waypoint x="70" y="350" />\n'
+            '        <di:waypoint x="150" y="350" />\n        <di:waypoint x="150" y="210" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect(
+        "edge_container_intersections (a real excursion below lane 3 must still be caught)",
+        excursion_layout["edge_container_intersections"] > 0,
+        True,
+    )
 
     # named_label_coverage.missing: a named gateway with no BPMNLabel at all
     # -- a real, countable finding, not vacuous, even for an engine that

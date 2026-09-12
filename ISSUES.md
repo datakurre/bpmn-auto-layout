@@ -296,14 +296,27 @@ and ends one branch on an `errorEventDefinition` end event.
 `nix develop --command python3 tools/bpmn_feedback.py check` on this fixture
 reports:
 
-- `Inner_Flow_Start_Task` and `Inner_Flow_Task_End` (both entirely inside
-  `SubProcess_Inner`) intersect the *outer* container `SubProcess_Outer` (L1).
-  This is the nesting-depth-2 case the corpus previously could not produce.
+- ~~`Inner_Flow_Start_Task` and `Inner_Flow_Task_End` (both entirely inside
+  `SubProcess_Inner`) intersect the *outer* container `SubProcess_Outer`
+  (L1).~~ **Correction (#64):** this was a checker defect, not an engine
+  one. `edge_container_intersections` resolved only the *immediate*
+  subprocess parent, so at nesting depth 2 an edge wholly inside
+  `SubProcess_Inner` never matched `SubProcess_Outer` by direct equality and
+  fell through to the blanket intersection check against it -- which is of
+  course true, since `SubProcess_Inner` sits entirely inside
+  `SubProcess_Outer`. The geometry was correct on every axis; 134 of 153
+  such findings across the full corpus were this same false positive.
+  Fixed by resolving the full ancestor chain instead of the immediate
+  parent alone. This fixture's nesting-depth-2 case now correctly scores
+  `edge_container_intersections == 0`.
 - `Sub_Flow_Split_Standard`'s label intersects both its own gateway and its
   target task (L2).
 
-Not fixed here — this fixture's purpose is to make the defect visible, not to
-change the routing algorithm in the same change as a corpus-coverage fix.
+Not fixed here (routing/label placement) — this fixture's purpose is to make
+defects visible, not to change the routing algorithm in the same change as a
+corpus-coverage fix. The containment *checker* defect above was fixed
+separately in #64, since it blocked evaluating every other containment
+finding in the corpus.
 
 ## Fixture: `activity-gateway-vendor-coverage.bpmn`
 
@@ -342,10 +355,11 @@ single-concern invariant (see `AGENTS.md`).
 
 ## Suggested handoff for a new agent
 
-Two coverage gaps closed after this review now have their own findings above
-and are worth picking up alongside the original priority list:
-`collaboration-lanes-messages.bpmn`'s lane-label/message-flow defects, and
-`nested-subprocess-exceptions.bpmn`'s nesting-depth-2 containment defect.
+One coverage gap closed after this review now has its own finding above and
+is worth picking up alongside the original priority list:
+`collaboration-lanes-messages.bpmn`'s lane-label/message-flow defects.
+(`nested-subprocess-exceptions.bpmn`'s reported nesting-depth-2 containment
+defect was corrected above -- it was never an engine defect; see #64.)
 
 Otherwise, start with `gateways-branches-loops.bpmn` and
 `subprocess-boundary-data-lanes.bpmn`, not with the simple fixtures. Reproduce
