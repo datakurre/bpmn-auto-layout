@@ -11,6 +11,7 @@ interface TrackContext {
   tracks: Map<string, number>;
   graph: DirectedGraph;
   feedbackEdges?: Set<string>;
+  nodeToLane?: Map<string, number>;
 }
 
 interface ColConfig {
@@ -158,7 +159,7 @@ function computeLaneAwareTracks(
 
   for (let l = 0; l <= maxLane; l++) {
     const laneNodes = graph.getNodes().filter((n) => (nodeToLane.get(n.id) ?? 0) === l);
-    const ctx: TrackContext = { tracks: localTracks, graph, feedbackEdges };
+    const ctx: TrackContext = { tracks: localTracks, graph, feedbackEdges, nodeToLane };
 
     for (let r = 0; r <= maxRank; r++) {
       const nodesInRank = laneNodes.filter((n) => (ranks.get(n.id) || 0) === r);
@@ -253,9 +254,15 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
     return (ctx.tracks.get(hostId) || 0) + 1;
   }
   const parentTrack = ctx.tracks.get(parentId) || 0;
-  const siblings = ctx.graph
+  let siblings = ctx.graph
     .outEdges(parentId)
     .filter((e) => !ctx.feedbackEdges?.has(e.id) && !e.id.startsWith('_attach_'));
+
+  if (ctx.nodeToLane) {
+    const currentLane = ctx.nodeToLane.get(nodeId);
+    siblings = siblings.filter((e) => ctx.nodeToLane!.get(e.target) === currentLane);
+  }
+
   if (siblings.length <= 1) {
     return parentTrack;
   }

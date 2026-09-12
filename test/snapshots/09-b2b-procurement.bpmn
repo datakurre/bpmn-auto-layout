@@ -82,13 +82,13 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Pool_Buyer_di" bpmnElement="Pool_Buyer">
-        <dc:Bounds x="100" y="80" width="1322" height="278" />
+        <dc:Bounds x="100" y="80" width="1322" height="240" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Purchasing_di" bpmnElement="Lane_Purchasing">
-        <dc:Bounds x="130" y="80" width="1292" height="158" />
+        <dc:Bounds x="130" y="80" width="1292" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Finance_di" bpmnElement="Lane_Finance">
-        <dc:Bounds x="130" y="238" width="1292" height="120" />
+        <dc:Bounds x="130" y="200" width="1292" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Start_di" bpmnElement="Buyer_Start">
         <dc:Bounds x="180" y="122" width="36" height="36" />
@@ -103,7 +103,7 @@
         <dc:Bounds x="596" y="115" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Cancel_End_di" bpmnElement="Buyer_Cancel_End">
-        <dc:Bounds x="738" y="182" width="36" height="36" />
+        <dc:Bounds x="738" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Receive_Notice_di" bpmnElement="Buyer_Receive_Notice">
         <dc:Bounds x="866" y="100" width="100" height="80" />
@@ -115,21 +115,19 @@
         <dc:Bounds x="1346" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Issue_Guarantee_di" bpmnElement="Buyer_Issue_Guarantee">
-        <dc:Bounds x="706" y="280" width="100" height="80" />
+        <dc:Bounds x="706" y="220" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Process_Invoice_di" bpmnElement="Buyer_Process_Invoice">
-        <dc:Bounds x="1186" y="280" width="100" height="80" />
+        <dc:Bounds x="1186" y="220" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BF_Reject_di" bpmnElement="BF_Reject">
         <di:waypoint x="646" y="140" />
-        <di:waypoint x="692" y="140" />
-        <di:waypoint x="692" y="200" />
-        <di:waypoint x="738" y="200" />
+        <di:waypoint x="738" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BF_Cross_Finance_di" bpmnElement="BF_Cross_Finance">
         <di:waypoint x="621" y="165" />
-        <di:waypoint x="621" y="320" />
-        <di:waypoint x="706" y="320" />
+        <di:waypoint x="621" y="260" />
+        <di:waypoint x="706" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BF3_di" bpmnElement="BF3">
         <di:waypoint x="536" y="140" />
@@ -144,8 +142,8 @@
         <di:waypoint x="436" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BF_Await_Shipment_di" bpmnElement="BF_Await_Shipment">
-        <di:waypoint x="806" y="320" />
-        <di:waypoint x="836" y="320" />
+        <di:waypoint x="806" y="260" />
+        <di:waypoint x="836" y="260" />
         <di:waypoint x="836" y="140" />
         <di:waypoint x="866" y="140" />
       </bpmndi:BPMNEdge>
@@ -156,122 +154,122 @@
       <bpmndi:BPMNEdge id="BF_Cross_Pay_di" bpmnElement="BF_Cross_Pay">
         <di:waypoint x="1126" y="140" />
         <di:waypoint x="1156" y="140" />
-        <di:waypoint x="1156" y="320" />
-        <di:waypoint x="1186" y="320" />
+        <di:waypoint x="1156" y="260" />
+        <di:waypoint x="1186" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="BF_Complete_di" bpmnElement="BF_Complete">
-        <di:waypoint x="1286" y="320" />
-        <di:waypoint x="1316" y="320" />
+        <di:waypoint x="1286" y="260" />
+        <di:waypoint x="1316" y="260" />
         <di:waypoint x="1316" y="140" />
         <di:waypoint x="1346" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNShape id="Pool_Supplier_di" bpmnElement="Pool_Supplier">
-        <dc:Bounds x="100" y="418" width="1066" height="360" />
+        <dc:Bounds x="100" y="380" width="1066" height="360" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales">
-        <dc:Bounds x="130" y="418" width="1036" height="240" />
+        <dc:Bounds x="130" y="380" width="1036" height="240" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Logistics_di" bpmnElement="Lane_Logistics">
-        <dc:Bounds x="130" y="658" width="1036" height="120" />
+        <dc:Bounds x="130" y="620" width="1036" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Check_Capacity_di" bpmnElement="Supplier_Check_Capacity">
-        <dc:Bounds x="180" y="498" width="100" height="80" />
+        <dc:Bounds x="180" y="460" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Gateway_Price_di" bpmnElement="Supplier_Gateway_Price">
-        <dc:Bounds x="340" y="513" width="50" height="50" />
+        <dc:Bounds x="340" y="475" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Draft_Quote_di" bpmnElement="Supplier_Draft_Quote">
-        <dc:Bounds x="450" y="438" width="100" height="80" />
+        <dc:Bounds x="450" y="400" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Confirm_Order_di" bpmnElement="Supplier_Confirm_Order">
-        <dc:Bounds x="450" y="558" width="100" height="80" />
+        <dc:Bounds x="450" y="520" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Produce_di" bpmnElement="Supplier_Produce">
-        <dc:Bounds x="610" y="678" width="100" height="80" />
+        <dc:Bounds x="610" y="640" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Dispatch_di" bpmnElement="Supplier_Dispatch">
-        <dc:Bounds x="770" y="678" width="100" height="80" />
+        <dc:Bounds x="770" y="640" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Send_Invoice_di" bpmnElement="Supplier_Send_Invoice">
-        <dc:Bounds x="930" y="678" width="100" height="80" />
+        <dc:Bounds x="930" y="640" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_End_di" bpmnElement="Supplier_End">
-        <dc:Bounds x="1090" y="700" width="36" height="36" />
+        <dc:Bounds x="1090" y="662" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="SF_Quote_di" bpmnElement="SF_Quote">
-        <di:waypoint x="365" y="513" />
-        <di:waypoint x="365" y="478" />
-        <di:waypoint x="450" y="478" />
+        <di:waypoint x="365" y="475" />
+        <di:waypoint x="365" y="440" />
+        <di:waypoint x="450" y="440" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Std_di" bpmnElement="SF_Std">
-        <di:waypoint x="365" y="563" />
-        <di:waypoint x="365" y="598" />
-        <di:waypoint x="450" y="598" />
+        <di:waypoint x="365" y="525" />
+        <di:waypoint x="365" y="560" />
+        <di:waypoint x="450" y="560" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF1_di" bpmnElement="SF1">
-        <di:waypoint x="280" y="538" />
-        <di:waypoint x="340" y="538" />
+        <di:waypoint x="280" y="500" />
+        <di:waypoint x="340" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_To_Prod_1_di" bpmnElement="SF_To_Prod_1">
-        <di:waypoint x="550" y="478" />
-        <di:waypoint x="580" y="478" />
-        <di:waypoint x="580" y="718" />
-        <di:waypoint x="610" y="718" />
+        <di:waypoint x="550" y="440" />
+        <di:waypoint x="580" y="440" />
+        <di:waypoint x="580" y="680" />
+        <di:waypoint x="610" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_To_Prod_2_di" bpmnElement="SF_To_Prod_2">
-        <di:waypoint x="550" y="598" />
-        <di:waypoint x="580" y="598" />
-        <di:waypoint x="580" y="718" />
-        <di:waypoint x="610" y="718" />
+        <di:waypoint x="550" y="560" />
+        <di:waypoint x="580" y="560" />
+        <di:waypoint x="580" y="680" />
+        <di:waypoint x="610" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Dispatch_di" bpmnElement="SF_Dispatch">
-        <di:waypoint x="710" y="718" />
-        <di:waypoint x="770" y="718" />
+        <di:waypoint x="710" y="680" />
+        <di:waypoint x="770" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Invoice_di" bpmnElement="SF_Invoice">
-        <di:waypoint x="870" y="718" />
-        <di:waypoint x="930" y="718" />
+        <di:waypoint x="870" y="680" />
+        <di:waypoint x="930" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Done_di" bpmnElement="SF_Done">
-        <di:waypoint x="1030" y="718" />
-        <di:waypoint x="1090" y="718" />
+        <di:waypoint x="1030" y="680" />
+        <di:waypoint x="1090" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_PO_di" bpmnElement="Msg_PO">
         <di:waypoint x="326" y="180" />
-        <di:waypoint x="326" y="339" />
-        <di:waypoint x="230" y="339" />
-        <di:waypoint x="230" y="498" />
+        <di:waypoint x="326" y="320" />
+        <di:waypoint x="230" y="320" />
+        <di:waypoint x="230" y="460" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Quote_di" bpmnElement="Msg_Quote">
-        <di:waypoint x="500" y="438" />
-        <di:waypoint x="500" y="309" />
-        <di:waypoint x="486" y="309" />
+        <di:waypoint x="500" y="400" />
+        <di:waypoint x="500" y="290" />
+        <di:waypoint x="486" y="290" />
         <di:waypoint x="486" y="180" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Confirm_di" bpmnElement="Msg_Confirm">
-        <di:waypoint x="550" y="598" />
-        <di:waypoint x="570" y="598" />
-        <di:waypoint x="570" y="369" />
-        <di:waypoint x="486" y="369" />
+        <di:waypoint x="550" y="560" />
+        <di:waypoint x="570" y="560" />
+        <di:waypoint x="570" y="350" />
+        <di:waypoint x="486" y="350" />
         <di:waypoint x="486" y="180" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Guarantee_di" bpmnElement="Msg_Guarantee">
-        <di:waypoint x="756" y="360" />
-        <di:waypoint x="756" y="519" />
-        <di:waypoint x="660" y="519" />
-        <di:waypoint x="660" y="678" />
+        <di:waypoint x="756" y="300" />
+        <di:waypoint x="756" y="470" />
+        <di:waypoint x="660" y="470" />
+        <di:waypoint x="660" y="640" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Shipment_di" bpmnElement="Msg_Shipment">
-        <di:waypoint x="820" y="678" />
-        <di:waypoint x="820" y="429" />
-        <di:waypoint x="916" y="429" />
+        <di:waypoint x="820" y="640" />
+        <di:waypoint x="820" y="410" />
+        <di:waypoint x="916" y="410" />
         <di:waypoint x="916" y="180" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Invoice_di" bpmnElement="Msg_Invoice">
-        <di:waypoint x="980" y="678" />
-        <di:waypoint x="980" y="519" />
-        <di:waypoint x="1236" y="519" />
-        <di:waypoint x="1236" y="360" />
+        <di:waypoint x="980" y="640" />
+        <di:waypoint x="980" y="470" />
+        <di:waypoint x="1236" y="470" />
+        <di:waypoint x="1236" y="300" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

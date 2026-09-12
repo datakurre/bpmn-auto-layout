@@ -23,8 +23,27 @@
         "aarch64-darwin"
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
+      overlay = final: prev: {
+        bpmn-auto-layout = final.callPackage ./nix/package.nix { };
+      };
     in
     {
+      packages = forAllSystems (pkgs: {
+        default = pkgs.callPackage ./nix/package.nix { };
+        bpmn-auto-layout = pkgs.callPackage ./nix/package.nix { };
+      });
+
+      apps = forAllSystems (pkgs: {
+        default = {
+          type = "app";
+          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.default}/bin/bpmn-auto-layout";
+        };
+        bpmn-auto-layout = {
+          type = "app";
+          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-auto-layout}/bin/bpmn-auto-layout";
+        };
+      });
+
       devShells = forAllSystems (pkgs: {
         default = pkgs.mkShell {
           packages = [
@@ -33,6 +52,8 @@
           ];
         };
       });
+
+      overlays.default = overlay;
 
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
     };

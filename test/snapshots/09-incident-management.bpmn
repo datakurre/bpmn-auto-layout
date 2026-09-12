@@ -67,16 +67,16 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Pool_Incident_di" bpmnElement="Pool_Incident">
-        <dc:Bounds x="100" y="80" width="1702" height="660" />
+        <dc:Bounds x="100" y="80" width="1702" height="600" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Support_di" bpmnElement="Lane_Support">
-        <dc:Bounds x="130" y="80" width="1672" height="180" />
+        <dc:Bounds x="130" y="80" width="1672" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Tier2_di" bpmnElement="Lane_Tier2">
-        <dc:Bounds x="130" y="260" width="1672" height="360" />
+        <dc:Bounds x="130" y="200" width="1672" height="360" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_QA_di" bpmnElement="Lane_QA">
-        <dc:Bounds x="130" y="620" width="1672" height="120" />
+        <dc:Bounds x="130" y="560" width="1672" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Start_Incident_di" bpmnElement="Start_Incident">
         <dc:Bounds x="180" y="122" width="36" height="36" />
@@ -91,10 +91,10 @@
         <dc:Bounds x="596" y="115" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Provide_Fix_di" bpmnElement="Task_Provide_Fix">
-        <dc:Bounds x="706" y="160" width="100" height="80" />
+        <dc:Bounds x="706" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Resolved_T1_di" bpmnElement="End_Resolved_T1">
-        <dc:Bounds x="873" y="182" width="36" height="36" />
+        <dc:Bounds x="873" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Customer_Update_di" bpmnElement="Task_Customer_Update">
         <dc:Bounds x="1566" y="100" width="100" height="80" />
@@ -103,75 +103,73 @@
         <dc:Bounds x="1726" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Investigate_di" bpmnElement="Task_Investigate">
-        <dc:Bounds x="706" y="340" width="100" height="80" />
+        <dc:Bounds x="706" y="280" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Escalate_Lead_di" bpmnElement="Task_Escalate_Lead">
-        <dc:Bounds x="976" y="520" width="100" height="80" />
+        <dc:Bounds x="976" y="460" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Need_Info_di" bpmnElement="Gateway_Need_Info">
-        <dc:Bounds x="866" y="355" width="50" height="50" />
+        <dc:Bounds x="866" y="295" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Request_Clarify_di" bpmnElement="Task_Request_Clarify">
-        <dc:Bounds x="976" y="280" width="100" height="80" />
+        <dc:Bounds x="976" y="220" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Develop_Patch_di" bpmnElement="Task_Develop_Patch">
-        <dc:Bounds x="976" y="400" width="100" height="80" />
+        <dc:Bounds x="976" y="340" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Run_QA_di" bpmnElement="Task_Run_QA">
-        <dc:Bounds x="1136" y="640" width="100" height="80" />
+        <dc:Bounds x="1136" y="580" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_QA_Pass_di" bpmnElement="Gateway_QA_Pass">
-        <dc:Bounds x="1296" y="655" width="50" height="50" />
+        <dc:Bounds x="1296" y="595" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Deploy_Hotfix_di" bpmnElement="Task_Deploy_Hotfix">
-        <dc:Bounds x="1406" y="640" width="100" height="80" />
+        <dc:Bounds x="1406" y="580" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Timer_SLA_di" bpmnElement="Timer_SLA">
-        <dc:Bounds x="738" y="402" width="36" height="36" />
+        <dc:Bounds x="738" y="342" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="F_Inc_Fix_di" bpmnElement="F_Inc_Fix">
         <di:waypoint x="646" y="140" />
-        <di:waypoint x="676" y="140" />
-        <di:waypoint x="676" y="200" />
-        <di:waypoint x="706" y="200" />
+        <di:waypoint x="706" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Escalate_T2_di" bpmnElement="F_Escalate_T2">
         <di:waypoint x="621" y="165" />
-        <di:waypoint x="621" y="380" />
-        <di:waypoint x="706" y="380" />
+        <di:waypoint x="621" y="320" />
+        <di:waypoint x="706" y="320" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Need_Info_di" bpmnElement="F_Need_Info">
-        <di:waypoint x="891" y="355" />
-        <di:waypoint x="891" y="320" />
-        <di:waypoint x="976" y="320" />
+        <di:waypoint x="891" y="295" />
+        <di:waypoint x="891" y="260" />
+        <di:waypoint x="976" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Ready_Dev_di" bpmnElement="F_Ready_Dev">
-        <di:waypoint x="891" y="405" />
-        <di:waypoint x="891" y="440" />
-        <di:waypoint x="976" y="440" />
+        <di:waypoint x="891" y="345" />
+        <di:waypoint x="891" y="380" />
+        <di:waypoint x="976" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_Fail_di" bpmnElement="F_QA_Fail">
-        <di:waypoint x="1321" y="705" />
-        <di:waypoint x="1321" y="760" />
-        <di:waypoint x="956" y="760" />
-        <di:waypoint x="956" y="440" />
-        <di:waypoint x="976" y="440" />
+        <di:waypoint x="1321" y="645" />
+        <di:waypoint x="1321" y="700" />
+        <di:waypoint x="956" y="700" />
+        <di:waypoint x="956" y="380" />
+        <di:waypoint x="976" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_OK_di" bpmnElement="F_QA_OK">
-        <di:waypoint x="1346" y="680" />
-        <di:waypoint x="1406" y="680" />
+        <di:waypoint x="1346" y="620" />
+        <di:waypoint x="1406" y="620" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_3_di" bpmnElement="F_Inc_3">
         <di:waypoint x="536" y="140" />
         <di:waypoint x="596" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inv_Done_di" bpmnElement="F_Inv_Done">
-        <di:waypoint x="806" y="380" />
-        <di:waypoint x="866" y="380" />
+        <di:waypoint x="806" y="320" />
+        <di:waypoint x="866" y="320" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_Check_di" bpmnElement="F_QA_Check">
-        <di:waypoint x="1236" y="680" />
-        <di:waypoint x="1296" y="680" />
+        <di:waypoint x="1236" y="620" />
+        <di:waypoint x="1296" y="620" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_1_di" bpmnElement="F_Inc_1">
         <di:waypoint x="216" y="140" />
@@ -182,30 +180,30 @@
         <di:waypoint x="436" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_End1_di" bpmnElement="F_Inc_End1">
-        <di:waypoint x="806" y="200" />
-        <di:waypoint x="873" y="200" />
+        <di:waypoint x="806" y="140" />
+        <di:waypoint x="873" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_SLA_Esc_di" bpmnElement="F_SLA_Esc">
-        <di:waypoint x="756" y="438" />
-        <di:waypoint x="756" y="560" />
-        <di:waypoint x="976" y="560" />
+        <di:waypoint x="756" y="378" />
+        <di:waypoint x="756" y="500" />
+        <di:waypoint x="976" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Clarify_T1_di" bpmnElement="F_Clarify_T1">
-        <di:waypoint x="1076" y="320" />
-        <di:waypoint x="1096" y="320" />
-        <di:waypoint x="1096" y="640" />
-        <di:waypoint x="486" y="640" />
+        <di:waypoint x="1076" y="260" />
+        <di:waypoint x="1096" y="260" />
+        <di:waypoint x="1096" y="580" />
+        <di:waypoint x="486" y="580" />
         <di:waypoint x="486" y="180" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_To_QA_di" bpmnElement="F_To_QA">
-        <di:waypoint x="1076" y="440" />
-        <di:waypoint x="1106" y="440" />
-        <di:waypoint x="1106" y="680" />
-        <di:waypoint x="1136" y="680" />
+        <di:waypoint x="1076" y="380" />
+        <di:waypoint x="1106" y="380" />
+        <di:waypoint x="1106" y="620" />
+        <di:waypoint x="1136" y="620" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Deploy_Notify_di" bpmnElement="F_Deploy_Notify">
-        <di:waypoint x="1506" y="680" />
-        <di:waypoint x="1536" y="680" />
+        <di:waypoint x="1506" y="620" />
+        <di:waypoint x="1536" y="620" />
         <di:waypoint x="1536" y="140" />
         <di:waypoint x="1566" y="140" />
       </bpmndi:BPMNEdge>

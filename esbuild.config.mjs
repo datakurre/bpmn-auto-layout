@@ -9,7 +9,7 @@ const esmConfig = {
   format: 'esm',
   outfile: 'dist/index.js',
   sourcemap: true,
-  external: ['bpmn-js', 'bpmn-js/*', 'bpmn-moddle', 'bpmn-moddle/*'],
+  external: ['bpmn-moddle', 'bpmn-moddle/*'],
 };
 
 /** @type {import('esbuild').BuildOptions} */
@@ -21,7 +21,7 @@ const cjsConfig = {
   format: 'cjs',
   outfile: 'dist/index.cjs',
   sourcemap: true,
-  external: ['bpmn-js', 'bpmn-js/*', 'bpmn-moddle', 'bpmn-moddle/*'],
+  external: ['bpmn-moddle', 'bpmn-moddle/*'],
 };
 
 /** @type {import('esbuild').BuildOptions} */
@@ -36,7 +36,7 @@ const cliConfig = {
   banner: {
     js: '#!/usr/bin/env node\n',
   },
-  external: ['bpmn-js', 'bpmn-js/*', 'bpmn-moddle', 'bpmn-moddle/*'],
+  external: ['bpmn-moddle', 'bpmn-moddle/*'],
 };
 
 const configs = [esmConfig, cjsConfig, cliConfig];
