@@ -320,32 +320,26 @@ export function routeProcessFlows(
       .filter((target): target is NodeLayout => Boolean(target && target.track !== src.track));
     if (branches.length === 0) continue;
     // Only reassert a channel route when the already-validated route this
-    // flow carries out of the main loop above actually collides with
-    // something. Reasserting unconditionally forced every co-track flow out
-    // of a gateway with an off-track branch into a 4-6 point channel detour
-    // even when a clear, unobstructed straight line was already in place --
-    // the mere existence of an unrelated branch to a different track should
+    // flow carries out of the main loop above actually collides with a real
+    // shape. Reasserting unconditionally forced every co-track flow out of a
+    // gateway with an off-track branch into a 4-6 point channel detour even
+    // when a clear, unobstructed straight line was already in place -- the
+    // mere existence of an unrelated branch to a different track should
     // never affect a route that doesn't touch it (#59).
+    //
+    // This used to also fall back to a local repair (nudge) when the
+    // straight route was shape-clean but still registered a hit against
+    // another flow's path, on the theory that a mere route-vs-route
+    // near-miss deserved a lighter touch than a full detour. That masked
+    // rather than fixed the real bug (#59, reopened): two flows fanning out
+    // from the same gateway a few px apart were never a real obstacle to
+    // begin with -- collision-repair's own obstacle set now knows that
+    // (routeObstacles/pathObstacles' shared-endpoint exemption), so a
+    // shape-clean straight route here has already cleared the only kind of
+    // hit that was ever real.
     const existing = edgeWaypoints.get(flow.id);
-    if (existing) {
-      if (countRouteHits(existing, layout, flow, edgeWaypoints) === 0) {
-        continue;
-      }
-      // The route clears every real shape but still runs afoul of another
-      // flow's already-placed path -- try a local repair (nudge) before
-      // reaching for a full channel detour, so two co-track flows that
-      // merely run close and parallel for a few pixels don't get the same
-      // heavy-handed treatment as one that actually needs to bypass a shape.
-      if (countShapeRouteHits(existing, layout, flow, edgeWaypoints) === 0) {
-        const repairedExisting = repairSegmentCollisions(existing, layout, flow, edgeWaypoints, routingPolicy);
-        if (
-          countRouteHits(repairedExisting, layout, flow, edgeWaypoints) === 0 &&
-          validateConnectionPoints(repairedExisting, src, tgt)
-        ) {
-          edgeWaypoints.set(flow.id, dedupeConsecutivePoints(repairedExisting));
-          continue;
-        }
-      }
+    if (existing && countShapeRouteHits(existing, layout, flow, edgeWaypoints) === 0) {
+      continue;
     }
     // Depart the gateway's right edge and arrive at the target's left edge
     // horizontally before turning toward the channel -- turning immediately

@@ -61,6 +61,32 @@ export function segmentHitCount(
   return n;
 }
 
+export interface SharedEndpointZone {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+}
+
+export interface SharedEndpointContext {
+  sourceId?: string;
+  targetId?: string;
+  /** Source/target node bounds inflated by ROUTE_DEPARTURE_GAP -- the zone
+   * around a shared node within which a sibling's bend is still "at the
+   * shared point," not just its very first segment (#59: a short first
+   * segment's own far end can sit just past the node, and the segment
+   * departing *that* elbow needs the same exemption). */
+  sourceZone?: SharedEndpointZone;
+  targetZone?: SharedEndpointZone;
+  endpointsById: Map<string, { sourceId?: string; targetId?: string }>;
+}
+
+function pointInZone(point: { x: number; y: number }, zone: SharedEndpointZone | undefined): boolean {
+  return Boolean(
+    zone && point.x >= zone.x && point.x <= zone.x + zone.width && point.y >= zone.y && point.y <= zone.y + zone.height,
+  );
+}
+
 /**
  * Treat the segments of already-placed edges as thin obstacle rectangles so
  * the repair pass avoids routing a new edge directly on top of an existing one.
@@ -68,11 +94,42 @@ export function segmentHitCount(
 export function pathObstacles(
   paths: Map<string, Array<{ x: number; y: number }>>,
   excludedFlowId?: string,
+  sharedEndpoints?: SharedEndpointContext,
 ): NodeLayout[] {
   const obstacles: NodeLayout[] = [];
   for (const [flowId, points] of paths) {
     if (flowId === excludedFlowId) continue;
+    // Two flows meeting at the same node -- fanning out from a shared
+    // source, converging on a shared target, or one arriving where the
+    // other departs (e.g. a loop-back) -- are expected to run close
+    // together right at that point. That proximity is not a defect, the
+    // same rationale edge_crossings' own shared-endpoint exemption already
+    // applies at the metrics level (#48). Only a segment with an endpoint
+    // still inside the shared node's own departure/arrival zone is
+    // exempted; the rest of a sibling's route still is a real obstacle
+    // (#59).
+    const otherEndpoints = sharedEndpoints?.endpointsById.get(flowId);
+    const sharesAtSource = Boolean(
+      otherEndpoints &&
+        sharedEndpoints?.sourceId &&
+        (otherEndpoints.sourceId === sharedEndpoints.sourceId || otherEndpoints.targetId === sharedEndpoints.sourceId),
+    );
+    const sharesAtTarget = Boolean(
+      otherEndpoints &&
+        sharedEndpoints?.targetId &&
+        (otherEndpoints.sourceId === sharedEndpoints.targetId || otherEndpoints.targetId === sharedEndpoints.targetId),
+    );
     for (let i = 0; i < points.length - 1; i += 1) {
+      const segA = points[i]!;
+      const segB = points[i + 1]!;
+      if (
+        (sharesAtSource &&
+          (pointInZone(segA, sharedEndpoints!.sourceZone) || pointInZone(segB, sharedEndpoints!.sourceZone))) ||
+        (sharesAtTarget &&
+          (pointInZone(segA, sharedEndpoints!.targetZone) || pointInZone(segB, sharedEndpoints!.targetZone)))
+      ) {
+        continue;
+      }
       const a = points[i]!;
       const b = points[i + 1]!;
       const length = Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
@@ -462,7 +519,27 @@ function routeObstacles(
     // boundary. Its children are not independently routable in this space.
     return !n.isSubProcessChild;
   });
-  obstacles.push(...pathObstacles(blockedPaths, flow?.id));
+  const endpointsById = new Map(
+    (layout.allFlows ?? []).map((f: any) => [f.id, { sourceId: f.sourceRef?.id, targetId: f.targetRef?.id }]),
+  );
+  const inflate = (node: NodeLayout | undefined): SharedEndpointZone | undefined =>
+    node
+      ? {
+          x: node.x - ROUTE_DEPARTURE_GAP,
+          y: node.y - ROUTE_DEPARTURE_GAP,
+          width: node.width + ROUTE_DEPARTURE_GAP * 2,
+          height: node.height + ROUTE_DEPARTURE_GAP * 2,
+        }
+      : undefined;
+  obstacles.push(
+    ...pathObstacles(blockedPaths, flow?.id, {
+      sourceId: flow?.sourceRef?.id,
+      targetId: flow?.targetRef?.id,
+      sourceZone: inflate(layout.nodes.get(flow?.sourceRef?.id)),
+      targetZone: inflate(layout.nodes.get(flow?.targetRef?.id)),
+      endpointsById,
+    }),
+  );
   obstacles.push(...(layout.containerObstacles ?? []));
   return obstacles;
 }
