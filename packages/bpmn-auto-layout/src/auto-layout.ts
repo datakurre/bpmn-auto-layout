@@ -30,6 +30,7 @@ import { createProcessDi, createCollaborationDi, getCollaborationProcessIds } fr
 import { DEFAULT_OPTIONS, type AutoLayoutOptions, type ResolvedLayoutOptions } from "./element-dimensions";
 import type { LayoutWarning } from "./layout-warnings";
 import { comparePriorityViolations } from "./layout-policy";
+import { alignPlane } from "./align-layout";
 
 export type { AutoLayoutOptions };
 export type { LayoutWarning, LayoutWarningCode } from "./layout-warnings";
@@ -108,4 +109,34 @@ export async function layoutProcessWithDiagnostics(
     comparePriorityViolations(new Set([a.priorityLevel]), new Set([b.priorityLevel])),
   );
   return { xml: outputXml, warnings: sortedWarnings };
+}
+
+/**
+ * Order-preserving alignment mode (#70): keep the input diagram's existing
+ * DI -- its topology, ordering, and routing decisions -- and only move
+ * shapes and edges to align near-duplicate positions and land on the grid.
+ * Unlike layoutProcess, this never clears `root.diagrams`; every diagram
+ * already present is aligned in place and everything else (existing
+ * labels, colors, any vendor extension) passes through untouched. A
+ * diagram with no DI at all has nothing for this mode to align and is
+ * returned unchanged.
+ *
+ * See align-layout.ts for the contract (order preservation, a single fixed
+ * clustering threshold, idempotence) and docs/bpmn-layout-rules.json's
+ * layout.align.* rules.
+ */
+export async function alignProcess(xml: string, options: AutoLayoutOptions = {}): Promise<string> {
+  const opts: ResolvedLayoutOptions = { ...DEFAULT_OPTIONS, ...options };
+  const moddle = new BpmnModdle();
+  const { rootElement } = await moddle.fromXML(xml);
+  const root = rootElement as any;
+
+  for (const diagram of root.diagrams ?? []) {
+    if (diagram.plane) {
+      alignPlane(diagram.plane, opts, (point) => moddle.create("dc:Point", point));
+    }
+  }
+
+  const { xml: outputXml } = await moddle.toXML(rootElement, { format: true });
+  return outputXml;
 }

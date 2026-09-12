@@ -14,7 +14,9 @@
       "packages/bpmn-auto-layout/src/collision-repair.ts",
       "packages/bpmn-auto-layout/src/label-placement.ts",
       "packages/bpmn-auto-layout/src/di-creation.ts",
-      "packages/bpmn-auto-layout/src/label-layout.ts"
+      "packages/bpmn-auto-layout/src/label-layout.ts",
+      "packages/bpmn-auto-layout/src/di-import.ts",
+      "packages/bpmn-auto-layout/src/align-layout.ts"
     ],
     "extraction_method": "Manual extraction from current TypeScript behavior; every rule below is labelled implementation-derived and cites the implementation lines used.",
     "determinism": "Do not include timestamps. Update only when current TypeScript behavior or measured feedback-loop metrics change."
@@ -223,6 +225,24 @@
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/label-layout.ts:156-244"],
       "rule": "labelLayout reports missing label DI for named events/gateways/lanes, invalid label bounds, lane labels outside lane bounds, labels overlapping elements or labels, and labels outside containing lanes or participants."
+    },
+    {
+      "id": "layout.align.scope",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/auto-layout.ts:114-141", "packages/bpmn-auto-layout/src/di-import.ts"],
+      "rule": "alignProcess (#70) is a second, order-preserving public entry point alongside layoutProcess: it keeps every existing bpmndi:BPMNDiagram (unlike layoutProcess, which always clears root.diagrams and regenerates from semantics) and only nudges geometry. importPlane reads one bpmndi:BPMNPlane's shapes and edges back into the same NodeLayout/ProcessLayoutResult shape node-placement.ts produces, without inferring track/column/back-edge structure -- those stay 0, unread by anything downstream of the importer. v1 excludes bpmn:Lane, bpmn:Participant, and bpmn:SubProcess shapes, and anything nested inside an expanded SubProcess, from alignment entirely: their bounds are derived from their contents elsewhere in this engine (lane-layout.ts, di-creation.ts's participant sizing, the subprocess container-sizing rule above), not independently positioned, and aligning them the same way as an ordinary flow node both risked breaking containment and made two successive alignment passes disagree with each other. Recomputing a container's bounds from its (aligned) contents is deferred; a diagram with no DI at all has nothing to align and passes through unchanged."
+    },
+    {
+      "id": "layout.align.clustering",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/align-layout.ts"],
+      "rule": "computeAlignmentDeltas aligns each axis independently: distinct current center values are sorted, then bucketed into contiguous groups whose span never exceeds ALIGN_CLUSTER_THRESHOLD=10px (the one thresholded, and therefore documented and fixed, decision in this mode -- #70 named this as 'the one place discreteness returns'), and every value in a group is reassigned that group's mean rounded to opts.gridSize=10px. Two centers already exactly equal have a zero-width group and are therefore always clustered together regardless of the threshold, which is what keeps a shape pair that already shares a row or column sharing it after alignment without any edge-aware special case. This is deterministic and idempotent: an already-aligned diagram's centers are already clustered and grid-snapped, so a second pass computes zero deltas everywhere."
+    },
+    {
+      "id": "layout.align.edge-stretch",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/align-layout.ts"],
+      "rule": "An edge's waypoints are stretched to its (possibly moved) endpoints rather than recomputed from scratch -- recomputation is layoutProcess's job (computeWaypoints / repairSegmentCollisions), which this mode does not call. stretchWaypoints interpolates each axis's offset as a function of a point's own coordinate value on that axis (relative to the polyline's first and last point), not by the point's index in the array: two points that already share an x (a vertical segment) get the identical x-offset because the offset is a pure function of x, so the segment stays vertical after the stretch. Interpolating by index instead breaks exactly this case -- confirmed against fixtures/regression/gateway-bidirectional-bypass.bpmn, where index-based interpolation turned a vertical opening segment diagonal and needed an extra corner (ensureOrthogonalWaypoints) to repair, increasing the waypoint count. Verified corpus-wide (all curated + regression fixtures with real DI): zero edges gained a waypoint, zero shape-center order violations on either axis, and re-running alignProcess on its own output is a byte-for-byte no-op."
     }
   ],
   "metrics": [

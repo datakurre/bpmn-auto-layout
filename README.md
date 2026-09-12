@@ -27,6 +27,30 @@ Nix flakes must be enabled in the local Nix configuration. The first run may
 download Nixpkgs and the JavaScript dependencies; subsequent runs use the Nix
 store cache.
 
+## Aligning an existing diagram instead of regenerating it
+
+The default command above always discards whatever DI is already in the
+file and rebuilds the diagram from the BPMN semantics. If you have already
+laid out the process by hand and only want the existing shapes and edges
+nudged onto a consistent grid -- not moved, reordered, or rerouted -- pass
+`--align`:
+
+```sh
+nix run . -- --align path/to/process.bpmn
+```
+
+This mode keeps every existing shape's and edge's relative order on both
+axes, merges positions that are already nearly aligned onto the same value,
+and snaps everything to the grid; it never re-decides topology, branch
+ordering, container sizing, or routing around obstacles the way the default
+command does. A file with no existing DI has nothing for this mode to align
+and is left unchanged. Running it twice produces the same result as running
+it once. `alignProcess` is also available as a programmatic export
+alongside `layoutProcess` for callers using the package directly. Lanes,
+pools, and expanded subprocess containers are not yet moved by this mode --
+their bounds are derived from their contents rather than independently
+positioned, and only the contained flow nodes are aligned for now.
+
 ## Layout feedback loop
 
 The repository includes a dependency-light Python feedback tool. The flake dev

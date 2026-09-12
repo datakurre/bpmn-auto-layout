@@ -66,19 +66,25 @@
             name = "bpmn-auto-layout";
             runtimeInputs = [ pkgs.nodejs ];
             text = ''
+              mode="layout"
+              if [ "$#" -eq 2 ] && [ "$1" = "--align" ]; then
+                mode="align"
+                shift
+              fi
               if [ "$#" -ne 1 ]; then
-                echo "usage: bpmn-auto-layout FILE.bpmn" >&2
+                echo "usage: bpmn-auto-layout [--align] FILE.bpmn" >&2
                 exit 2
               fi
 
               input=$(realpath "$1")
-              ${pkgs.nodejs}/bin/node --input-type=module - "$input" <<'NODE'
+              ${pkgs.nodejs}/bin/node --input-type=module - "$mode" "$input" <<'NODE'
               import { readFile, writeFile } from "node:fs/promises";
-              import { layoutProcess } from "${layout}/lib/node_modules/bpmn-auto-layout/dist/index.js";
+              import { layoutProcess, alignProcess } from "${layout}/lib/node_modules/bpmn-auto-layout/dist/index.js";
 
-              const file = process.argv[2];
+              const mode = process.argv[2];
+              const file = process.argv[3];
               const xml = await readFile(file, "utf8");
-              await writeFile(file, await layoutProcess(xml));
+              await writeFile(file, await (mode === "align" ? alignProcess(xml) : layoutProcess(xml)));
               NODE
             '';
             meta.mainProgram = "bpmn-auto-layout";
