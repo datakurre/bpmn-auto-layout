@@ -4,7 +4,9 @@ import {
   isVerticalCorridorClear,
   isHorizontalCorridorClear,
   routeGatewayOutgoingEdges,
+  routeGatewayIncomingEdges,
   type GatewayFlowInfo,
+  type GatewayIncomingFlowInfo,
 } from '../src/graph/gateway-router';
 
 describe('gateway-router', () => {
@@ -250,6 +252,227 @@ describe('gateway-router', () => {
       // Forward flow below routed via Right because hasOutgoingFeedback disabled bottom
       const ptsBelow = routeMap.get('Flow_Below')!;
       expect(ptsBelow[0]).toEqual({ x: 250, y: 225 });
+    });
+  });
+
+  describe('routeGatewayIncomingEdges', () => {
+    it('routes collinear forward source via direct left with 0 bends', () => {
+      const srcBounds: Bounds = { x: 50, y: 185, width: 100, height: 80 }; // center Y = 225
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_1' }, sourceBounds: srcBounds },
+      ];
+
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, { gatewayBounds: gwBounds });
+      const pts = routes.get('Flow_1')!;
+      expect(pts).toHaveLength(2);
+      expect(pts[0]).toEqual({ x: 150, y: 225 });
+      expect(pts[1]).toEqual({ x: 200, y: 225 });
+      expect(usedPorts.has('left')).toBe(true);
+    });
+
+    it('routes source above via direct top and source below via direct bottom', () => {
+      const srcAbove: Bounds = { x: 50, y: 50, width: 100, height: 80 }; // center Y = 90
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 }; // center Y = 390
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above' }, sourceBounds: srcAbove },
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcAbove, srcBelow],
+      });
+
+      const ptsTop = routes.get('Flow_Above')!;
+      expect(ptsTop).toHaveLength(3);
+      expect(ptsTop[0]).toEqual({ x: 150, y: 90 });
+      expect(ptsTop[1]).toEqual({ x: 225, y: 90 });
+      expect(ptsTop[2]).toEqual({ x: 225, y: 200 }); // entry Top
+
+      const ptsBottom = routes.get('Flow_Below')!;
+      expect(ptsBottom).toHaveLength(3);
+      expect(ptsBottom[0]).toEqual({ x: 150, y: 390 });
+      expect(ptsBottom[1]).toEqual({ x: 225, y: 390 });
+      expect(ptsBottom[2]).toEqual({ x: 225, y: 250 }); // entry Bottom
+
+      expect(usedPorts.has('top')).toBe(true);
+      expect(usedPorts.has('bottom')).toBe(true);
+    });
+
+    it('falls back to left port when top corridor is obstructed vertically', () => {
+      const srcAbove: Bounds = { x: 50, y: 50, width: 100, height: 80 }; // center Y = 90
+      const blocker: Bounds = { x: 210, y: 120, width: 30, height: 30 }; // blocks vertical corridor at x = 225
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above' }, sourceBounds: srcAbove },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcAbove, blocker],
+      });
+
+      const pts = routes.get('Flow_Above')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[3]).toEqual({ x: 200, y: 225 }); // enters Left
+    });
+
+    it('falls back to left port when horizontal corridor of top path is obstructed', () => {
+      const srcAbove: Bounds = { x: 50, y: 50, width: 100, height: 80 }; // center Y = 90
+      const blocker: Bounds = { x: 180, y: 80, width: 30, height: 30 }; // blocks horizontal corridor at y = 90
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above' }, sourceBounds: srcAbove },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcAbove, blocker],
+      });
+
+      const pts = routes.get('Flow_Above')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[3]).toEqual({ x: 200, y: 225 });
+    });
+
+    it('falls back to left port when bottom corridor is obstructed', () => {
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 }; // center Y = 390
+      const blocker: Bounds = { x: 210, y: 280, width: 30, height: 30 }; // blocks vertical corridor at x = 225
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcBelow, blocker],
+      });
+
+      const pts = routes.get('Flow_Below')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[3]).toEqual({ x: 200, y: 225 });
+    });
+
+    it('sorts multiple above and multiple below sources and routes surplus to left port', () => {
+      const wideGw: Bounds = { x: 350, y: 200, width: 50, height: 50 };
+      const srcAbove1: Bounds = { x: 50, y: 20, width: 100, height: 80 }; // center Y = 60
+      const srcAbove2: Bounds = { x: 50, y: 100, width: 100, height: 80 }; // center Y = 140
+      const srcBelow1: Bounds = { x: 50, y: 300, width: 100, height: 80 }; // center Y = 340
+      const srcBelow2: Bounds = { x: 50, y: 400, width: 100, height: 80 }; // center Y = 440
+
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above2' }, sourceBounds: srcAbove2 },
+        { flow: { id: 'Flow_Above1' }, sourceBounds: srcAbove1 },
+        { flow: { id: 'Flow_Below1' }, sourceBounds: srcBelow1 },
+        { flow: { id: 'Flow_Below2' }, sourceBounds: srcBelow2 },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: wideGw,
+        allBounds: [wideGw, srcAbove1, srcAbove2, srcBelow1, srcBelow2],
+      });
+
+      // Above1 is furthest above -> gets Top port
+      const ptsTop = routes.get('Flow_Above1')!;
+      expect(ptsTop[2]).toEqual({ x: 375, y: 200 });
+
+      // Below2 is furthest below -> gets Bottom port
+      const ptsBottom = routes.get('Flow_Below2')!;
+      expect(ptsBottom[2]).toEqual({ x: 375, y: 250 });
+
+      // Above2 and Below1 get Left port with staggered stepX offsets
+      const ptsL1 = routes.get('Flow_Above2')!;
+      const ptsL2 = routes.get('Flow_Below1')!;
+      expect(ptsL1[3]).toEqual({ x: 350, y: 225 });
+      expect(ptsL2[3]).toEqual({ x: 350, y: 225 });
+      expect(ptsL2[1].x).toBeLessThan(ptsL1[1].x);
+    });
+
+    it('routes left flow with entryX - exitX <= 100 using midpoint', () => {
+      // exitX = 150, entryX = 200 (diff = 50 <= 100)
+      const srcClose: Bounds = { x: 100, y: 100, width: 50, height: 50 }; // exitX = 150, center Y = 125
+      const blocker: Bounds = { x: 210, y: 120, width: 30, height: 30 }; // block top so it enters Left
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Close' }, sourceBounds: srcClose },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcClose, blocker],
+      });
+
+      const pts = routes.get('Flow_Close')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[1].x).toBe(175); // midpoint between 150 and 200
+    });
+
+    it('disables bottom port when gateway has incoming feedback edge', () => {
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        hasIncomingFeedback: true,
+      });
+
+      const pts = routes.get('Flow_Below')!;
+      expect(pts[3]).toEqual({ x: 200, y: 225 }); // enters Left
+    });
+
+    it('respects usedPorts when top or bottom is already claimed', () => {
+      const srcAbove: Bounds = { x: 50, y: 50, width: 100, height: 80 };
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above' }, sourceBounds: srcAbove },
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top', 'bottom']);
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        usedPorts,
+      });
+
+      const ptsTop = routes.get('Flow_Above')!;
+      const ptsBottom = routes.get('Flow_Below')!;
+      expect(ptsTop[3]).toEqual({ x: 200, y: 225 });
+      expect(ptsBottom[3]).toEqual({ x: 200, y: 225 });
+    });
+
+    it('routes sources above and below when allBounds is omitted', () => {
+      const srcAbove: Bounds = { x: 50, y: 50, width: 100, height: 80 };
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Above' }, sourceBounds: srcAbove },
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+      });
+
+      expect(routes.get('Flow_Above')).toBeDefined();
+      expect(routes.get('Flow_Below')).toBeDefined();
+    });
+
+    it('handles backward and explicit feedback edges for incoming flows', () => {
+      // Backward source: source is to the right of the gateway (src.x + width > gw.x)
+      const srcBack: Bounds = { x: 300, y: 185, width: 100, height: 80 };
+      const srcBelow: Bounds = { x: 50, y: 350, width: 100, height: 80 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'Flow_Back' }, sourceBounds: srcBack, isFeedback: true },
+        { flow: { id: 'Flow_Below' }, sourceBounds: srcBelow },
+      ];
+
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, srcBack, srcBelow],
+      });
+
+      const ptsBack = routes.get('Flow_Back')!;
+      expect(ptsBack.length).toBeGreaterThanOrEqual(2);
+
+      const ptsBelow = routes.get('Flow_Below')!;
+      expect(ptsBelow[3]).toEqual({ x: 200, y: 225 }); // enters Left because feedback disabled bottom
     });
   });
 });

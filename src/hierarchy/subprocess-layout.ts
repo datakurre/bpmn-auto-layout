@@ -3,7 +3,12 @@ import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
 import { assignCoordinates } from '../graph/coordinate-assignment';
 import { routeOrthogonalEdge } from '../graph/orthogonal-router';
-import { routeGatewayOutgoingEdges, type GatewayFlowInfo } from '../graph/gateway-router';
+import {
+  routeGatewayOutgoingEdges,
+  routeGatewayIncomingEdges,
+  type GatewayFlowInfo,
+  type GatewayIncomingFlowInfo,
+} from '../graph/gateway-router';
 import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
 import type { AutoLayoutOptions, Bounds, Point } from '../types';
 
@@ -123,7 +128,8 @@ interface ScopeRouteContext {
 }
 
 interface PartitionedFlows {
-  gatewayFlows: Map<string, GatewayFlowInfo[]>;
+  gatewayOutgoingFlows: Map<string, GatewayFlowInfo[]>;
+  gatewayIncomingFlows: Map<string, GatewayIncomingFlowInfo[]>;
   otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>;
 }
 
@@ -136,7 +142,8 @@ function partitionScopeFlows(
   gatewaySet: Set<string>,
   ctx: ScopeRouteContext
 ): PartitionedFlows {
-  const gatewayFlows = new Map<string, GatewayFlowInfo[]>();
+  const gatewayOutgoingFlows = new Map<string, GatewayFlowInfo[]>();
+  const gatewayIncomingFlows = new Map<string, GatewayIncomingFlowInfo[]>();
   const otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }> = [];
 
   for (const flow of sequenceFlows) {
@@ -147,45 +154,106 @@ function partitionScopeFlows(
 
     if (srcBounds && tgtBounds) {
       if (gatewaySet.has(srcId!)) {
-        const list = gatewayFlows.get(srcId!) || [];
+        const list = gatewayOutgoingFlows.get(srcId!) || [];
         list.push({
           flow,
           targetBounds: tgtBounds,
           isFeedback: ctx.feedbackEdges?.has(flow.id),
         });
-        gatewayFlows.set(srcId!, list);
+        gatewayOutgoingFlows.set(srcId!, list);
+      } else if (gatewaySet.has(tgtId!)) {
+        const list = gatewayIncomingFlows.get(tgtId!) || [];
+        list.push({
+          flow,
+          sourceBounds: srcBounds,
+          isFeedback: ctx.feedbackEdges?.has(flow.id),
+        });
+        gatewayIncomingFlows.set(tgtId!, list);
       } else {
         otherFlows.push({ flow, srcId: srcId!, srcBounds, tgtBounds });
       }
     }
   }
 
-  return { gatewayFlows, otherFlows };
+  return { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows };
 }
 
-function routeAllGatewayFlows(
+interface GatewayRouteScopeContext {
+  routeCtx: ScopeRouteContext;
+  sequenceFlows: any[];
+  usedPortsMap: Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>;
+}
+
+function getUsedPorts(
+  map: Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>,
+  id: string
+): Set<'top' | 'bottom' | 'left' | 'right'> {
+  let set = map.get(id);
+  if (!set) {
+    set = new Set();
+    map.set(id, set);
+  }
+  return set;
+}
+
+function routeAllGatewayOutgoingFlows(
   gatewayFlows: Map<string, GatewayFlowInfo[]>,
-  sequenceFlows: any[],
-  ctx: ScopeRouteContext
+  ctx: GatewayRouteScopeContext
 ): Array<{ element: any; waypoints: Point[] }> {
   const edges: Array<{ element: any; waypoints: Point[] }> = [];
-  const allBounds = Array.from(ctx.boundsMap.values());
+  const allBounds = Array.from(ctx.routeCtx.boundsMap.values());
 
   for (const [gwId, flows] of gatewayFlows.entries()) {
-    const gwBounds = ctx.boundsMap.get(gwId)!;
-    const hasIncomingFeedback = sequenceFlows.some((f) => {
+    const gwBounds = ctx.routeCtx.boundsMap.get(gwId)!;
+    const hasIncomingFeedback = ctx.sequenceFlows.some((f) => {
       const tgtId = getRefId(f.targetRef);
-      return tgtId === gwId && Boolean(ctx.feedbackEdges?.has(f.id));
+      return tgtId === gwId && Boolean(ctx.routeCtx.feedbackEdges?.has(f.id));
     });
 
+    const usedPorts = getUsedPorts(ctx.usedPortsMap, gwId);
     const routeMap = routeGatewayOutgoingEdges(flows, {
       gatewayBounds: gwBounds,
       allBounds,
       hasIncomingFeedback,
+      usedPorts,
     });
+    ctx.usedPortsMap.set(gwId, usedPorts);
 
     for (const f of flows) {
       const waypoints = routeMap.get(f.flow.id)!;
+      edges.push({ element: f.flow, waypoints });
+    }
+  }
+
+  return edges;
+}
+
+function routeAllGatewayIncomingFlows(
+  gatewayFlows: Map<string, GatewayIncomingFlowInfo[]>,
+  ctx: GatewayRouteScopeContext
+): Array<{ element: any; waypoints: Point[] }> {
+  const edges: Array<{ element: any; waypoints: Point[] }> = [];
+  const allBounds = Array.from(ctx.routeCtx.boundsMap.values());
+
+  for (const [gwId, flows] of gatewayFlows.entries()) {
+    const gwBounds = ctx.routeCtx.boundsMap.get(gwId)!;
+    const hasIncomingFeedback = ctx.sequenceFlows.some((f) => {
+      const tgtId = getRefId(f.targetRef);
+      const srcId = getRefId(f.sourceRef);
+      return (tgtId === gwId || srcId === gwId) && Boolean(ctx.routeCtx.feedbackEdges?.has(f.id));
+    });
+
+    const usedPorts = getUsedPorts(ctx.usedPortsMap, gwId);
+    const { routes, usedPorts: updatedPorts } = routeGatewayIncomingEdges(flows, {
+      gatewayBounds: gwBounds,
+      allBounds,
+      hasIncomingFeedback,
+      usedPorts,
+    });
+    ctx.usedPortsMap.set(gwId, updatedPorts);
+
+    for (const f of flows) {
+      const waypoints = routes.get(f.flow.id)!;
       edges.push({ element: f.flow, waypoints });
     }
   }
@@ -218,11 +286,24 @@ function routeScopeEdges(
     ctx.regularNodes.filter((n) => n.$type?.endsWith('Gateway')).map((n) => n.id)
   );
 
-  const { gatewayFlows, otherFlows } = partitionScopeFlows(sequenceFlows, gatewaySet, ctx);
-  const gwEdges = routeAllGatewayFlows(gatewayFlows, sequenceFlows, ctx);
+  const { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows } = partitionScopeFlows(
+    sequenceFlows,
+    gatewaySet,
+    ctx
+  );
+
+  const usedPortsMap = new Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>();
+  const gwCtx: GatewayRouteScopeContext = {
+    routeCtx: ctx,
+    sequenceFlows,
+    usedPortsMap,
+  };
+
+  const outEdges = routeAllGatewayOutgoingFlows(gatewayOutgoingFlows, gwCtx);
+  const inEdges = routeAllGatewayIncomingFlows(gatewayIncomingFlows, gwCtx);
   const otherEdges = routeOtherFlows(otherFlows, ctx.boundaryEvents, allBounds);
 
-  return [...gwEdges, ...otherEdges];
+  return [...outEdges, ...inEdges, ...otherEdges];
 }
 
 function buildScopeGraph(

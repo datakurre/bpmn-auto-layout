@@ -187,6 +187,14 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
     expect(waypoints[1].y).toBeGreaterThan(src.y + src.height);
   });
 
+  it('covers orthogonal router forward S-bend with gap > 100', () => {
+    const src = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt = { x: 350, y: 250, width: 100, height: 80 };
+    const waypoints = routeOrthogonalEdge(src, tgt);
+    expect(waypoints.length).toBe(4);
+    expect(waypoints[1].x).toBe(320);
+  });
+
   it('covers DirectedGraph duplicate node, edge sorting, and missing node queries', () => {
     const graph = new DirectedGraph();
     graph.addNode('N1', {});

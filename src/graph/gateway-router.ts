@@ -7,10 +7,24 @@ export interface GatewayFlowInfo {
   isFeedback?: boolean;
 }
 
+export interface GatewayIncomingFlowInfo {
+  flow: any;
+  sourceBounds: Bounds;
+  isFeedback?: boolean;
+}
+
 export interface GatewayRouteOptions {
   gatewayBounds: Bounds;
   allBounds?: Bounds[];
   hasIncomingFeedback?: boolean;
+  usedPorts?: Set<'top' | 'bottom' | 'left' | 'right'>;
+}
+
+export interface GatewayIncomingRouteOptions {
+  gatewayBounds: Bounds;
+  allBounds?: Bounds[];
+  hasIncomingFeedback?: boolean;
+  usedPorts?: Set<'top' | 'bottom' | 'left' | 'right'>;
 }
 
 export interface LinearSpan {
@@ -132,19 +146,66 @@ function routeDirectRight(gw: Bounds, tgt: Bounds, stepXOffset = 0): Point[] {
   ];
 }
 
+function routeDirectIncomingTop(src: Bounds, gw: Bounds): Point[] {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+  const entryY = gw.y;
+  return [
+    { x: exitX, y: exitY },
+    { x: entryX, y: exitY },
+    { x: entryX, y: entryY },
+  ];
+}
+
+function routeDirectIncomingBottom(src: Bounds, gw: Bounds): Point[] {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+  const entryY = gw.y + gw.height;
+  return [
+    { x: exitX, y: exitY },
+    { x: entryX, y: exitY },
+    { x: entryX, y: entryY },
+  ];
+}
+
+function routeDirectIncomingLeft(src: Bounds, gw: Bounds, stepXOffset = 0): Point[] {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = gw.x;
+  const entryY = Math.round(gw.y + gw.height / 2);
+
+  if (exitY === entryY) {
+    return [
+      { x: exitX, y: exitY },
+      { x: entryX, y: entryY },
+    ];
+  }
+
+  const baseStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
+  const stepX = baseStepX + stepXOffset;
+  return [
+    { x: exitX, y: exitY },
+    { x: stepX, y: exitY },
+    { x: stepX, y: entryY },
+    { x: entryX, y: entryY },
+  ];
+}
+
 interface ObstaclesContext {
   allBounds?: Bounds[];
   gw: Bounds;
 }
 
-function getOtherObstacles(ctx: ObstaclesContext, tgt: Bounds): Bounds[] {
+function getOtherObstacles(ctx: ObstaclesContext, other: Bounds): Bounds[] {
   if (!ctx.allBounds) {
     return [];
   }
   return ctx.allBounds.filter(
     (b) =>
       !(b.x === ctx.gw.x && b.y === ctx.gw.y && b.width === ctx.gw.width) &&
-      !(b.x === tgt.x && b.y === tgt.y && b.width === tgt.width)
+      !(b.x === other.x && b.y === other.y && b.width === other.width)
   );
 }
 
@@ -176,6 +237,36 @@ function canUseBottomPort(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): boolea
   return checkDirectPortClear(endpoints, obstacles);
 }
 
+function canUseIncomingTopPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): boolean {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+  const endpoints: CorridorEndpoints = {
+    vX: entryX,
+    vStart: exitY,
+    vEnd: gw.y,
+    hY: exitY,
+    hStart: exitX,
+    hEnd: entryX,
+  };
+  return checkDirectPortClear(endpoints, obstacles);
+}
+
+function canUseIncomingBottomPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): boolean {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+  const endpoints: CorridorEndpoints = {
+    vX: entryX,
+    vStart: gw.y + gw.height,
+    vEnd: exitY,
+    hY: exitY,
+    hStart: exitX,
+    hEnd: entryX,
+  };
+  return checkDirectPortClear(endpoints, obstacles);
+}
+
 interface CategorizedFlows {
   above: GatewayFlowInfo[];
   center: GatewayFlowInfo[];
@@ -199,10 +290,40 @@ function categorizeFlows(flows: GatewayFlowInfo[], gwCenterY: number): Categoriz
     }
   }
 
-  // Furthest above first (smallest Y)
   above.sort((a, b) => a.targetBounds.y - b.targetBounds.y);
-  // Furthest below first (largest Y)
   below.sort((a, b) => b.targetBounds.y - a.targetBounds.y);
+
+  return { above, center, below };
+}
+
+interface CategorizedIncomingFlows {
+  above: GatewayIncomingFlowInfo[];
+  center: GatewayIncomingFlowInfo[];
+  below: GatewayIncomingFlowInfo[];
+}
+
+function categorizeIncomingFlows(
+  flows: GatewayIncomingFlowInfo[],
+  gwCenterY: number
+): CategorizedIncomingFlows {
+  const above: GatewayIncomingFlowInfo[] = [];
+  const center: GatewayIncomingFlowInfo[] = [];
+  const below: GatewayIncomingFlowInfo[] = [];
+
+  for (const f of flows) {
+    const srcCenterY = f.sourceBounds.y + f.sourceBounds.height / 2;
+    const diff = srcCenterY - gwCenterY;
+    if (diff < -2) {
+      above.push(f);
+    } else if (diff > 2) {
+      below.push(f);
+    } else {
+      center.push(f);
+    }
+  }
+
+  above.sort((a, b) => a.sourceBounds.y - b.sourceBounds.y);
+  below.sort((a, b) => b.sourceBounds.y - a.sourceBounds.y);
 
   return { above, center, below };
 }
@@ -211,6 +332,12 @@ interface PortAssignments {
   topFlow?: GatewayFlowInfo;
   bottomFlow?: GatewayFlowInfo;
   rightFlows: GatewayFlowInfo[];
+}
+
+interface IncomingPortAssignments {
+  topFlow?: GatewayIncomingFlowInfo;
+  bottomFlow?: GatewayIncomingFlowInfo;
+  leftFlows: GatewayIncomingFlowInfo[];
 }
 
 interface AssignmentContext {
@@ -251,6 +378,36 @@ function computePortAssignments(
   return assignments;
 }
 
+function computeIncomingPortAssignments(
+  cat: CategorizedIncomingFlows,
+  freePorts: { top: boolean; bottom: boolean; left: boolean },
+  ctx: AssignmentContext
+): IncomingPortAssignments {
+  const assignments: IncomingPortAssignments = { leftFlows: [] };
+  const obstaclesParams: ObstaclesContext = { allBounds: ctx.allBounds, gw: ctx.gw };
+
+  if (freePorts.top && cat.above.length > 0) {
+    const candidate = cat.above[0];
+    const obstacles = getOtherObstacles(obstaclesParams, candidate.sourceBounds);
+    if (canUseIncomingTopPort(candidate.sourceBounds, ctx.gw, obstacles)) {
+      assignments.topFlow = candidate;
+      cat.above.shift();
+    }
+  }
+
+  if (freePorts.bottom && cat.below.length > 0) {
+    const candidate = cat.below[0];
+    const obstacles = getOtherObstacles(obstaclesParams, candidate.sourceBounds);
+    if (canUseIncomingBottomPort(candidate.sourceBounds, ctx.gw, obstacles)) {
+      assignments.bottomFlow = candidate;
+      cat.below.shift();
+    }
+  }
+
+  assignments.leftFlows.push(...cat.center, ...cat.above, ...cat.below);
+  return assignments;
+}
+
 export function routeGatewayOutgoingEdges(
   flows: GatewayFlowInfo[],
   options: GatewayRouteOptions
@@ -275,8 +432,9 @@ export function routeGatewayOutgoingEdges(
   }
 
   const freePorts = {
-    top: true,
-    bottom: !hasOutgoingFeedback && !options.hasIncomingFeedback,
+    top: !options.usedPorts?.has('top'),
+    bottom:
+      !options.usedPorts?.has('bottom') && !hasOutgoingFeedback && !options.hasIncomingFeedback,
     right: true,
   };
 
@@ -288,6 +446,7 @@ export function routeGatewayOutgoingEdges(
 
   if (assignments.topFlow) {
     result.set(assignments.topFlow.flow.id, routeDirectTop(gw, assignments.topFlow.targetBounds));
+    options.usedPorts?.add('top');
   }
 
   if (assignments.bottomFlow) {
@@ -295,13 +454,76 @@ export function routeGatewayOutgoingEdges(
       assignments.bottomFlow.flow.id,
       routeDirectBottom(gw, assignments.bottomFlow.targetBounds)
     );
+    options.usedPorts?.add('bottom');
   }
 
   let stepOffset = 0;
   for (const rf of assignments.rightFlows) {
     result.set(rf.flow.id, routeDirectRight(gw, rf.targetBounds, stepOffset));
+    options.usedPorts?.add('right');
     stepOffset += 10;
   }
 
   return result;
+}
+
+export function routeGatewayIncomingEdges(
+  flows: GatewayIncomingFlowInfo[],
+  options: GatewayIncomingRouteOptions
+): { routes: Map<string, Point[]>; usedPorts: Set<'top' | 'bottom' | 'left' | 'right'> } {
+  const routes = new Map<string, Point[]>();
+  const usedPorts = options.usedPorts || new Set<'top' | 'bottom' | 'left' | 'right'>();
+  const gw = options.gatewayBounds;
+  const gwCenterY = gw.y + gw.height / 2;
+
+  const forwardFlows: GatewayIncomingFlowInfo[] = [];
+  let hasIncomingFeedback = Boolean(options.hasIncomingFeedback);
+
+  for (const f of flows) {
+    const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gw.x;
+    if (f.isFeedback || isBackwards) {
+      hasIncomingFeedback = true;
+      const waypoints = routeOrthogonalEdge(f.sourceBounds, gw, options.allBounds);
+      routes.set(f.flow.id, waypoints);
+    } else {
+      forwardFlows.push(f);
+    }
+  }
+
+  const freePorts = {
+    top: !usedPorts.has('top'),
+    bottom: !usedPorts.has('bottom') && !hasIncomingFeedback,
+    left: true,
+  };
+
+  const cat = categorizeIncomingFlows(forwardFlows, gwCenterY);
+  const assignments = computeIncomingPortAssignments(cat, freePorts, {
+    gw,
+    allBounds: options.allBounds,
+  });
+
+  if (assignments.topFlow) {
+    routes.set(
+      assignments.topFlow.flow.id,
+      routeDirectIncomingTop(assignments.topFlow.sourceBounds, gw)
+    );
+    usedPorts.add('top');
+  }
+
+  if (assignments.bottomFlow) {
+    routes.set(
+      assignments.bottomFlow.flow.id,
+      routeDirectIncomingBottom(assignments.bottomFlow.sourceBounds, gw)
+    );
+    usedPorts.add('bottom');
+  }
+
+  let stepOffset = 0;
+  for (const lf of assignments.leftFlows) {
+    routes.set(lf.flow.id, routeDirectIncomingLeft(lf.sourceBounds, gw, stepOffset));
+    usedPorts.add('left');
+    stepOffset -= 10;
+  }
+
+  return { routes, usedPorts };
 }
