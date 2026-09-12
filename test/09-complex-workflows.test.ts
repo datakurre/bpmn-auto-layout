@@ -17,6 +17,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       .addTask('Task_Payment_Failed', 'Notify Payment Failed')
       .addEndEvent('End_Order_Cancelled', 'Order Cancelled')
       // Branch 2: Inventory Evaluation & Feedback Retry Loop
+      .addExclusiveGateway('Gateway_Stock_Merge', 'Stock Evaluation')
       .addTask('Task_Check_Stock', 'Check Inventory')
       .addExclusiveGateway('Gateway_Stock', 'In Stock?')
       .addTask('Task_Backorder', 'Request Backorder')
@@ -50,10 +51,11 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       .addSequenceFlow('F_Pay_Cancel', 'Task_Payment_Failed', 'End_Order_Cancelled')
       .addSequenceFlow('F_Pay_OK', 'Gateway_Payment', 'Join_Parallel')
       // Stock branch flows
-      .addSequenceFlow('F_Stock_1', 'Split_Parallel', 'Task_Check_Stock')
+      .addSequenceFlow('F_Stock_1', 'Split_Parallel', 'Gateway_Stock_Merge')
+      .addSequenceFlow('F_Stock_To_Check', 'Gateway_Stock_Merge', 'Task_Check_Stock')
       .addSequenceFlow('F_Stock_2', 'Task_Check_Stock', 'Gateway_Stock')
       .addSequenceFlow('F_Stock_Wait', 'Gateway_Stock', 'Task_Backorder')
-      .addSequenceFlow('F_Stock_Retry', 'Task_Backorder', 'Task_Check_Stock')
+      .addSequenceFlow('F_Stock_Retry', 'Task_Backorder', 'Gateway_Stock_Merge')
       .addSequenceFlow('F_Stock_OK', 'Gateway_Stock', 'Task_Reserve_Stock')
       .addSequenceFlow('F_Stock_Join', 'Task_Reserve_Stock', 'Join_Parallel')
       // Downstream flows
@@ -81,6 +83,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       // Support lane
       .addStartEvent('Start_Incident', 'Incident Reported')
       .addTask('Task_Log', 'Log Incident')
+      .addExclusiveGateway('Gateway_Merge_Triage', 'Triage Intake')
       .addTask('Task_Triage', 'Initial Triage')
       .addExclusiveGateway('Gateway_Can_Resolve', 'Can Resolve?')
       .addTask('Task_Provide_Fix', 'Provide Self-Service Fix')
@@ -93,6 +96,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       .addTask('Task_Escalate_Lead', 'Escalate to Engineering Lead')
       .addExclusiveGateway('Gateway_Need_Info', 'Need Info?')
       .addTask('Task_Request_Clarify', 'Request Info from Support')
+      .addExclusiveGateway('Gateway_Merge_Dev', 'Development Queue')
       .addTask('Task_Develop_Patch', 'Develop Bugfix Patch')
       // QA lane
       .addTask('Task_Run_QA', 'Run Regression Tests')
@@ -104,6 +108,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
         [
           'Start_Incident',
           'Task_Log',
+          'Gateway_Merge_Triage',
           'Task_Triage',
           'Gateway_Can_Resolve',
           'Task_Provide_Fix',
@@ -121,6 +126,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
           'Task_Escalate_Lead',
           'Gateway_Need_Info',
           'Task_Request_Clarify',
+          'Gateway_Merge_Dev',
           'Task_Develop_Patch',
         ],
         'Tier 2 Engineering'
@@ -132,7 +138,8 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       )
       // Sequence flows inside Support
       .addSequenceFlow('F_Inc_1', 'Start_Incident', 'Task_Log')
-      .addSequenceFlow('F_Inc_2', 'Task_Log', 'Task_Triage')
+      .addSequenceFlow('F_Inc_2', 'Task_Log', 'Gateway_Merge_Triage')
+      .addSequenceFlow('F_To_Triage', 'Gateway_Merge_Triage', 'Task_Triage')
       .addSequenceFlow('F_Inc_3', 'Task_Triage', 'Gateway_Can_Resolve')
       .addSequenceFlow('F_Inc_Fix', 'Gateway_Can_Resolve', 'Task_Provide_Fix')
       .addSequenceFlow('F_Inc_End1', 'Task_Provide_Fix', 'End_Resolved_T1')
@@ -142,15 +149,16 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       .addSequenceFlow('F_SLA_Esc', 'Timer_SLA', 'Task_Escalate_Lead')
       .addSequenceFlow('F_Inv_Done', 'Task_Investigate', 'Gateway_Need_Info')
       .addSequenceFlow('F_Need_Info', 'Gateway_Need_Info', 'Task_Request_Clarify')
-      .addSequenceFlow('F_Ready_Dev', 'Gateway_Need_Info', 'Task_Develop_Patch')
+      .addSequenceFlow('F_Ready_Dev', 'Gateway_Need_Info', 'Gateway_Merge_Dev')
+      .addSequenceFlow('F_To_Dev', 'Gateway_Merge_Dev', 'Task_Develop_Patch')
       // Rework cross-lane: Tier 2 -> Support
-      .addSequenceFlow('F_Clarify_T1', 'Task_Request_Clarify', 'Task_Triage')
+      .addSequenceFlow('F_Clarify_T1', 'Task_Request_Clarify', 'Gateway_Merge_Triage')
       // Forward cross-lane: Tier 2 -> QA
       .addSequenceFlow('F_To_QA', 'Task_Develop_Patch', 'Task_Run_QA')
       // Inside QA
       .addSequenceFlow('F_QA_Check', 'Task_Run_QA', 'Gateway_QA_Pass')
       // Rework cross-lane: QA -> Tier 2
-      .addSequenceFlow('F_QA_Fail', 'Gateway_QA_Pass', 'Task_Develop_Patch')
+      .addSequenceFlow('F_QA_Fail', 'Gateway_QA_Pass', 'Gateway_Merge_Dev')
       .addSequenceFlow('F_QA_OK', 'Gateway_QA_Pass', 'Task_Deploy_Hotfix')
       // Multi-lane jump cross-lane: QA -> Support
       .addSequenceFlow('F_Deploy_Notify', 'Task_Deploy_Hotfix', 'Task_Customer_Update')
@@ -230,6 +238,7 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       .addTask('Supplier_Draft_Quote', 'Prepare Revised Quotation')
       .addTask('Supplier_Confirm_Order', 'Confirm Standard Order')
       // Supplier Logistics Lane
+      .addExclusiveGateway('Supplier_Gateway_Produce_Merge', 'Order Approved')
       .addTask('Supplier_Produce', 'Manufacture & Pack Goods')
       .addTask('Supplier_Dispatch', 'Ship Consignment')
       .addTask('Supplier_Send_Invoice', 'Issue Final Invoice')
@@ -246,15 +255,22 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       )
       .addLane(
         'Lane_Logistics',
-        ['Supplier_Produce', 'Supplier_Dispatch', 'Supplier_Send_Invoice', 'Supplier_End'],
+        [
+          'Supplier_Gateway_Produce_Merge',
+          'Supplier_Produce',
+          'Supplier_Dispatch',
+          'Supplier_Send_Invoice',
+          'Supplier_End',
+        ],
         'Logistics & Billing'
       )
       // Supplier sequence flows
       .addSequenceFlow('SF1', 'Supplier_Check_Capacity', 'Supplier_Gateway_Price')
       .addSequenceFlow('SF_Quote', 'Supplier_Gateway_Price', 'Supplier_Draft_Quote')
       .addSequenceFlow('SF_Std', 'Supplier_Gateway_Price', 'Supplier_Confirm_Order')
-      .addSequenceFlow('SF_To_Prod_1', 'Supplier_Draft_Quote', 'Supplier_Produce')
-      .addSequenceFlow('SF_To_Prod_2', 'Supplier_Confirm_Order', 'Supplier_Produce')
+      .addSequenceFlow('SF_To_Prod_1', 'Supplier_Draft_Quote', 'Supplier_Gateway_Produce_Merge')
+      .addSequenceFlow('SF_To_Prod_2', 'Supplier_Confirm_Order', 'Supplier_Gateway_Produce_Merge')
+      .addSequenceFlow('SF_To_Produce', 'Supplier_Gateway_Produce_Merge', 'Supplier_Produce')
       .addSequenceFlow('SF_Dispatch', 'Supplier_Produce', 'Supplier_Dispatch')
       .addSequenceFlow('SF_Invoice', 'Supplier_Dispatch', 'Supplier_Send_Invoice')
       .addSequenceFlow('SF_Done', 'Supplier_Send_Invoice', 'Supplier_End')
@@ -298,9 +314,11 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       // Gateway 3: Multi-tier Risk Classification
       .addExclusiveGateway('Gateway_Risk_Tier', 'Risk Tier?')
       .addTask('Task_Fast_Approve', 'Standard Automated Approval')
+      .addExclusiveGateway('Join_Decline', 'Reject Path')
       .addTask('Task_Fast_Decline', 'Automated Decline Notice')
       .addEndEvent('End_Declined', 'Application Rejected')
       // Manual Underwriting with SLA Boundary Timer
+      .addExclusiveGateway('Join_Review', 'Underwriting Intake')
       .addTask('Task_Manual_Review', 'Manual Underwriting Review')
       .addBoundaryEvent('Timer_Review_SLA', 'Task_Manual_Review', '24h SLA')
       .addTask('Task_Expedite', 'Expedite to Senior Team')
@@ -324,18 +342,20 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
       // Risk classification
       .addSequenceFlow('LF_To_Risk', 'Join_Checks', 'Gateway_Risk_Tier')
       .addSequenceFlow('LF_Low_Risk', 'Gateway_Risk_Tier', 'Task_Fast_Approve')
-      .addSequenceFlow('LF_High_Risk', 'Gateway_Risk_Tier', 'Task_Fast_Decline')
-      .addSequenceFlow('LF_Med_Risk', 'Gateway_Risk_Tier', 'Task_Manual_Review')
+      .addSequenceFlow('LF_High_Risk', 'Gateway_Risk_Tier', 'Join_Decline')
+      .addSequenceFlow('LF_Med_Risk', 'Gateway_Risk_Tier', 'Join_Review')
+      .addSequenceFlow('LF_To_Decline', 'Join_Decline', 'Task_Fast_Decline')
       .addSequenceFlow('LF_Decline_End', 'Task_Fast_Decline', 'End_Declined')
       // SLA timer flow
       .addSequenceFlow('LF_SLA_Flow', 'Timer_Review_SLA', 'Task_Expedite')
       // Underwriting review
+      .addSequenceFlow('LF_To_Review', 'Join_Review', 'Task_Manual_Review')
       .addSequenceFlow('LF_To_UW', 'Task_Manual_Review', 'Gateway_Underwriter')
       .addSequenceFlow('LF_UW_Approve', 'Gateway_Underwriter', 'Join_Approve')
-      .addSequenceFlow('LF_UW_Decline', 'Gateway_Underwriter', 'Task_Fast_Decline')
+      .addSequenceFlow('LF_UW_Decline', 'Gateway_Underwriter', 'Join_Decline')
       .addSequenceFlow('LF_UW_Cond', 'Gateway_Underwriter', 'Task_Request_Collateral')
       // Feedback loop from collateral back to underwriting
-      .addSequenceFlow('LF_Loop_UW', 'Task_Request_Collateral', 'Task_Manual_Review')
+      .addSequenceFlow('LF_Loop_UW', 'Task_Request_Collateral', 'Join_Review')
       // Final preparation and disbursement
       .addSequenceFlow('LF_Auto_Approve', 'Task_Fast_Approve', 'Join_Approve')
       .addSequenceFlow('LF_Contract', 'Join_Approve', 'Task_Prepare_Contract')

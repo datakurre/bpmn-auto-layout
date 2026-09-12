@@ -9,12 +9,14 @@ describe('Iteration 4: Cycles & Loops', () => {
     const builder = new BpmnBuilder();
     builder
       .addStartEvent('Start_1', 'Start')
+      .addExclusiveGateway('Gate_Merge_A', 'Merge')
       .addTask('Task_A', 'Draft Document')
       .addTask('Task_B', 'Review Document')
       .addEndEvent('End_1', 'Published')
-      .addSequenceFlow('Flow_1', 'Start_1', 'Task_A')
+      .addSequenceFlow('Flow_1', 'Start_1', 'Gate_Merge_A')
+      .addSequenceFlow('Flow_To_A', 'Gate_Merge_A', 'Task_A')
       .addSequenceFlow('Flow_2', 'Task_A', 'Task_B')
-      .addSequenceFlow('Flow_Loop', 'Task_B', 'Task_A')
+      .addSequenceFlow('Flow_Loop', 'Task_B', 'Gate_Merge_A')
       .addSequenceFlow('Flow_3', 'Task_B', 'End_1');
 
     const inputXml = await builder.toXml();
@@ -33,13 +35,15 @@ describe('Iteration 4: Cycles & Loops', () => {
     const builder = new BpmnBuilder();
     builder
       .addStartEvent('Start_1', 'Start')
+      .addExclusiveGateway('Gate_Merge_Work', 'Merge')
       .addTask('Task_Work', 'Execute Job')
       .addExclusiveGateway('Gate_Valid', 'Valid?')
       .addEndEvent('End_1', 'Success')
-      .addSequenceFlow('Flow_1', 'Start_1', 'Task_Work')
+      .addSequenceFlow('Flow_1', 'Start_1', 'Gate_Merge_Work')
+      .addSequenceFlow('Flow_To_Work', 'Gate_Merge_Work', 'Task_Work')
       .addSequenceFlow('Flow_2', 'Task_Work', 'Gate_Valid')
       .addSequenceFlow('Flow_Pass', 'Gate_Valid', 'End_1')
-      .addSequenceFlow('Flow_Retry', 'Gate_Valid', 'Task_Work');
+      .addSequenceFlow('Flow_Retry', 'Gate_Valid', 'Gate_Merge_Work');
 
     const inputXml = await builder.toXml();
     const resultXml = await layoutProcess(inputXml);

@@ -1,7 +1,11 @@
 import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 import { DiGenerator } from './di-generator';
 import { layoutScope } from './hierarchy/subprocess-layout';
-import { layoutProcessLanes, routeMessageFlow } from './hierarchy/swimlane-layout';
+import {
+  layoutProcessLanes,
+  routeMessageFlow,
+  isMessageCorridorBlocked,
+} from './hierarchy/swimlane-layout';
 import type { AutoLayoutOptions, Bounds } from './types';
 
 interface ParticipantLayoutParams {
@@ -209,9 +213,22 @@ export class LayoutEngine {
     options: { plane: any; participants: any[] }
   ): void {
     const participantIds = new Set(options.participants.map((p: any) => p.id));
+    const poolBoundsList = options.participants
+      .map((p: any) => allShapesMap.get(p.id))
+      .filter((b): b is Bounds => Boolean(b));
     const flowNodeBounds = Array.from(allShapesMap.entries())
       .filter(([id]) => !participantIds.has(id))
       .map(([, b]) => b);
+
+    const flowsByTarget = new Map<string, any[]>();
+    for (const flow of messageFlows) {
+      const tgtId = flow.targetRef?.id || flow.targetRef;
+      if (tgtId) {
+        const list = flowsByTarget.get(tgtId) || [];
+        list.push(flow);
+        flowsByTarget.set(tgtId, list);
+      }
+    }
 
     for (const flow of messageFlows) {
       const srcId = flow.sourceRef?.id || flow.sourceRef;
@@ -220,9 +237,107 @@ export class LayoutEngine {
       const tgtBounds = allShapesMap.get(tgtId);
 
       if (srcBounds && tgtBounds) {
-        const waypoints = routeMessageFlow(srcBounds, tgtBounds, flowNodeBounds);
+        const interPoolChannelY = computeInterPoolChannelY(srcBounds, tgtBounds, poolBoundsList);
+        const flowsForTarget = flowsByTarget.get(tgtId)!;
+        const targetPortX = computeTargetPortX({
+          flow,
+          flowsForTarget,
+          tgtBounds,
+          allShapesMap,
+          obstacles: flowNodeBounds,
+          channelY: interPoolChannelY,
+        });
+
+        const waypoints = routeMessageFlow(srcBounds, tgtBounds, {
+          obstacles: flowNodeBounds,
+          interPoolChannelY,
+          targetPortX,
+        });
         this.diGenerator.addEdge(options.plane, flow, waypoints);
       }
     }
   }
+}
+
+export interface ApproachContext {
+  targetBounds: Bounds;
+  obstacles: Bounds[];
+  channelY?: number;
+}
+
+export function findEnclosingPool(bounds: Bounds, pools: Bounds[]): Bounds | undefined {
+  return (
+    pools.find((p) => p === bounds) ??
+    pools.find(
+      (p) =>
+        bounds.x >= p.x - 5 &&
+        bounds.x + bounds.width <= p.x + p.width + 5 &&
+        bounds.y >= p.y - 5 &&
+        bounds.y + bounds.height <= p.y + p.height + 5
+    )
+  );
+}
+
+export function computeInterPoolChannelY(
+  srcBounds: Bounds,
+  tgtBounds: Bounds,
+  pools: Bounds[]
+): number | undefined {
+  const srcPool = findEnclosingPool(srcBounds, pools);
+  const tgtPool = findEnclosingPool(tgtBounds, pools);
+  if (!srcPool || !tgtPool || srcPool === tgtPool) {
+    return undefined;
+  }
+  const [upper, lower] = srcPool.y < tgtPool.y ? [srcPool, tgtPool] : [tgtPool, srcPool];
+  return Math.round((upper.y + upper.height + lower.y) / 2);
+}
+
+export function getEffectiveApproachX(sourceBounds: Bounds, ctx: ApproachContext): number {
+  const isUpward = sourceBounds.y >= ctx.targetBounds.y + ctx.targetBounds.height;
+  const centerX = Math.round(sourceBounds.x + sourceBounds.width / 2);
+  const srcY = isUpward ? sourceBounds.y : sourceBounds.y + sourceBounds.height;
+  const tgtY = isUpward ? ctx.targetBounds.y + ctx.targetBounds.height : ctx.targetBounds.y;
+  const midY = ctx.channelY ?? Math.round((srcY + tgtY) / 2);
+  const blocked = isMessageCorridorBlocked(centerX, [srcY, midY], {
+    ignore: [sourceBounds, ctx.targetBounds],
+    obstacles: ctx.obstacles,
+  });
+  if (blocked) {
+    return sourceBounds.x + sourceBounds.width + 20;
+  }
+  return centerX;
+}
+
+export interface TargetPortParams {
+  flow: any;
+  flowsForTarget: any[];
+  tgtBounds: Bounds;
+  allShapesMap: Map<string, Bounds>;
+  obstacles: Bounds[];
+  channelY?: number;
+}
+
+export function computeTargetPortX(params: TargetPortParams): number | undefined {
+  const { flow, flowsForTarget, tgtBounds, allShapesMap, obstacles, channelY } = params;
+  if (flowsForTarget.length <= 1) {
+    return undefined;
+  }
+
+  const sorted = [...flowsForTarget].sort((a, b) => {
+    const srcA = allShapesMap.get(a.sourceRef?.id || a.sourceRef);
+    const srcB = allShapesMap.get(b.sourceRef?.id || b.sourceRef);
+    const xA = srcA
+      ? getEffectiveApproachX(srcA, { targetBounds: tgtBounds, obstacles, channelY })
+      : 0;
+    const xB = srcB
+      ? getEffectiveApproachX(srcB, { targetBounds: tgtBounds, obstacles, channelY })
+      : 0;
+    if (xA !== xB) {
+      return xA - xB;
+    }
+    return (a.id || '').localeCompare(b.id || '');
+  });
+
+  const index = sorted.findIndex((f) => f.id === flow.id);
+  return tgtBounds.x + Math.round((tgtBounds.width * (index + 1)) / (sorted.length + 1));
 }

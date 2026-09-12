@@ -8,6 +8,7 @@
       <bpmn:lane id="Lane_Support" name="Tier 1 Support">
         <bpmn:flowNodeRef>Start_Incident</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Log</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Merge_Triage</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Triage</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_Can_Resolve</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Provide_Fix</bpmn:flowNodeRef>
@@ -21,6 +22,7 @@
         <bpmn:flowNodeRef>Task_Escalate_Lead</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Gateway_Need_Info</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Request_Clarify</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Merge_Dev</bpmn:flowNodeRef>
         <bpmn:flowNodeRef>Task_Develop_Patch</bpmn:flowNodeRef>
       </bpmn:lane>
       <bpmn:lane id="Lane_QA" name="QA &#38; Release Management">
@@ -31,6 +33,7 @@
     </bpmn:laneSet>
     <bpmn:startEvent id="Start_Incident" name="Incident Reported" />
     <bpmn:task id="Task_Log" name="Log Incident" />
+    <bpmn:exclusiveGateway id="Gateway_Merge_Triage" name="Triage Intake" />
     <bpmn:task id="Task_Triage" name="Initial Triage" />
     <bpmn:exclusiveGateway id="Gateway_Can_Resolve" name="Can Resolve?" />
     <bpmn:task id="Task_Provide_Fix" name="Provide Self-Service Fix" />
@@ -42,12 +45,14 @@
     <bpmn:task id="Task_Escalate_Lead" name="Escalate to Engineering Lead" />
     <bpmn:exclusiveGateway id="Gateway_Need_Info" name="Need Info?" />
     <bpmn:task id="Task_Request_Clarify" name="Request Info from Support" />
+    <bpmn:exclusiveGateway id="Gateway_Merge_Dev" name="Development Queue" />
     <bpmn:task id="Task_Develop_Patch" name="Develop Bugfix Patch" />
     <bpmn:task id="Task_Run_QA" name="Run Regression Tests" />
     <bpmn:exclusiveGateway id="Gateway_QA_Pass" name="QA Passed?" />
     <bpmn:task id="Task_Deploy_Hotfix" name="Deploy to Production" />
     <bpmn:sequenceFlow id="F_Inc_1" sourceRef="Start_Incident" targetRef="Task_Log" />
-    <bpmn:sequenceFlow id="F_Inc_2" sourceRef="Task_Log" targetRef="Task_Triage" />
+    <bpmn:sequenceFlow id="F_Inc_2" sourceRef="Task_Log" targetRef="Gateway_Merge_Triage" />
+    <bpmn:sequenceFlow id="F_To_Triage" sourceRef="Gateway_Merge_Triage" targetRef="Task_Triage" />
     <bpmn:sequenceFlow id="F_Inc_3" sourceRef="Task_Triage" targetRef="Gateway_Can_Resolve" />
     <bpmn:sequenceFlow id="F_Inc_Fix" sourceRef="Gateway_Can_Resolve" targetRef="Task_Provide_Fix" />
     <bpmn:sequenceFlow id="F_Inc_End1" sourceRef="Task_Provide_Fix" targetRef="End_Resolved_T1" />
@@ -55,11 +60,12 @@
     <bpmn:sequenceFlow id="F_SLA_Esc" sourceRef="Timer_SLA" targetRef="Task_Escalate_Lead" />
     <bpmn:sequenceFlow id="F_Inv_Done" sourceRef="Task_Investigate" targetRef="Gateway_Need_Info" />
     <bpmn:sequenceFlow id="F_Need_Info" sourceRef="Gateway_Need_Info" targetRef="Task_Request_Clarify" />
-    <bpmn:sequenceFlow id="F_Ready_Dev" sourceRef="Gateway_Need_Info" targetRef="Task_Develop_Patch" />
-    <bpmn:sequenceFlow id="F_Clarify_T1" sourceRef="Task_Request_Clarify" targetRef="Task_Triage" />
+    <bpmn:sequenceFlow id="F_Ready_Dev" sourceRef="Gateway_Need_Info" targetRef="Gateway_Merge_Dev" />
+    <bpmn:sequenceFlow id="F_To_Dev" sourceRef="Gateway_Merge_Dev" targetRef="Task_Develop_Patch" />
+    <bpmn:sequenceFlow id="F_Clarify_T1" sourceRef="Task_Request_Clarify" targetRef="Gateway_Merge_Triage" />
     <bpmn:sequenceFlow id="F_To_QA" sourceRef="Task_Develop_Patch" targetRef="Task_Run_QA" />
     <bpmn:sequenceFlow id="F_QA_Check" sourceRef="Task_Run_QA" targetRef="Gateway_QA_Pass" />
-    <bpmn:sequenceFlow id="F_QA_Fail" sourceRef="Gateway_QA_Pass" targetRef="Task_Develop_Patch" />
+    <bpmn:sequenceFlow id="F_QA_Fail" sourceRef="Gateway_QA_Pass" targetRef="Gateway_Merge_Dev" />
     <bpmn:sequenceFlow id="F_QA_OK" sourceRef="Gateway_QA_Pass" targetRef="Task_Deploy_Hotfix" />
     <bpmn:sequenceFlow id="F_Deploy_Notify" sourceRef="Task_Deploy_Hotfix" targetRef="Task_Customer_Update" />
     <bpmn:sequenceFlow id="F_Close" sourceRef="Task_Customer_Update" targetRef="End_Incident_Closed" />
@@ -67,16 +73,16 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Pool_Incident_di" bpmnElement="Pool_Incident">
-        <dc:Bounds x="100" y="80" width="1702" height="600" />
+        <dc:Bounds x="100" y="80" width="1972" height="600" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Support_di" bpmnElement="Lane_Support">
-        <dc:Bounds x="130" y="80" width="1672" height="120" />
+        <dc:Bounds x="130" y="80" width="1942" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Tier2_di" bpmnElement="Lane_Tier2">
-        <dc:Bounds x="130" y="200" width="1672" height="360" />
+        <dc:Bounds x="130" y="200" width="1942" height="360" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_QA_di" bpmnElement="Lane_QA">
-        <dc:Bounds x="130" y="560" width="1672" height="120" />
+        <dc:Bounds x="130" y="560" width="1942" height="120" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Start_Incident_di" bpmnElement="Start_Incident">
         <dc:Bounds x="180" y="122" width="36" height="36" />
@@ -84,132 +90,146 @@
       <bpmndi:BPMNShape id="Task_Log_di" bpmnElement="Task_Log">
         <dc:Bounds x="276" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Merge_Triage_di" bpmnElement="Gateway_Merge_Triage">
+        <dc:Bounds x="436" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Triage_di" bpmnElement="Task_Triage">
-        <dc:Bounds x="436" y="100" width="100" height="80" />
+        <dc:Bounds x="546" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Can_Resolve_di" bpmnElement="Gateway_Can_Resolve">
-        <dc:Bounds x="596" y="115" width="50" height="50" />
+        <dc:Bounds x="706" y="115" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Provide_Fix_di" bpmnElement="Task_Provide_Fix">
-        <dc:Bounds x="706" y="100" width="100" height="80" />
+        <dc:Bounds x="816" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Resolved_T1_di" bpmnElement="End_Resolved_T1">
-        <dc:Bounds x="873" y="122" width="36" height="36" />
+        <dc:Bounds x="983" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Customer_Update_di" bpmnElement="Task_Customer_Update">
-        <dc:Bounds x="1566" y="100" width="100" height="80" />
+        <dc:Bounds x="1836" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Incident_Closed_di" bpmnElement="End_Incident_Closed">
-        <dc:Bounds x="1726" y="122" width="36" height="36" />
+        <dc:Bounds x="1996" y="122" width="36" height="36" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Investigate_di" bpmnElement="Task_Investigate">
-        <dc:Bounds x="706" y="280" width="100" height="80" />
+        <dc:Bounds x="816" y="280" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Escalate_Lead_di" bpmnElement="Task_Escalate_Lead">
-        <dc:Bounds x="976" y="460" width="100" height="80" />
+        <dc:Bounds x="1086" y="460" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Need_Info_di" bpmnElement="Gateway_Need_Info">
-        <dc:Bounds x="866" y="295" width="50" height="50" />
+        <dc:Bounds x="976" y="295" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Request_Clarify_di" bpmnElement="Task_Request_Clarify">
-        <dc:Bounds x="976" y="220" width="100" height="80" />
+        <dc:Bounds x="1086" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Merge_Dev_di" bpmnElement="Gateway_Merge_Dev">
+        <dc:Bounds x="1111" y="355" width="50" height="50" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Develop_Patch_di" bpmnElement="Task_Develop_Patch">
-        <dc:Bounds x="976" y="340" width="100" height="80" />
+        <dc:Bounds x="1246" y="340" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Run_QA_di" bpmnElement="Task_Run_QA">
-        <dc:Bounds x="1136" y="580" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Gateway_QA_Pass_di" bpmnElement="Gateway_QA_Pass">
-        <dc:Bounds x="1296" y="595" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Task_Deploy_Hotfix_di" bpmnElement="Task_Deploy_Hotfix">
         <dc:Bounds x="1406" y="580" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Timer_SLA_di" bpmnElement="Timer_SLA">
-        <dc:Bounds x="738" y="342" width="36" height="36" />
+      <bpmndi:BPMNShape id="Gateway_QA_Pass_di" bpmnElement="Gateway_QA_Pass">
+        <dc:Bounds x="1566" y="595" width="50" height="50" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Deploy_Hotfix_di" bpmnElement="Task_Deploy_Hotfix">
+        <dc:Bounds x="1676" y="580" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_SLA_di" bpmnElement="Timer_SLA">
+        <dc:Bounds x="848" y="342" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_To_Triage_di" bpmnElement="F_To_Triage">
+        <di:waypoint x="486" y="140" />
+        <di:waypoint x="546" y="140" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_Fix_di" bpmnElement="F_Inc_Fix">
-        <di:waypoint x="646" y="140" />
-        <di:waypoint x="706" y="140" />
+        <di:waypoint x="756" y="140" />
+        <di:waypoint x="816" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Escalate_T2_di" bpmnElement="F_Escalate_T2">
-        <di:waypoint x="621" y="165" />
-        <di:waypoint x="621" y="320" />
-        <di:waypoint x="706" y="320" />
+        <di:waypoint x="731" y="165" />
+        <di:waypoint x="731" y="320" />
+        <di:waypoint x="816" y="320" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Need_Info_di" bpmnElement="F_Need_Info">
-        <di:waypoint x="891" y="295" />
-        <di:waypoint x="891" y="260" />
-        <di:waypoint x="976" y="260" />
+        <di:waypoint x="1001" y="295" />
+        <di:waypoint x="1001" y="260" />
+        <di:waypoint x="1086" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Ready_Dev_di" bpmnElement="F_Ready_Dev">
-        <di:waypoint x="891" y="345" />
-        <di:waypoint x="891" y="380" />
-        <di:waypoint x="976" y="380" />
+        <di:waypoint x="1001" y="345" />
+        <di:waypoint x="1001" y="380" />
+        <di:waypoint x="1111" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_To_Dev_di" bpmnElement="F_To_Dev">
+        <di:waypoint x="1161" y="380" />
+        <di:waypoint x="1246" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_Fail_di" bpmnElement="F_QA_Fail">
-        <di:waypoint x="1321" y="645" />
-        <di:waypoint x="1321" y="700" />
-        <di:waypoint x="956" y="700" />
-        <di:waypoint x="956" y="380" />
-        <di:waypoint x="976" y="380" />
+        <di:waypoint x="1591" y="645" />
+        <di:waypoint x="1591" y="700" />
+        <di:waypoint x="1091" y="700" />
+        <di:waypoint x="1091" y="380" />
+        <di:waypoint x="1111" y="380" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_QA_OK_di" bpmnElement="F_QA_OK">
-        <di:waypoint x="1346" y="620" />
-        <di:waypoint x="1406" y="620" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_Inc_3_di" bpmnElement="F_Inc_3">
-        <di:waypoint x="536" y="140" />
-        <di:waypoint x="596" y="140" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_Inv_Done_di" bpmnElement="F_Inv_Done">
-        <di:waypoint x="806" y="320" />
-        <di:waypoint x="866" y="320" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_QA_Check_di" bpmnElement="F_QA_Check">
-        <di:waypoint x="1236" y="620" />
-        <di:waypoint x="1296" y="620" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_Inc_1_di" bpmnElement="F_Inc_1">
-        <di:waypoint x="216" y="140" />
-        <di:waypoint x="276" y="140" />
+        <di:waypoint x="1616" y="620" />
+        <di:waypoint x="1676" y="620" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_2_di" bpmnElement="F_Inc_2">
         <di:waypoint x="376" y="140" />
         <di:waypoint x="436" y="140" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Clarify_T1_di" bpmnElement="F_Clarify_T1">
+        <di:waypoint x="1186" y="260" />
+        <di:waypoint x="1206" y="260" />
+        <di:waypoint x="1206" y="580" />
+        <di:waypoint x="461" y="580" />
+        <di:waypoint x="461" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Inc_3_di" bpmnElement="F_Inc_3">
+        <di:waypoint x="646" y="140" />
+        <di:waypoint x="706" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Inv_Done_di" bpmnElement="F_Inv_Done">
+        <di:waypoint x="916" y="320" />
+        <di:waypoint x="976" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_QA_Check_di" bpmnElement="F_QA_Check">
+        <di:waypoint x="1506" y="620" />
+        <di:waypoint x="1566" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Inc_1_di" bpmnElement="F_Inc_1">
+        <di:waypoint x="216" y="140" />
+        <di:waypoint x="276" y="140" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Inc_End1_di" bpmnElement="F_Inc_End1">
-        <di:waypoint x="806" y="140" />
-        <di:waypoint x="873" y="140" />
+        <di:waypoint x="916" y="140" />
+        <di:waypoint x="983" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_SLA_Esc_di" bpmnElement="F_SLA_Esc">
-        <di:waypoint x="756" y="378" />
-        <di:waypoint x="756" y="500" />
-        <di:waypoint x="976" y="500" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F_Clarify_T1_di" bpmnElement="F_Clarify_T1">
-        <di:waypoint x="1076" y="260" />
-        <di:waypoint x="1096" y="260" />
-        <di:waypoint x="1096" y="580" />
-        <di:waypoint x="486" y="580" />
-        <di:waypoint x="486" y="180" />
+        <di:waypoint x="866" y="378" />
+        <di:waypoint x="866" y="500" />
+        <di:waypoint x="1086" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_To_QA_di" bpmnElement="F_To_QA">
-        <di:waypoint x="1076" y="380" />
-        <di:waypoint x="1106" y="380" />
-        <di:waypoint x="1106" y="620" />
-        <di:waypoint x="1136" y="620" />
+        <di:waypoint x="1346" y="380" />
+        <di:waypoint x="1376" y="380" />
+        <di:waypoint x="1376" y="620" />
+        <di:waypoint x="1406" y="620" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Deploy_Notify_di" bpmnElement="F_Deploy_Notify">
-        <di:waypoint x="1506" y="620" />
-        <di:waypoint x="1536" y="620" />
-        <di:waypoint x="1536" y="140" />
-        <di:waypoint x="1566" y="140" />
+        <di:waypoint x="1776" y="620" />
+        <di:waypoint x="1806" y="620" />
+        <di:waypoint x="1806" y="140" />
+        <di:waypoint x="1836" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Close_di" bpmnElement="F_Close">
-        <di:waypoint x="1666" y="140" />
-        <di:waypoint x="1726" y="140" />
+        <di:waypoint x="1936" y="140" />
+        <di:waypoint x="1996" y="140" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

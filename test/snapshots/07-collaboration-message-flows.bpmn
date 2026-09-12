@@ -45,8 +45,8 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Msg_Order_di" bpmnElement="Msg_Order">
         <di:waypoint x="296" y="180" />
-        <di:waypoint x="296" y="270" />
-        <di:waypoint x="200" y="270" />
+        <di:waypoint x="296" y="310" />
+        <di:waypoint x="200" y="310" />
         <di:waypoint x="200" y="360" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

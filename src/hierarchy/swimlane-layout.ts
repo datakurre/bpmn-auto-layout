@@ -70,7 +70,13 @@ export function layoutProcessLanes(
   };
 }
 
-function isMessageCorridorBlocked(
+export interface MessageFlowRouteOptions {
+  obstacles?: Bounds[];
+  interPoolChannelY?: number;
+  targetPortX?: number;
+}
+
+export function isMessageCorridorBlocked(
   x: number,
   yRange: [number, number],
   ctx: { ignore: Bounds[]; obstacles?: Bounds[] }
@@ -90,8 +96,11 @@ function isMessageCorridorBlocked(
 export function routeMessageFlow(
   sourceBounds: Bounds,
   targetBounds: Bounds,
-  allBounds?: Bounds[]
+  options?: MessageFlowRouteOptions | Bounds[]
 ): Point[] {
+  const opts: MessageFlowRouteOptions = Array.isArray(options)
+    ? { obstacles: options }
+    : (options ?? {});
   const ignore = [sourceBounds, targetBounds];
 
   // Source is above target
@@ -100,8 +109,9 @@ export function routeMessageFlow(
       x: Math.round(sourceBounds.x + sourceBounds.width / 2),
       y: sourceBounds.y + sourceBounds.height,
     };
+    const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
     const tgtTop: Point = {
-      x: Math.round(targetBounds.x + targetBounds.width / 2),
+      x: tgtX,
       y: targetBounds.y,
     };
 
@@ -109,10 +119,10 @@ export function routeMessageFlow(
       return [srcBottom, tgtTop];
     }
 
-    const midY = Math.round((srcBottom.y + tgtTop.y) / 2);
+    const midY = opts.interPoolChannelY ?? Math.round((srcBottom.y + tgtTop.y) / 2);
     const blocked = isMessageCorridorBlocked(srcBottom.x, [srcBottom.y, midY], {
       ignore,
-      obstacles: allBounds,
+      obstacles: opts.obstacles,
     });
 
     if (blocked) {
@@ -138,8 +148,9 @@ export function routeMessageFlow(
     x: Math.round(sourceBounds.x + sourceBounds.width / 2),
     y: sourceBounds.y,
   };
+  const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
   const tgtBottom: Point = {
-    x: Math.round(targetBounds.x + targetBounds.width / 2),
+    x: tgtX,
     y: targetBounds.y + targetBounds.height,
   };
 
@@ -147,10 +158,10 @@ export function routeMessageFlow(
     return [srcTop, tgtBottom];
   }
 
-  const midY = Math.round((srcTop.y + tgtBottom.y) / 2);
+  const midY = opts.interPoolChannelY ?? Math.round((srcTop.y + tgtBottom.y) / 2);
   const blocked = isMessageCorridorBlocked(srcTop.x, [srcTop.y, midY], {
     ignore,
-    obstacles: allBounds,
+    obstacles: opts.obstacles,
   });
 
   if (blocked) {

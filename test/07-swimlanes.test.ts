@@ -3,6 +3,12 @@ import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
 import { routeMessageFlow } from '../src/hierarchy/swimlane-layout';
+import {
+  findEnclosingPool,
+  computeInterPoolChannelY,
+  getEffectiveApproachX,
+  computeTargetPortX,
+} from '../src/layout-engine';
 import { expectImageSnapshotMatch } from './helpers/snapshot-helper';
 
 describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
@@ -77,5 +83,129 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
     expect(waypoints).toHaveLength(5);
     expect(waypoints[0]).toEqual({ x: 200, y: 140 });
     expect(waypoints[1].x).toBe(220);
+
+    const defaultWaypoints = routeMessageFlow(src, tgt);
+    expect(defaultWaypoints).toHaveLength(4);
+  });
+
+  it('detects enclosing pools and calculates inter-pool channels', () => {
+    const poolA = { x: 100, y: 80, width: 500, height: 200 };
+    const poolB = { x: 100, y: 340, width: 500, height: 200 };
+    const nodeA = { x: 200, y: 100, width: 100, height: 80 };
+    const nodeB = { x: 200, y: 360, width: 100, height: 80 };
+    const orphan = { x: 9999, y: 9999, width: 100, height: 80 };
+
+    expect(findEnclosingPool(poolA, [poolA, poolB])).toBe(poolA);
+    expect(findEnclosingPool(nodeA, [poolA, poolB])).toBe(poolA);
+    expect(findEnclosingPool(orphan, [poolA, poolB])).toBeUndefined();
+
+    // Valid inter-pool channels in both directions
+    expect(computeInterPoolChannelY(nodeA, nodeB, [poolA, poolB])).toBe(310);
+    expect(computeInterPoolChannelY(nodeB, nodeA, [poolA, poolB])).toBe(310);
+
+    // Undefined when orphan or same pool
+    expect(computeInterPoolChannelY(orphan, nodeB, [poolA, poolB])).toBeUndefined();
+    expect(computeInterPoolChannelY(nodeA, orphan, [poolA, poolB])).toBeUndefined();
+    expect(computeInterPoolChannelY(nodeA, poolA, [poolA, poolB])).toBeUndefined();
+  });
+
+  it('determines effective approach X and target ports for message flows', () => {
+    const target = { x: 400, y: 100, width: 100, height: 80 };
+    const obstacle = { x: 400, y: 250, width: 100, height: 80 };
+    const sourceBlockedDown = { x: 400, y: 50, width: 100, height: 80 };
+    const sourceClearDown = { x: 600, y: 50, width: 100, height: 80 };
+    const sourceBlockedUp = { x: 400, y: 400, width: 100, height: 80 };
+    const sourceClearUp = { x: 600, y: 400, width: 100, height: 80 };
+
+    const approachCtx = {
+      targetBounds: target,
+      obstacles: [obstacle],
+      channelY: 260,
+    };
+
+    expect(getEffectiveApproachX(sourceClearDown, approachCtx)).toBe(650);
+    expect(getEffectiveApproachX(sourceBlockedDown, approachCtx)).toBe(520);
+    expect(getEffectiveApproachX(sourceClearUp, approachCtx)).toBe(650);
+    expect(getEffectiveApproachX(sourceBlockedUp, approachCtx)).toBe(520);
+
+    const f1 = { id: 'Msg_1', sourceRef: 'S1' };
+    const f2 = { id: 'Msg_2', sourceRef: 'S2' };
+    const f3 = { sourceRef: 'S3' };
+    const allShapes = new Map([
+      ['S1', sourceClearUp],
+      ['S2', sourceBlockedUp],
+    ]);
+
+    // Single flow returns undefined
+    expect(
+      computeTargetPortX({
+        flow: f1,
+        flowsForTarget: [f1],
+        tgtBounds: target,
+        allShapesMap: allShapes,
+        obstacles: [obstacle],
+      })
+    ).toBeUndefined();
+
+    // Multiple flows sorted by approach X (blocked at 520, clear at 650)
+    const portBlocked = computeTargetPortX({
+      flow: f2,
+      flowsForTarget: [f1, f2],
+      tgtBounds: target,
+      allShapesMap: allShapes,
+      obstacles: [obstacle],
+    });
+    const portClear = computeTargetPortX({
+      flow: f1,
+      flowsForTarget: [f1, f2],
+      tgtBounds: target,
+      allShapesMap: allShapes,
+      obstacles: [obstacle],
+    });
+    expect(portBlocked).toBe(433);
+    expect(portClear).toBe(467);
+
+    // Identical approach X falls back to ID sort or empty id fallback
+    const allShapesSame = new Map([
+      ['S1', sourceClearUp],
+      ['S2', sourceClearUp],
+    ]);
+    const portId1 = computeTargetPortX({
+      flow: f1,
+      flowsForTarget: [f2, f1],
+      tgtBounds: target,
+      allShapesMap: allShapesSame,
+      obstacles: [],
+    });
+    const portId2 = computeTargetPortX({
+      flow: f2,
+      flowsForTarget: [f2, f1],
+      tgtBounds: target,
+      allShapesMap: allShapesSame,
+      obstacles: [],
+    });
+    expect(portId1).toBe(433);
+    expect(portId2).toBe(467);
+
+    // Missing source bounds fallback and empty ID fallback
+    const portMissingSrc = computeTargetPortX({
+      flow: f3,
+      flowsForTarget: [f3, f1],
+      tgtBounds: target,
+      allShapesMap: allShapes,
+      obstacles: [],
+    });
+    expect(portMissingSrc).toBe(433);
+
+    const fNoIdA = { sourceRef: 'Unknown_A' };
+    const fNoIdB = { sourceRef: 'Unknown_B' };
+    const portNoIds = computeTargetPortX({
+      flow: fNoIdA,
+      flowsForTarget: [fNoIdA, fNoIdB],
+      tgtBounds: target,
+      allShapesMap: new Map(),
+      obstacles: [],
+    });
+    expect(portNoIds).toBe(433);
   });
 });
