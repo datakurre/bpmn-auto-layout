@@ -141,8 +141,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_Med_Risk_di" bpmnElement="LF_Med_Risk">
         <di:waypoint x="786" y="140" />
-        <di:waypoint x="841" y="140" />
-        <di:waypoint x="841" y="208" />
+        <di:waypoint x="816" y="140" />
+        <di:waypoint x="816" y="208" />
         <di:waypoint x="896" y="208" />
         <di:waypoint x="896" y="235" />
       </bpmndi:BPMNEdge>
@@ -160,8 +160,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_UW_Decline_di" bpmnElement="LF_UW_Decline">
         <di:waypoint x="1216" y="260" />
-        <di:waypoint x="1271" y="260" />
-        <di:waypoint x="1271" y="320" />
+        <di:waypoint x="1259" y="260" />
+        <di:waypoint x="1259" y="320" />
         <di:waypoint x="1326" y="320" />
         <di:waypoint x="1326" y="355" />
       </bpmndi:BPMNEdge>

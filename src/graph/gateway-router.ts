@@ -124,7 +124,12 @@ function routeDirectBottom(gw: Bounds, tgt: Bounds): Point[] {
   ];
 }
 
-function routeDirectRight(gw: Bounds, tgt: Bounds, stepXOffset = 0): Point[] {
+interface DirectRightOptions {
+  stepXOffset: number;
+  collinearTgtX?: number;
+}
+
+function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Point[] {
   const exitX = gw.x + gw.width;
   const exitY = Math.round(gw.y + gw.height / 2);
   const entryX = tgt.x;
@@ -137,8 +142,11 @@ function routeDirectRight(gw: Bounds, tgt: Bounds, stepXOffset = 0): Point[] {
     ];
   }
 
-  const baseStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
-  const stepX = baseStepX + stepXOffset;
+  const defaultStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
+  const baseStepX = opts.collinearTgtX
+    ? Math.round((exitX + opts.collinearTgtX) / 2)
+    : defaultStepX;
+  const stepX = baseStepX + opts.stepXOffset;
   return [
     { x: exitX, y: exitY },
     { x: stepX, y: exitY },
@@ -213,6 +221,7 @@ function getOtherObstacles(ctx: ObstaclesContext, other: Bounds): Bounds[] {
 interface TargetPortRouteOptions {
   exitPort: 'right' | 'bottom' | 'top';
   allBounds?: Bounds[];
+  collinearTgtX?: number;
 }
 
 function findObstacleAboveTarget(entryX: number, tgtY: number, obstacles: Bounds[]): number {
@@ -263,7 +272,8 @@ function routeToTargetTop(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptions)
 
   const maxBottom = findObstacleAboveTarget(entryX, entryY, obstacles);
   const gapY = maxBottom > -Infinity ? Math.round((maxBottom + entryY) / 2) : entryY - 30;
-  const stepX = entryX - exitX > 100 ? Math.round((exitX + entryX) / 2) : entryX - 30;
+  const defaultStepX = entryX - exitX > 100 ? Math.round((exitX + entryX) / 2) : entryX - 30;
+  const stepX = opts.collinearTgtX ? Math.round((exitX + opts.collinearTgtX) / 2) : defaultStepX;
 
   const stepClear =
     isHorizontalCorridorClear(exitY, { start: exitX, end: stepX }, obstacles) &&
@@ -316,7 +326,8 @@ function routeToTargetBottom(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptio
 
   const minTop = findObstacleBelowTarget(entryX, entryY, obstacles);
   const gapY = minTop < Infinity ? Math.round((entryY + minTop) / 2) : entryY + 30;
-  const stepX = entryX - exitX > 100 ? Math.round((exitX + entryX) / 2) : entryX - 30;
+  const defaultStepX = entryX - exitX > 100 ? Math.round((exitX + entryX) / 2) : entryX - 30;
+  const stepX = opts.collinearTgtX ? Math.round((exitX + opts.collinearTgtX) / 2) : defaultStepX;
 
   const stepClear =
     isHorizontalCorridorClear(exitY, { start: exitX, end: stepX }, obstacles) &&
@@ -341,7 +352,15 @@ function routeToTargetBottom(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptio
   ];
 }
 
-function canUseTopPort(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): boolean {
+interface PortCheckContext {
+  obstacles?: Bounds[];
+  targetPort?: 'top' | 'bottom' | 'left' | 'right';
+}
+
+function canUseTopPort(gw: Bounds, tgt: Bounds, ctx?: PortCheckContext): boolean {
+  if (ctx?.targetPort === 'bottom' && gw.y - (tgt.y + tgt.height) < 40) {
+    return false;
+  }
   const exitX = Math.round(gw.x + gw.width / 2);
   const entryY = Math.round(tgt.y + tgt.height / 2);
   const endpoints: CorridorEndpoints = {
@@ -352,10 +371,13 @@ function canUseTopPort(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): boolean {
     hStart: exitX,
     hEnd: tgt.x,
   };
-  return checkDirectPortClear(endpoints, obstacles);
+  return checkDirectPortClear(endpoints, ctx?.obstacles);
 }
 
-function canUseBottomPort(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): boolean {
+function canUseBottomPort(gw: Bounds, tgt: Bounds, ctx?: PortCheckContext): boolean {
+  if (ctx?.targetPort === 'top' && tgt.y - (gw.y + gw.height) < 40) {
+    return false;
+  }
   const exitX = Math.round(gw.x + gw.width / 2);
   const entryY = Math.round(tgt.y + tgt.height / 2);
   const endpoints: CorridorEndpoints = {
@@ -366,7 +388,7 @@ function canUseBottomPort(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): boolea
     hStart: exitX,
     hEnd: tgt.x,
   };
-  return checkDirectPortClear(endpoints, obstacles);
+  return checkDirectPortClear(endpoints, ctx?.obstacles);
 }
 
 function canUseIncomingTopPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): boolean {
@@ -489,7 +511,12 @@ function computePortAssignments(
   if (freePorts.top && cat.above.length > 0) {
     const candidate = cat.above[0];
     const obstacles = getOtherObstacles(obstaclesParams, candidate.targetBounds);
-    if (canUseTopPort(ctx.gw, candidate.targetBounds, obstacles)) {
+    if (
+      canUseTopPort(ctx.gw, candidate.targetBounds, {
+        obstacles,
+        targetPort: candidate.targetPort,
+      })
+    ) {
       assignments.topFlow = candidate;
       cat.above.shift();
     }
@@ -499,7 +526,12 @@ function computePortAssignments(
   if (freePorts.bottom && cat.below.length > 0) {
     const candidate = cat.below[0];
     const obstacles = getOtherObstacles(obstaclesParams, candidate.targetBounds);
-    if (canUseBottomPort(ctx.gw, candidate.targetBounds, obstacles)) {
+    if (
+      canUseBottomPort(ctx.gw, candidate.targetBounds, {
+        obstacles,
+        targetPort: candidate.targetPort,
+      })
+    ) {
       assignments.bottomFlow = candidate;
       cat.below.shift();
     }
@@ -543,19 +575,28 @@ function computeIncomingPortAssignments(
 interface RightFlowRouteContext {
   allBounds?: Bounds[];
   stepOffset: number;
+  collinearTgtX?: number;
 }
 
 function routeRightFlow(gw: Bounds, rf: GatewayFlowInfo, ctx: RightFlowRouteContext): Point[] {
   if (rf.targetPort === 'top') {
-    return routeToTargetTop(gw, rf.targetBounds, { exitPort: 'right', allBounds: ctx.allBounds });
+    return routeToTargetTop(gw, rf.targetBounds, {
+      exitPort: 'right',
+      allBounds: ctx.allBounds,
+      collinearTgtX: ctx.collinearTgtX,
+    });
   }
   if (rf.targetPort === 'bottom') {
     return routeToTargetBottom(gw, rf.targetBounds, {
       exitPort: 'right',
       allBounds: ctx.allBounds,
+      collinearTgtX: ctx.collinearTgtX,
     });
   }
-  return routeDirectRight(gw, rf.targetBounds, ctx.stepOffset);
+  return routeDirectRight(gw, rf.targetBounds, {
+    stepXOffset: ctx.stepOffset,
+    collinearTgtX: ctx.collinearTgtX,
+  });
 }
 
 function routeTopFlow(gw: Bounds, tf: GatewayFlowInfo, allBounds?: Bounds[]): Point[] {
@@ -622,9 +663,22 @@ export function routeGatewayOutgoingEdges(
     options.usedPorts?.add('bottom');
   }
 
+  const collinearFlow = assignments.rightFlows.find((rf) => {
+    const tgtCenterY = Math.round(rf.targetBounds.y + rf.targetBounds.height / 2);
+    return tgtCenterY === Math.round(gw.y + gw.height / 2);
+  });
+  const collinearTgtX = collinearFlow?.targetBounds.x;
+
   let stepOffset = 0;
   for (const rf of assignments.rightFlows) {
-    result.set(rf.flow.id, routeRightFlow(gw, rf, { allBounds: options.allBounds, stepOffset }));
+    result.set(
+      rf.flow.id,
+      routeRightFlow(gw, rf, {
+        allBounds: options.allBounds,
+        stepOffset,
+        collinearTgtX,
+      })
+    );
     options.usedPorts?.add('right');
     stepOffset += 10;
   }

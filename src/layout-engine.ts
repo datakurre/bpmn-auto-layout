@@ -81,6 +81,7 @@ export class LayoutEngine {
         startX: 100,
         startY,
         totalWidth: result.width,
+        edges: result.edges,
       });
 
       for (const lane of laneResult.lanes) {
@@ -181,6 +182,7 @@ export class LayoutEngine {
         startX: laneStartX,
         startY: currentY,
         totalWidth: laneWidth,
+        edges: result.edges,
       });
 
       const poolBounds: Bounds = {

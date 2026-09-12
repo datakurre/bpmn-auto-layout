@@ -10,6 +10,7 @@ export interface LaneLayoutOptions {
   startX: number;
   startY: number;
   totalWidth: number;
+  edges?: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
 export function layoutProcessLanes(
@@ -38,18 +39,14 @@ export function layoutProcessLanes(
 
   for (const lane of rawLanes) {
     const laneElements = shapes.filter((s) => nodeToLane.get(s.element.id) === lane.id);
-    let laneHeight = LANE_MIN_HEIGHT;
+    const laneNodeIds = new Set(laneElements.map((s) => s.element.id));
+    const laneFeedbackEdges =
+      options.edges?.filter((e) => {
+        const srcId = e.element.sourceRef?.id || e.element.sourceRef;
+        return Boolean(e.isFeedback) && laneNodeIds.has(srcId);
+      }) || [];
 
-    if (laneElements.length > 0) {
-      let minY = Infinity;
-      let maxY = -Infinity;
-      for (const el of laneElements) {
-        minY = Math.min(minY, el.bounds.y);
-        maxY = Math.max(maxY, el.bounds.y + el.bounds.height);
-      }
-      const span = maxY - minY + 40;
-      laneHeight = Math.max(LANE_MIN_HEIGHT, span);
-    }
+    const laneHeight = computeSingleLaneHeight(laneElements, laneFeedbackEdges, currentY);
 
     laneResults.push({
       element: lane,
@@ -68,6 +65,34 @@ export function layoutProcessLanes(
     lanes: laneResults,
     totalHeight: currentY - options.startY,
   };
+}
+
+function computeSingleLaneHeight(
+  laneElements: Array<{ bounds: Bounds }>,
+  laneFeedbackEdges: Array<{ waypoints: Point[] }>,
+  currentY: number
+): number {
+  if (laneElements.length === 0) {
+    return LANE_MIN_HEIGHT;
+  }
+
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const el of laneElements) {
+    minY = Math.min(minY, el.bounds.y);
+    maxY = Math.max(maxY, el.bounds.y + el.bounds.height);
+  }
+  let maxEdgeY = -Infinity;
+  for (const edge of laneFeedbackEdges) {
+    for (const wp of edge.waypoints) {
+      maxEdgeY = Math.max(maxEdgeY, wp.y);
+    }
+  }
+
+  if (maxEdgeY > -Infinity) {
+    return Math.max(LANE_MIN_HEIGHT, maxEdgeY - currentY + 30);
+  }
+  return Math.max(LANE_MIN_HEIGHT, maxY - minY + 40);
 }
 
 export interface MessageFlowRouteOptions {

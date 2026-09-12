@@ -178,7 +178,10 @@ function computeLaneAwareTracks(
     }
 
     const count = normalizeLaneTracks(laneNodes, localTracks);
-    laneTrackCounts.set(l, count);
+    const hasFeedback = graph
+      .getEdges()
+      .some((e) => Boolean(feedbackEdges?.has(e.id)) && nodeToLane.get(e.source) === l);
+    laneTrackCounts.set(l, hasFeedback ? count + 1 : count);
   }
 
   const laneStartTrack = computeLaneStartOffsets(maxLane, laneTrackCounts);

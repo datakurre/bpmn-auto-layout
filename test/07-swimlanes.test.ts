@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
-import { routeMessageFlow } from '../src/hierarchy/swimlane-layout';
+import { routeMessageFlow, layoutProcessLanes } from '../src/hierarchy/swimlane-layout';
 import {
   findEnclosingPool,
   computeInterPoolChannelY,
@@ -207,5 +207,36 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
       obstacles: [],
     });
     expect(portNoIds).toBe(433);
+  });
+
+  it('handles edges with string sourceRef in layoutProcessLanes', () => {
+    const process = {
+      laneSets: [
+        {
+          lanes: [{ id: 'Lane_1', flowNodeRef: [{ id: 'Task_1' }] }],
+        },
+      ],
+    };
+    const shapes = [
+      { element: { id: 'Task_1' }, bounds: { x: 100, y: 100, width: 100, height: 80 } },
+    ];
+    const edges = [
+      {
+        element: { sourceRef: 'Task_1' },
+        waypoints: [
+          { x: 150, y: 180 },
+          { x: 150, y: 220 },
+        ],
+        isFeedback: true,
+      },
+    ];
+    const result = layoutProcessLanes(process, shapes, {
+      startX: 100,
+      startY: 80,
+      totalWidth: 500,
+      edges,
+    });
+    expect(result.lanes.length).toBe(1);
+    expect(result.lanes[0].bounds.height).toBeGreaterThanOrEqual(120);
   });
 });

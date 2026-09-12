@@ -1,0 +1,149 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_Integration" isExecutable="false">
+    <bpmn:startEvent id="Start_Req" name="Loan Requested" />
+    <bpmn:task id="Task_Ingest" name="Ingest Documents" />
+    <bpmn:exclusiveGateway id="Gate_Check" name="Complete?" />
+    <bpmn:task id="Task_Standard" name="Standard Underwrite" />
+    <bpmn:task id="Task_FastTrack" name="Fast Track Review" />
+    <bpmn:exclusiveGateway id="Gate_Merge" name="Join Review" />
+    <bpmn:task id="Task_Archive" name="Store Application" />
+    <bpmn:endEvent id="End_Complete" name="Loan Decided" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start_Req" targetRef="Task_Ingest" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Ingest" targetRef="Gate_Check" />
+    <bpmn:sequenceFlow id="F3" sourceRef="Gate_Check" targetRef="Task_Standard" />
+    <bpmn:sequenceFlow id="F4" sourceRef="Gate_Check" targetRef="Task_FastTrack" />
+    <bpmn:sequenceFlow id="F5" sourceRef="Task_Standard" targetRef="Gate_Merge" />
+    <bpmn:sequenceFlow id="F6" sourceRef="Task_FastTrack" targetRef="Gate_Merge" />
+    <bpmn:sequenceFlow id="F7" sourceRef="Gate_Merge" targetRef="Task_Archive" />
+    <bpmn:sequenceFlow id="F8" sourceRef="Task_Archive" targetRef="End_Complete" />
+    <bpmn:dataObjectReference id="Doc_Packet" name="Loan Dossier" />
+    <bpmn:dataStoreReference id="Store_CoreDB" name="Core Banking DB" />
+    <bpmn:subProcess id="EventSub_Cancel" name="Cancellation Handler" triggeredByEvent="true">
+      <bpmn:startEvent id="Start_Cancel" name="Client Cancellation">
+        <bpmn:messageEventDefinition />
+      </bpmn:startEvent>
+      <bpmn:task id="Task_Cleanup" name="Clean Temporary Files" />
+      <bpmn:endEvent id="End_Cancelled" name="Process Terminated">
+        <bpmn:terminateEventDefinition />
+      </bpmn:endEvent>
+      <bpmn:sequenceFlow id="SubF1" sourceRef="Start_Cancel" targetRef="Task_Cleanup" />
+      <bpmn:sequenceFlow id="SubF2" sourceRef="Task_Cleanup" targetRef="End_Cancelled" />
+    </bpmn:subProcess>
+    <bpmn:dataObjectReference id="Doc_Policy" name="Lending Policy Doc" />
+    <bpmn:textAnnotation id="Note_Criteria">
+      <bpmn:text>Check credit score and collateral</bpmn:text>
+    </bpmn:textAnnotation>
+    <bpmn:association id="Assoc_Doc" sourceRef="Doc_Packet" targetRef="Task_Ingest" />
+    <bpmn:association id="Assoc_DB" sourceRef="Task_Archive" targetRef="Store_CoreDB" />
+    <bpmn:association id="Assoc_Note" sourceRef="Note_Criteria" targetRef="Task_Standard" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_Integration">
+      <bpmndi:BPMNShape id="Start_Req_di" bpmnElement="Start_Req">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Ingest_di" bpmnElement="Task_Ingest">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Check_di" bpmnElement="Gate_Check">
+        <dc:Bounds x="356" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Standard_di" bpmnElement="Task_Standard">
+        <dc:Bounds x="466" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FastTrack_di" bpmnElement="Task_FastTrack">
+        <dc:Bounds x="466" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Merge_di" bpmnElement="Gate_Merge">
+        <dc:Bounds x="626" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Archive_di" bpmnElement="Task_Archive">
+        <dc:Bounds x="736" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Complete_di" bpmnElement="End_Complete">
+        <dc:Bounds x="896" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Doc_Packet_di" bpmnElement="Doc_Packet">
+        <dc:Bounds x="228" y="20" width="36" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Store_CoreDB_di" bpmnElement="Store_CoreDB">
+        <dc:Bounds x="761" y="210" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Note_Criteria_di" bpmnElement="Note_Criteria">
+        <dc:Bounds x="466" y="-20" width="100" height="30" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="EventSub_Cancel_di" bpmnElement="EventSub_Cancel" isExpanded="true">
+        <dc:Bounds x="100" y="320" width="352" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Cancel_di" bpmnElement="Start_Cancel">
+        <dc:Bounds x="130" y="377" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Cleanup_di" bpmnElement="Task_Cleanup">
+        <dc:Bounds x="226" y="355" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
+        <dc:Bounds x="386" y="377" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Doc_Policy_di" bpmnElement="Doc_Policy">
+        <dc:Bounds x="492" y="320" width="36" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F3_di" bpmnElement="F3">
+        <di:waypoint x="381" y="115" />
+        <di:waypoint x="381" y="80" />
+        <di:waypoint x="466" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F4_di" bpmnElement="F4">
+        <di:waypoint x="381" y="165" />
+        <di:waypoint x="381" y="200" />
+        <di:waypoint x="466" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F7_di" bpmnElement="F7">
+        <di:waypoint x="676" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_di" bpmnElement="F2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F5_di" bpmnElement="F5">
+        <di:waypoint x="566" y="80" />
+        <di:waypoint x="651" y="80" />
+        <di:waypoint x="651" y="115" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F6_di" bpmnElement="F6">
+        <di:waypoint x="566" y="200" />
+        <di:waypoint x="651" y="200" />
+        <di:waypoint x="651" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F8_di" bpmnElement="F8">
+        <di:waypoint x="836" y="140" />
+        <di:waypoint x="896" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Doc_di" bpmnElement="Assoc_Doc">
+        <di:waypoint x="246" y="70" />
+        <di:waypoint x="246" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_DB_di" bpmnElement="Assoc_DB">
+        <di:waypoint x="786" y="180" />
+        <di:waypoint x="786" y="210" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Note_di" bpmnElement="Assoc_Note">
+        <di:waypoint x="516" y="10" />
+        <di:waypoint x="516" y="40" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubF1_di" bpmnElement="SubF1">
+        <di:waypoint x="166" y="395" />
+        <di:waypoint x="226" y="395" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubF2_di" bpmnElement="SubF2">
+        <di:waypoint x="326" y="395" />
+        <di:waypoint x="386" y="395" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

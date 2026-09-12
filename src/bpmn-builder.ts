@@ -47,12 +47,41 @@ export class BpmnBuilder {
     return this;
   }
 
-  public addStartEvent(id: string, name?: string): this {
-    return this.addFlowNode('bpmn:StartEvent', id, name);
+  public addStartEvent(id: string, name?: string, eventDefinitionType?: string): this {
+    if (!eventDefinitionType) {
+      return this.addFlowNode('bpmn:StartEvent', id, name);
+    }
+    const def = this.moddle.create(eventDefinitionType);
+    const element = this.moddle.create('bpmn:StartEvent', {
+      id,
+      name,
+      eventDefinitions: [def],
+    });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
   }
 
-  public addEndEvent(id: string, name?: string): this {
-    return this.addFlowNode('bpmn:EndEvent', id, name);
+  public addEndEvent(id: string, name?: string, eventDefinitionType?: string): this {
+    if (!eventDefinitionType) {
+      return this.addFlowNode('bpmn:EndEvent', id, name);
+    }
+    const def = this.moddle.create(eventDefinitionType);
+    const element = this.moddle.create('bpmn:EndEvent', {
+      id,
+      name,
+      eventDefinitions: [def],
+    });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
+  public addDataObject(id: string, name?: string): this {
+    const element = this.moddle.create('bpmn:DataObject', { id, name });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
   }
 
   public addTask(id: string, name?: string, type = 'bpmn:Task'): this {
@@ -107,6 +136,74 @@ export class BpmnBuilder {
       this.process = originalProcess;
     }
 
+    return this;
+  }
+
+  public addEventSubProcess(
+    id: string,
+    name?: string,
+    configure?: (builder: BpmnBuilder) => void
+  ): this {
+    const subProcess = this.moddle.create('bpmn:SubProcess', {
+      id,
+      name,
+      triggeredByEvent: true,
+    });
+    subProcess.flowElements = [];
+    this.process.flowElements.push(subProcess);
+    this.elementMap.set(id, subProcess);
+
+    if (configure) {
+      const originalProcess = this.process;
+      this.process = subProcess;
+      configure(this);
+      this.process = originalProcess;
+    }
+
+    return this;
+  }
+
+  public addDataObjectReference(id: string, name?: string, dataObjectRef?: string): this {
+    const props: Record<string, any> = { id, name };
+    if (dataObjectRef) {
+      props.dataObjectRef = this.elementMap.get(dataObjectRef) || dataObjectRef;
+    }
+    const element = this.moddle.create('bpmn:DataObjectReference', props);
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
+  public addDataStoreReference(id: string, name?: string): this {
+    const element = this.moddle.create('bpmn:DataStoreReference', { id, name });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
+  public addTextAnnotation(id: string, text: string): this {
+    if (!this.process.artifacts) {
+      this.process.artifacts = [];
+    }
+    const element = this.moddle.create('bpmn:TextAnnotation', { id, text });
+    this.process.artifacts.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
+  public addAssociation(id: string, sourceRef: string, targetRef: string): this {
+    if (!this.process.artifacts) {
+      this.process.artifacts = [];
+    }
+    const source = this.elementMap.get(sourceRef) || sourceRef;
+    const target = this.elementMap.get(targetRef) || targetRef;
+    const element = this.moddle.create('bpmn:Association', {
+      id,
+      sourceRef: source,
+      targetRef: target,
+    });
+    this.process.artifacts.push(element);
+    this.elementMap.set(id, element);
     return this;
   }
 

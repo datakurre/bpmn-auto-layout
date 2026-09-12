@@ -137,8 +137,8 @@
         <di:waypoint x="466" y="80" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_1_di" bpmnElement="F_Stock_1">
-        <di:waypoint x="381" y="165" />
-        <di:waypoint x="516" y="165" />
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="516" y="140" />
         <di:waypoint x="516" y="175" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_Fail_di" bpmnElement="F_Pay_Fail">

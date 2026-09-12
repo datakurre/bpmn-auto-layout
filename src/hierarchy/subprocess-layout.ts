@@ -9,7 +9,7 @@ import {
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
-import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
+import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT, getElementDimensions } from '../di-constants';
 import type { AutoLayoutOptions, Bounds, Point } from '../types';
 
 export interface ScopeLayoutResult {
@@ -18,7 +18,7 @@ export interface ScopeLayoutResult {
   minX: number;
   minY: number;
   shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[] }>;
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
 interface LayoutContext {
@@ -35,64 +35,71 @@ export function layoutScope(
 ): ScopeLayoutResult {
   const flowElements = scopeElement.flowElements || [];
   const subProcesses = flowElements.filter((el: any) => el.$type === 'bpmn:SubProcess');
-  const childScopeResults = new Map<string, ScopeLayoutResult>();
-  const subDimensions = customDimensions ?? new Map<string, { width: number; height: number }>();
-
-  for (const sub of subProcesses) {
-    const childResult = layoutScope(sub, options, subDimensions);
-    childScopeResults.set(sub.id, childResult);
-    subDimensions.set(sub.id, { width: childResult.width, height: childResult.height });
-  }
-
-  const boundaryEvents = flowElements.filter((el: any) => el.$type === 'bpmn:BoundaryEvent');
-  const regularNodes = flowElements.filter(
-    (el: any) => el.$type !== 'bpmn:SequenceFlow' && el.$type !== 'bpmn:BoundaryEvent'
+  const { childScopeResults, subDimensions } = layoutChildSubProcesses(
+    subProcesses,
+    options,
+    customDimensions
   );
-  const sequenceFlows = flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
 
-  if (regularNodes.length === 0 && boundaryEvents.length === 0) {
+  const partition = partitionScopeElements(scopeElement);
+  const {
+    boundaryEvents,
+    sequenceFlows,
+    eventSubProcesses,
+    regularNodes,
+    allArtifacts,
+    allAssociations,
+  } = partition;
+
+  if (
+    regularNodes.length === 0 &&
+    boundaryEvents.length === 0 &&
+    eventSubProcesses.length === 0 &&
+    allArtifacts.length === 0
+  ) {
     return { width: 100, height: 80, minX: 0, minY: 0, shapes: [], edges: [] };
   }
 
-  const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
-  const feedbackEdges = findFeedbackEdges(graph);
-  const ranks = assignLayers(graph, feedbackEdges);
-  const nodeToLane = extractNodeToLaneMap(scopeElement);
-
-  const boundsMap = assignCoordinatesWithCustomDimensions(graph, ranks, {
-    options,
-    feedbackEdges,
-    subDimensions,
-    nodeToLane,
-  });
-
-  placeBoundaries(boundaryEvents, boundsMap, graph);
-
+  const boundsMap = new Map<string, Bounds>();
   const shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }> = [];
-  const edges: Array<{ element: any; waypoints: Point[] }> = [];
+  const edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> = [];
 
-  for (const node of regularNodes) {
-    const bounds = boundsMap.get(node.id)!;
-    const isSub = node.$type === 'bpmn:SubProcess';
-    shapes.push({ element: node, bounds, isExpanded: isSub ? true : undefined });
-
-    if (isSub && childScopeResults.has(node.id)) {
-      const child = childScopeResults.get(node.id)!;
-      offsetAndCollectChildren(child, bounds, { shapes, edges });
-    }
+  if (regularNodes.length > 0 || boundaryEvents.length > 0) {
+    layoutRegularFlowNodes({
+      scopeElement,
+      regularNodes,
+      boundaryEvents,
+      sequenceFlows,
+      childScopeResults,
+      subDimensions,
+      options,
+      boundsMap,
+      shapes,
+      edges,
+    });
   }
 
-  for (const bEvent of boundaryEvents) {
-    shapes.push({ element: bEvent, bounds: boundsMap.get(bEvent.id)! });
-  }
+  const regularNodeIds = new Set<string>(regularNodes.map((n: any) => n.id));
+  const { connected, unconnected } = partitionArtifacts(
+    allArtifacts,
+    allAssociations,
+    regularNodeIds
+  );
 
-  const routedEdges = routeScopeEdges(sequenceFlows, {
-    regularNodes,
-    boundaryEvents,
-    boundsMap,
-    feedbackEdges,
-  });
-  edges.push(...routedEdges);
+  layoutConnectedArtifacts(connected, { boundsMap, shapes });
+  routeAssociations(allAssociations, boundsMap, edges);
+
+  const disconnectedItems = [...eventSubProcesses, ...unconnected];
+  if (disconnectedItems.length > 0) {
+    const diagramBounds = computeCurrentDiagramBounds(shapes, edges);
+    layoutDisconnectedElements(disconnectedItems, diagramBounds, {
+      childScopeResults,
+      boundsMap,
+      shapes,
+      edges,
+    });
+    routeAssociations(allAssociations, boundsMap, edges);
+  }
 
   const bounding = computeScopeBoundingBox(shapes);
   return {
@@ -599,4 +606,517 @@ function routeBoundaryExit(sourceBounds: Bounds, targetBounds: Bounds): Point[] 
     y: Math.round(targetBounds.y + targetBounds.height / 2),
   };
   return [srcBottom, { x: srcBottom.x, y: tgtEntry.y }, tgtEntry];
+}
+
+function isEventSubProcess(el: any): boolean {
+  return Boolean(el.$type === 'bpmn:SubProcess' && el.triggeredByEvent);
+}
+
+function isArtifact(el: any): boolean {
+  return (
+    el.$type === 'bpmn:DataObjectReference' ||
+    el.$type === 'bpmn:DataStoreReference' ||
+    el.$type === 'bpmn:TextAnnotation'
+  );
+}
+
+function isAssociation(el: any): boolean {
+  return el.$type === 'bpmn:Association';
+}
+
+function isNonVisual(el: any): boolean {
+  return el.$type === 'bpmn:DataObject';
+}
+
+interface RegularFlowContext {
+  scopeElement: any;
+  regularNodes: any[];
+  boundaryEvents: any[];
+  sequenceFlows: any[];
+  childScopeResults: Map<string, ScopeLayoutResult>;
+  subDimensions: Map<string, { width: number; height: number }>;
+  options?: AutoLayoutOptions;
+  boundsMap: Map<string, Bounds>;
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+}
+
+function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
+  const {
+    scopeElement,
+    regularNodes,
+    boundaryEvents,
+    sequenceFlows,
+    childScopeResults,
+    subDimensions,
+    options,
+    boundsMap,
+    shapes,
+    edges,
+  } = ctx;
+
+  const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
+  const feedbackEdges = findFeedbackEdges(graph);
+  const ranks = assignLayers(graph, feedbackEdges);
+  const nodeToLane = extractNodeToLaneMap(scopeElement);
+
+  const calculatedBounds = assignCoordinatesWithCustomDimensions(graph, ranks, {
+    options,
+    feedbackEdges,
+    subDimensions,
+    nodeToLane,
+  });
+  for (const [id, b] of calculatedBounds.entries()) {
+    boundsMap.set(id, b);
+  }
+
+  placeBoundaries(boundaryEvents, boundsMap, graph);
+
+  for (const node of regularNodes) {
+    const bounds = boundsMap.get(node.id)!;
+    const isSub = node.$type === 'bpmn:SubProcess';
+    shapes.push({ element: node, bounds, isExpanded: isSub ? true : undefined });
+
+    if (isSub && childScopeResults.has(node.id)) {
+      const child = childScopeResults.get(node.id)!;
+      offsetAndCollectChildren(child, bounds, { shapes, edges });
+    }
+  }
+
+  for (const bEvent of boundaryEvents) {
+    shapes.push({ element: bEvent, bounds: boundsMap.get(bEvent.id)! });
+  }
+
+  const routedEdges = routeScopeEdges(sequenceFlows, {
+    regularNodes,
+    boundaryEvents,
+    boundsMap,
+    feedbackEdges,
+  });
+  for (const e of routedEdges) {
+    edges.push({
+      element: e.element,
+      waypoints: e.waypoints,
+      isFeedback: feedbackEdges.has(e.element.id),
+    });
+  }
+}
+
+function routeAssociations(
+  associations: any[],
+  boundsMap: Map<string, Bounds>,
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>
+): void {
+  for (const assoc of associations) {
+    if (edges.some((e) => e.element.id === assoc.id)) {
+      continue;
+    }
+    const srcId = getRefId(assoc.sourceRef);
+    const tgtId = getRefId(assoc.targetRef);
+    const srcBounds = boundsMap.get(srcId as string);
+    const tgtBounds = boundsMap.get(tgtId as string);
+    if (srcBounds && tgtBounds) {
+      const waypoints = routeAssociationEdge(srcBounds, tgtBounds);
+      edges.push({ element: assoc, waypoints });
+    }
+  }
+}
+
+function collectTaskDataAssociations(node: any): any[] {
+  const result: any[] = [];
+  for (const dia of node.dataInputAssociations || []) {
+    const src = Array.isArray(dia.sourceRef) ? dia.sourceRef[0] : dia.sourceRef;
+    const srcId = getRefId(src);
+    result.push({
+      $type: 'bpmn:Association',
+      id: dia.id ?? `Assoc_${srcId}_${node.id}`,
+      sourceRef: src,
+      targetRef: node,
+    });
+  }
+  for (const doa of node.dataOutputAssociations || []) {
+    const tgtId = getRefId(doa.targetRef);
+    result.push({
+      $type: 'bpmn:Association',
+      id: doa.id ?? `Assoc_${node.id}_${tgtId}`,
+      sourceRef: node,
+      targetRef: doa.targetRef,
+    });
+  }
+  return result;
+}
+
+function collectScopeAssociations(scopeElement: any, regularNodes: any[]): any[] {
+  const flowElements = scopeElement.flowElements || [];
+  const artifacts = scopeElement.artifacts || [];
+  const result = [...flowElements.filter(isAssociation), ...artifacts.filter(isAssociation)];
+
+  for (const node of regularNodes) {
+    result.push(...collectTaskDataAssociations(node));
+  }
+
+  return result;
+}
+
+interface ConnectedArtifactInfo {
+  artifact: any;
+  hostId: string;
+}
+
+function partitionArtifacts(
+  artifacts: any[],
+  associations: any[],
+  regularNodeIds: Set<string>
+): {
+  connected: ConnectedArtifactInfo[];
+  unconnected: any[];
+} {
+  const connected: ConnectedArtifactInfo[] = [];
+  const unconnected: any[] = [];
+
+  for (const art of artifacts) {
+    let hostId: string | undefined;
+    for (const assoc of associations) {
+      const srcId = getRefId(assoc.sourceRef);
+      const tgtId = getRefId(assoc.targetRef);
+      if (srcId === art.id && tgtId && regularNodeIds.has(tgtId)) {
+        hostId = tgtId;
+        break;
+      }
+      if (tgtId === art.id && srcId && regularNodeIds.has(srcId)) {
+        hostId = srcId;
+        break;
+      }
+    }
+    if (hostId) {
+      connected.push({ artifact: art, hostId });
+    } else {
+      unconnected.push(art);
+    }
+  }
+
+  return { connected, unconnected };
+}
+
+interface ConnectedLayoutContext {
+  boundsMap: Map<string, Bounds>;
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+}
+
+function layoutConnectedArtifacts(
+  connectedList: ConnectedArtifactInfo[],
+  ctx: ConnectedLayoutContext
+): void {
+  const byHost = new Map<string, any[]>();
+  for (const item of connectedList) {
+    const list = byHost.get(item.hostId) || [];
+    list.push(item.artifact);
+    byHost.set(item.hostId, list);
+  }
+
+  for (const [hostId, artifacts] of byHost.entries()) {
+    const hostBounds = ctx.boundsMap.get(hostId)!;
+    placeHostArtifacts(artifacts, hostBounds, ctx);
+  }
+}
+
+function placeHostArtifacts(
+  artifacts: any[],
+  hostBounds: Bounds,
+  ctx: ConnectedLayoutContext
+): void {
+  const aboveList: any[] = [];
+  const belowList: any[] = [];
+  const sideList: any[] = [];
+
+  for (const art of artifacts) {
+    if (art.$type === 'bpmn:DataStoreReference') {
+      belowList.push(art);
+    } else if (art.$type === 'bpmn:DataObjectReference') {
+      aboveList.push(art);
+    } else if (aboveList.length === 0) {
+      aboveList.push(art);
+    } else if (belowList.length === 0) {
+      belowList.push(art);
+    } else {
+      sideList.push(art);
+    }
+  }
+
+  const hostCenterX = Math.round(hostBounds.x + hostBounds.width / 2);
+  placeArtifactRow(aboveList, {
+    hostCenterX,
+    y: (h) => hostBounds.y - 30 - h,
+    ctx,
+  });
+  placeArtifactRow(belowList, {
+    hostCenterX,
+    y: () => hostBounds.y + hostBounds.height + 30,
+    ctx,
+  });
+  placeArtifactSide(sideList, hostBounds, ctx);
+}
+
+interface RowPlacementConfig {
+  hostCenterX: number;
+  y: (height: number) => number;
+  ctx: ConnectedLayoutContext;
+}
+
+function placeArtifactRow(artifacts: any[], config: RowPlacementConfig): void {
+  if (artifacts.length === 0) {
+    return;
+  }
+  const dims = artifacts.map((a) => getElementDimensions(a.$type));
+  const totalWidth = dims.reduce((sum, d) => sum + d.width, 0) + (artifacts.length - 1) * 20;
+  let curX = Math.round(config.hostCenterX - totalWidth / 2);
+
+  for (let i = 0; i < artifacts.length; i++) {
+    const art = artifacts[i];
+    const dim = dims[i];
+    const bounds: Bounds = {
+      x: curX,
+      y: config.y(dim.height),
+      width: dim.width,
+      height: dim.height,
+    };
+    config.ctx.boundsMap.set(art.id, bounds);
+    config.ctx.shapes.push({ element: art, bounds });
+    curX += dim.width + 20;
+  }
+}
+
+function placeArtifactSide(
+  artifacts: any[],
+  hostBounds: Bounds,
+  ctx: ConnectedLayoutContext
+): void {
+  let curX = hostBounds.x + hostBounds.width + 30;
+  for (const art of artifacts) {
+    const dim = getElementDimensions(art.$type);
+    const bounds: Bounds = {
+      x: curX,
+      y: Math.round(hostBounds.y + (hostBounds.height - dim.height) / 2),
+      width: dim.width,
+      height: dim.height,
+    };
+    ctx.boundsMap.set(art.id, bounds);
+    ctx.shapes.push({ element: art, bounds });
+    curX += dim.width + 20;
+  }
+}
+
+export function routeAssociationEdge(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
+  const overlapMinX = Math.max(sourceBounds.x, targetBounds.x);
+  const overlapMaxX = Math.min(
+    sourceBounds.x + sourceBounds.width,
+    targetBounds.x + targetBounds.width
+  );
+
+  if (overlapMinX < overlapMaxX) {
+    const midX = Math.round((overlapMinX + overlapMaxX) / 2);
+    if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
+      return [
+        { x: midX, y: sourceBounds.y + sourceBounds.height },
+        { x: midX, y: targetBounds.y },
+      ];
+    }
+    if (targetBounds.y + targetBounds.height <= sourceBounds.y) {
+      return [
+        { x: midX, y: sourceBounds.y },
+        { x: midX, y: targetBounds.y + targetBounds.height },
+      ];
+    }
+  }
+
+  const overlapMinY = Math.max(sourceBounds.y, targetBounds.y);
+  const overlapMaxY = Math.min(
+    sourceBounds.y + sourceBounds.height,
+    targetBounds.y + targetBounds.height
+  );
+
+  if (overlapMinY < overlapMaxY) {
+    const midY = Math.round((overlapMinY + overlapMaxY) / 2);
+    if (sourceBounds.x + sourceBounds.width <= targetBounds.x) {
+      return [
+        { x: sourceBounds.x + sourceBounds.width, y: midY },
+        { x: targetBounds.x, y: midY },
+      ];
+    }
+    if (targetBounds.x + targetBounds.width <= sourceBounds.x) {
+      return [
+        { x: sourceBounds.x, y: midY },
+        { x: targetBounds.x + targetBounds.width, y: midY },
+      ];
+    }
+  }
+
+  return routeDiagonalAssociation(sourceBounds, targetBounds);
+}
+
+function routeDiagonalAssociation(src: Bounds, tgt: Bounds): Point[] {
+  const srcCenter: Point = {
+    x: Math.round(src.x + src.width / 2),
+    y: Math.round(src.y + src.height / 2),
+  };
+  const tgtCenter: Point = {
+    x: Math.round(tgt.x + tgt.width / 2),
+    y: Math.round(tgt.y + tgt.height / 2),
+  };
+
+  if (src.x + src.width <= tgt.x) {
+    const p1: Point = { x: src.x + src.width, y: srcCenter.y };
+    const p3: Point = {
+      x: tgtCenter.x,
+      y: srcCenter.y < tgtCenter.y ? tgt.y : tgt.y + tgt.height,
+    };
+    return [p1, { x: p3.x, y: p1.y }, p3];
+  }
+
+  const p1: Point = {
+    x: srcCenter.x,
+    y: srcCenter.y < tgtCenter.y ? src.y + src.height : src.y,
+  };
+  const p3: Point = {
+    x: tgt.x + tgt.width,
+    y: tgtCenter.y,
+  };
+  return [p1, { x: p1.x, y: p3.y }, p3];
+}
+
+function computeCurrentDiagramBounds(
+  shapes: Array<{ bounds: Bounds }>,
+  edges: Array<{ waypoints: Point[] }>
+): { minX: number; maxX: number; maxY: number } {
+  if (shapes.length === 0) {
+    return { minX: 100, maxX: 500, maxY: 40 };
+  }
+  let minX = shapes[0].bounds.x;
+  let maxX = shapes[0].bounds.x + shapes[0].bounds.width;
+  let maxY = shapes[0].bounds.y + shapes[0].bounds.height;
+
+  for (const s of shapes) {
+    minX = Math.min(minX, s.bounds.x);
+    maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
+    maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
+  }
+  for (const e of edges) {
+    for (const wp of e.waypoints) {
+      minX = Math.min(minX, wp.x);
+      maxX = Math.max(maxX, wp.x);
+      maxY = Math.max(maxY, wp.y);
+    }
+  }
+  return { minX, maxX, maxY };
+}
+
+interface DisconnectedLayoutContext {
+  childScopeResults: Map<string, ScopeLayoutResult>;
+  boundsMap: Map<string, Bounds>;
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+}
+
+function layoutDisconnectedElements(
+  items: any[],
+  diagramBounds: { minX: number; maxX: number; maxY: number },
+  ctx: DisconnectedLayoutContext
+): void {
+  const rowStartX = diagramBounds.minX;
+  const rowBoundaryX = Math.max(diagramBounds.maxX, rowStartX + 600);
+  let currentX = rowStartX;
+  let currentY = diagramBounds.maxY + 60;
+  let rowMaxHeight = 0;
+
+  for (const item of items) {
+    const childResult = isEventSubProcess(item) ? ctx.childScopeResults.get(item.id) : undefined;
+    const width = childResult
+      ? Math.max(SUBPROCESS_MIN_WIDTH, childResult.width)
+      : getElementDimensions(item.$type).width;
+    const height = childResult
+      ? Math.max(SUBPROCESS_MIN_HEIGHT, childResult.height)
+      : getElementDimensions(item.$type).height;
+
+    if (currentX > rowStartX && currentX + width > rowBoundaryX) {
+      currentX = rowStartX;
+      currentY += rowMaxHeight + 40;
+      rowMaxHeight = 0;
+    }
+
+    const bounds: Bounds = { x: currentX, y: currentY, width, height };
+    ctx.boundsMap.set(item.id, bounds);
+
+    if (childResult) {
+      ctx.shapes.push({ element: item, bounds, isExpanded: true });
+      offsetAndCollectChildren(childResult, bounds, {
+        shapes: ctx.shapes,
+        edges: ctx.edges,
+      });
+    } else {
+      ctx.shapes.push({ element: item, bounds });
+    }
+
+    currentX += width + 40;
+    rowMaxHeight = Math.max(rowMaxHeight, height);
+  }
+}
+
+function layoutChildSubProcesses(
+  subProcesses: any[],
+  options?: AutoLayoutOptions,
+  customDimensions?: Map<string, { width: number; height: number }>
+): {
+  childScopeResults: Map<string, ScopeLayoutResult>;
+  subDimensions: Map<string, { width: number; height: number }>;
+} {
+  const childScopeResults = new Map<string, ScopeLayoutResult>();
+  const subDimensions = customDimensions ?? new Map<string, { width: number; height: number }>();
+
+  for (const sub of subProcesses) {
+    const childResult = layoutScope(sub, options, subDimensions);
+    childScopeResults.set(sub.id, childResult);
+    subDimensions.set(sub.id, { width: childResult.width, height: childResult.height });
+  }
+
+  return { childScopeResults, subDimensions };
+}
+
+interface ScopeElementsPartition {
+  boundaryEvents: any[];
+  sequenceFlows: any[];
+  eventSubProcesses: any[];
+  regularNodes: any[];
+  allArtifacts: any[];
+  allAssociations: any[];
+}
+
+function partitionScopeElements(scopeElement: any): ScopeElementsPartition {
+  const flowElements = scopeElement.flowElements || [];
+  const boundaryEvents = flowElements.filter((el: any) => el.$type === 'bpmn:BoundaryEvent');
+  const sequenceFlows = flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
+  const eventSubProcesses = flowElements.filter(isEventSubProcess);
+  const regularNodes = flowElements.filter(
+    (el: any) =>
+      el.$type !== 'bpmn:SequenceFlow' &&
+      el.$type !== 'bpmn:BoundaryEvent' &&
+      !isEventSubProcess(el) &&
+      !isArtifact(el) &&
+      !isAssociation(el) &&
+      !isNonVisual(el)
+  );
+
+  const allArtifacts = [
+    ...flowElements.filter(isArtifact),
+    ...(scopeElement.artifacts || []).filter(isArtifact),
+  ];
+  const allAssociations = collectScopeAssociations(scopeElement, regularNodes);
+
+  return {
+    boundaryEvents,
+    sequenceFlows,
+    eventSubProcesses,
+    regularNodes,
+    allArtifacts,
+    allAssociations,
+  };
 }

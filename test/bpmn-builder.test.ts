@@ -96,4 +96,62 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('Msg_1');
     expect(xml).toContain('Msg_2');
   });
+
+  it('supports event definitions on start and end events', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addStartEvent('Start_Err', 'Error Start', 'bpmn:ErrorEventDefinition')
+      .addEndEvent('End_Term', 'Terminate End', 'bpmn:TerminateEventDefinition');
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('errorEventDefinition');
+    expect(xml).toContain('terminateEventDefinition');
+  });
+
+  it('supports event sub-processes with and without callback', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addEventSubProcess('EventSub_1', 'Error Handler', (sub) => {
+        sub.addStartEvent('Sub_Start', 'Err', 'bpmn:ErrorEventDefinition');
+      })
+      .addEventSubProcess('EventSub_Empty', 'Empty Event Sub');
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('EventSub_1');
+    expect(xml).toContain('triggeredByEvent="true"');
+    expect(xml).toContain('EventSub_Empty');
+  });
+
+  it('supports data objects, references, data stores, annotations, and associations', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addDataObject('DataObj_1', 'My Data')
+      .addDataObjectReference('Doc_1', 'Document Ref', 'DataObj_1')
+      .addDataObjectReference('Doc_Unreg', 'Unregistered Ref', 'Missing_DataObj')
+      .addDataObjectReference('Doc_Direct', 'Direct Ref')
+      .addDataStoreReference('Store_1', 'Database')
+      .addTextAnnotation('Note_1', 'Some important note')
+      .addTextAnnotation('Note_2', 'Second note')
+      .addTask('Task_1')
+      .addAssociation('Assoc_1', 'Doc_1', 'Task_1')
+      .addAssociation('Assoc_2', 'Task_1', 'Unregistered_Tgt')
+      .addAssociation('Assoc_3', 'Unregistered_Src', 'Task_1')
+      .addAssociation('Assoc_4', 'Task_1', 'Doc_1');
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('dataObject');
+    expect(xml).toContain('dataObjectReference');
+    expect(xml).toContain('dataStoreReference');
+    expect(xml).toContain('textAnnotation');
+    expect(xml).toContain('association');
+    expect(xml).toContain('Assoc_1');
+    expect(xml).toContain('Assoc_2');
+    expect(xml).toContain('Assoc_3');
+    expect(xml).toContain('Assoc_4');
+
+    const freshBuilder = new BpmnBuilder();
+    freshBuilder.addAssociation('Assoc_Fresh', 'S', 'T');
+    const freshXml = await freshBuilder.toXml();
+    expect(freshXml).toContain('Assoc_Fresh');
+  });
 });

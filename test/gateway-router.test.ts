@@ -466,6 +466,66 @@ describe('gateway-router', () => {
       expect(pts[0]).toEqual({ x: 225, y: 200 });
       expect(pts[2]).toEqual({ x: 425, y: 125 });
     });
+
+    it('falls back to right port when target is above with targetPort bottom and vertical gap < 40', () => {
+      const tgt: Bounds = { x: 350, y: 150, width: 50, height: 30 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_CloseAbove' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+      });
+      const pts = routeMap.get('Flow_CloseAbove')!;
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+    });
+
+    it('falls back to right port when target is below with targetPort top and vertical gap < 40', () => {
+      const tgt: Bounds = { x: 350, y: 260, width: 50, height: 40 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_CloseBelow' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt],
+      });
+      const pts = routeMap.get('Flow_CloseBelow')!;
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+    });
+
+    it('routes right flow to target bottom using collinear flow midpoint when collinear flow exists', () => {
+      const tgtCollinear: Bounds = { x: 450, y: 200, width: 50, height: 50 };
+      const tgtBottom: Bounds = { x: 450, y: 100, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_Collinear' }, targetBounds: tgtCollinear },
+        { flow: { id: 'Flow_ToBottom' }, targetBounds: tgtBottom, targetPort: 'bottom' },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgtCollinear, tgtBottom],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_ToBottom')!;
+      expect(pts[1].x).toBe(350);
+    });
+
+    it('routes direct right flow using collinear flow midpoint when collinear flow exists', () => {
+      const tgtCollinear: Bounds = { x: 450, y: 200, width: 50, height: 50 };
+      const tgtDirect: Bounds = { x: 450, y: 350, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_Collinear' }, targetBounds: tgtCollinear },
+        { flow: { id: 'Flow_Direct' }, targetBounds: tgtDirect },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>(['top', 'bottom']);
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgtCollinear, tgtDirect],
+        usedPorts,
+      });
+      const pts = routeMap.get('Flow_Direct')!;
+      expect(pts[1].x).toBe(360);
+    });
   });
 
   describe('routeGatewayIncomingEdges', () => {
