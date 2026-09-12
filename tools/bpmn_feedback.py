@@ -1135,19 +1135,20 @@ def resolve_dist_index() -> Path | None:
     return candidate if candidate.is_file() else None
 
 
-def write_layout_via_node_script(dist_index: Path) -> Path:
+def write_layout_via_node_script(dist_index: Path, export_name: str = "layoutProcess") -> Path:
     """Write (to a fresh temp file the caller must clean up) a small ESM
-    script that imports layoutProcess from the built package directly and
+    script that imports `export_name` from the built package directly and
     transforms every file named on argv in place. Shared by layout_via_node
-    (batches every target in one process) and the report command's "ours"
-    fallback (invoked once per file, same calling convention as an external
-    --layout-command)."""
+    (batches every target in one process, always layoutProcess) and the
+    report command's "ours"/"ours-align" fallback (invoked once per file,
+    same calling convention as an external --layout-command;
+    resolve_engine_command picks which export by name -- #71)."""
     script = (
         'import { readFile, writeFile } from "node:fs/promises";\n'
-        f"import {{ layoutProcess }} from {json.dumps(dist_index.resolve().as_posix())};\n"
+        f"import {{ {export_name} }} from {json.dumps(dist_index.resolve().as_posix())};\n"
         "for (const file of process.argv.slice(2)) {\n"
         '  const xml = await readFile(file, "utf8");\n'
-        "  await writeFile(file, await layoutProcess(xml));\n"
+        f"  await writeFile(file, await {export_name}(xml));\n"
         "}\n"
     )
     with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False, encoding="utf8") as handle:
@@ -1233,16 +1234,20 @@ def parse_engine_specs(specs: list[str], default_layout_command: str) -> dict[st
 def resolve_engine_command(name: str, command: list[str]) -> list[str]:
     """Resolve an engine's layout command for the report's own invocation
     convention (`command + [file]`, in place). Falls back to running the
-    locally built package directly through node when this is our own engine
-    and its configured command isn't on PATH -- the same fallback
-    selftest/regression rely on (#43), extended here so N-way comparisons
-    also work without nix or a globally installed CLI."""
-    if name == "ours" and not (command and shutil.which(command[0])):
+    locally built package directly through node when this is one of our own
+    engine's two entry points ("ours" -> layoutProcess, "ours-align" ->
+    alignProcess, #71) and its configured command isn't on PATH -- the same
+    fallback selftest/regression rely on (#43) for "ours", extended here so
+    N-way comparisons also work without nix or a globally installed CLI. A
+    caller wanting this fallback for "ours-align" passes any placeholder
+    command that is not itself on PATH, e.g. `--engine ours-align=ours-align`."""
+    export_name = {"ours": "layoutProcess", "ours-align": "alignProcess"}.get(name)
+    if export_name and not (command and shutil.which(command[0])):
         dist_index = resolve_dist_index()
         if dist_index:
             node = shutil.which("node")
             if node:
-                return [node, str(write_layout_via_node_script(dist_index))]
+                return [node, str(write_layout_via_node_script(dist_index, export_name))]
     return command
 
 
@@ -1276,7 +1281,7 @@ def engine_version(name: str, command: list[str]) -> str:
     command (a bare package name with no @version) resolves to "unknown"
     rather than a guess -- an unreproducible comparison should look
     unreproducible, not silently pass as pinned."""
-    if name == "ours":
+    if name == "ours" or is_align_engine(name):
         return ours_version()
     for part in command:
         match = re.search(r"@(\d[\w.\-]*)$", part)
@@ -1345,6 +1350,67 @@ def original_seeded_reason(original_xml: str, engine_xml: str) -> str | None:
         if matching / len(original_signature) >= NEAR_SEEDED_THRESHOLD:
             return "nearly identical to this engine's own output, likely seeded from an earlier run -- not an independent reference"
     return None
+
+
+ALIGN_ENGINE_NAME_PREFIX = "ours-align"
+
+
+def is_align_engine(name: str) -> bool:
+    """Naming convention (#71): an engine named exactly "ours-align" or
+    starting with "ours-align" (e.g. a future "ours-align-of-ours") declares
+    itself order-preserving and is scored against its own input DI in the
+    report's Alignment table, instead of that table reading n/a for it."""
+    return name == ALIGN_ENGINE_NAME_PREFIX or name.startswith(f"{ALIGN_ENGINE_NAME_PREFIX}-")
+
+
+def shape_centers_by_element(root: ET.Element) -> dict[str, tuple[float, float]]:
+    centers: dict[str, tuple[float, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            bounds = bounds_from(shape)
+            if element_id and bounds:
+                centers[element_id] = (bounds["x"] + bounds["width"] / 2, bounds["y"] + bounds["height"] / 2)
+    return centers
+
+
+def _sign(value: float) -> int:
+    return (value > 0) - (value < 0)
+
+
+def compute_alignment_metrics(reference_root: ET.Element, candidate_root: ET.Element) -> dict[str, object]:
+    """Relation-between-two-diagrams metrics for an order-preserving
+    alignment column (#71, #70): how much did it move shapes, and did it
+    ever reorder them? Neither is computable from a single collect_metrics
+    call against one document, which is why this is a companion rather than
+    a metric path -- it needs both the pre-alignment reference (the source's
+    own committed DI) and the candidate (that engine's output) at once.
+
+    order_changes is #70's own contract (`alignProcess` may move shapes but
+    may not reorder them on either axis) made checkable: it is meant to
+    read 0, so this is an assertion surfaced as a count, not a competitive
+    score. shape_displacement_avg/max describe how far shapes moved to get
+    there.
+    """
+    reference = shape_centers_by_element(reference_root)
+    candidate = shape_centers_by_element(candidate_root)
+    ids = sorted(set(reference) & set(candidate))
+    displacements = [math.hypot(candidate[i][0] - reference[i][0], candidate[i][1] - reference[i][1]) for i in ids]
+    order_changes = 0
+    for a_index in range(len(ids)):
+        for b_index in range(a_index + 1, len(ids)):
+            a, b = ids[a_index], ids[b_index]
+            for axis in (0, 1):
+                before_sign = _sign(reference[a][axis] - reference[b][axis])
+                after_sign = _sign(candidate[a][axis] - candidate[b][axis])
+                if before_sign != 0 and after_sign != 0 and before_sign != after_sign:
+                    order_changes += 1
+    return {
+        "shapes_compared": len(ids),
+        "shape_displacement_avg": round(sum(displacements) / len(displacements), 2) if displacements else 0,
+        "shape_displacement_max": round(max(displacements), 2) if displacements else 0,
+        "order_changes": order_changes,
+    }
 
 
 def source_has_di(source: Path) -> bool:
@@ -1435,6 +1501,37 @@ def render_report(args: argparse.Namespace) -> Path:
                         column["metrics"] = collect_metrics(engine_bpmn)
                 column["error"] = error
                 entry["engines"][name] = column  # type: ignore[index]
+
+            # An order-preserving alignment engine (#71) is not scored
+            # against its own from-scratch output the way layoutProcess is
+            # -- it is scored against what it started from, i.e. this
+            # fixture's own committed DI, regardless of whether the
+            # "original" column above is even shown (a DI-less source has
+            # nothing to align, and correctly reports 0 shapes compared
+            # rather than being skipped outright). Stashed under
+            # metrics["alignment"] so the existing metric_rows/
+            # format_metric_cell machinery renders it in a third table with
+            # no separate code path, and reads n/a for every other column.
+            for name in resolved_commands:
+                if not is_align_engine(name):
+                    continue
+                column = entry["engines"][name]  # type: ignore[index]
+                if not column["metrics"] or not column["bpmn"]:
+                    continue
+                reference_root = parse_xml(source)
+                candidate_root = parse_xml(workdir / column["bpmn"])
+                alignment = compute_alignment_metrics(reference_root, candidate_root)
+                reference_metrics = collect_metrics(source) if source_has_di(source) else None
+                for delta_key, path in (
+                    ("grid_deviation_delta", ("layout", "grid_center_x_deviation_avg")),
+                    ("lattice_delta", ("layout", "route_lattice", "non_multiple_segments")),
+                    ("orthogonality_delta", ("layout", "non_orthogonal_segments")),
+                ):
+                    before_value = get_metric(reference_metrics, path)
+                    after_value = get_metric(column["metrics"], path)
+                    if isinstance(before_value, (int, float)) and isinstance(after_value, (int, float)):
+                        alignment[delta_key] = round(after_value - before_value, 2)
+                column["metrics"]["alignment"] = alignment  # type: ignore[index]
 
             # The "original" column exists to be an independent third point
             # of comparison. If its committed DI is actually a copy of our
@@ -1530,6 +1627,22 @@ OTHER_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
     ("data references", ("semantic", "data_references")),
 ]
 
+# ALIGNMENT is neither validity nor aesthetics: it is a relation between an
+# engine's output and what it started from, not a property of the output
+# alone (#71). Only an engine that declares itself order-preserving
+# (is_align_engine) has this populated at all -- every other column,
+# "original" included, reads n/a here, the same n/a mechanism format_metric_
+# cell already uses for a metric a column cannot meaningfully score.
+ALIGNMENT_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("shapes compared", ("alignment", "shapes_compared")),
+    ("shape displacement average (px)", ("alignment", "shape_displacement_avg")),
+    ("shape displacement maximum (px)", ("alignment", "shape_displacement_max")),
+    ("shape order changes (must be 0 -- #70's contract)", ("alignment", "order_changes")),
+    ("grid center-x deviation, change from input", ("alignment", "grid_deviation_delta")),
+    ("non-50px route segments, change from input", ("alignment", "lattice_delta")),
+    ("non-orthogonal segments, change from input", ("alignment", "orthogonality_delta")),
+]
+
 # Every label-collision metric reads as a vacuous 0 for an engine that emits
 # no BPMNLabel elements at all -- you cannot overlap a label you did not
 # draw. Rendered as n/a instead of 0 wherever one of these paths appears, in
@@ -1611,6 +1724,7 @@ def report_html(metrics_doc: dict[str, object]) -> str:
     entries = metrics_doc["entries"]  # type: ignore[index]
     engines = metrics_doc.get("engines", [])  # type: ignore[union-attr]
     engine_names = [engine["name"] for engine in engines]  # type: ignore[index]
+    has_align_column = any(is_align_engine(name) for name in engine_names)
     commit = html.escape(str(metrics_doc.get("commit", "unknown")))
     generated_at = html.escape(str(metrics_doc.get("generated_at", "unknown")))
     sections: list[str] = []
@@ -1641,6 +1755,14 @@ def report_html(metrics_doc: dict[str, object]) -> str:
                     f'<p class="engine-error">{html.escape(column["error"] or "no output")}</p></figure>'
                 )
         header_cells = "".join(f"<th>{html.escape(name)}</th>" for name, _metrics, _error, _na_reason in columns)
+        alignment_section = (
+            f"""<h3>Alignment <span class="table-note">(relative to this fixture's own input DI -- applies only to columns that declare themselves order-preserving; every other column reads n/a here, see bias note above)</span></h3>
+  <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+    {metric_rows(ALIGNMENT_METRIC_PATHS, columns)}
+  </tbody></table>"""
+            if has_align_column
+            else ""
+        )
         details = "".join(
             f"<details><summary>{html.escape(name)} metrics JSON</summary>"
             f"<pre>{(html.escape('n/a (' + na_reason + ') -- not used for comparison; raw metrics below for reference:') + chr(10) + chr(10)) if na_reason else ''}"
@@ -1664,6 +1786,7 @@ def report_html(metrics_doc: dict[str, object]) -> str:
   <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
     {metric_rows(AESTHETIC_METRIC_PATHS, columns)}
   </tbody></table>
+  {alignment_section}
   <details>
     <summary>Other metrics (descriptive counts and our own grid-convention internals, excluded from comparison)</summary>
     <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
@@ -1715,6 +1838,13 @@ pre {{ overflow: auto; background: #f6f8fa; padding: 1rem; }}
   <code>0</code>. Metrics describing only this engine's own 50px-grid routing convention are
   excluded from both tables as not comparable. No combined score or ranking is computed anywhere
   in this report.
+  A third table, <strong>Alignment</strong>, appears only when a column declares itself
+  order-preserving (#71) and is measured differently in kind, not just in scope: every other
+  column's metrics are a property of that column's own output considered alone, while
+  Alignment's are a <em>relation</em> to this fixture's own input DI -- how far shapes moved and
+  whether any two of them changed relative order getting there. Comparing an Alignment score
+  against a Validity or Aesthetics score from another column is comparing different things
+  measured on different axes, not two engines on the same scale.
 </div>
 <h2>Engines</h2>
 <p>Measured at commit <code>{commit}</code>, generated {generated_at}. A reader who wants to check whether
@@ -2489,6 +2619,48 @@ def metric_selftests() -> None:
     )["layout"]
     expect("grid_center_x_deviation_avg (one on-grid, one 5px off)", layout["grid_center_x_deviation_avg"], 2.5)
     expect("grid_center_x_deviation_max (one on-grid, one 5px off)", layout["grid_center_x_deviation_max"], 5)
+
+    # compute_alignment_metrics (#71): a hand-built "before" and "after" pair
+    # of documents rather than one -- this metric is a relation between two
+    # diagrams, never computable from collect_metrics against either alone.
+    # A, B, C start at centers (50,40), (250,40), (150,240); the "after"
+    # document moves A by +3px and B by -3px on x (a plausible alignment
+    # nudge) and leaves C untouched, without changing anyone's relative
+    # order on either axis.
+    reference_xml = _wrap_metric_test(
+        '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n    <bpmn:task id="C" name="C" />\n',
+        '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="200" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="100" y="200" width="100" height="80" /></bpmndi:BPMNShape>\n',
+    )
+    aligned_xml = _wrap_metric_test(
+        '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n    <bpmn:task id="C" name="C" />\n',
+        '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="3" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="197" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="100" y="200" width="100" height="80" /></bpmndi:BPMNShape>\n',
+    )
+    alignment = compute_alignment_metrics(ET.fromstring(reference_xml), ET.fromstring(aligned_xml))
+    expect("compute_alignment_metrics shapes_compared", alignment["shapes_compared"], 3)
+    expect("compute_alignment_metrics shape_displacement_avg", alignment["shape_displacement_avg"], 2.0)
+    expect("compute_alignment_metrics shape_displacement_max", alignment["shape_displacement_max"], 3.0)
+    expect("compute_alignment_metrics order_changes (order preserved)", alignment["order_changes"], 0)
+
+    # Same starting document, but this "after" swaps A and B's relative x
+    # order (A ends up to the right of B, and both cross over C's x in
+    # between, in different directions -- exactly what #70's contract
+    # forbids an order-preserving engine from doing. order_changes counts
+    # every pair whose relative order flipped: A-B (they crossed each
+    # other), A-C (A crossed from C's left to its right), and B-C (B
+    # crossed from C's right to its left) -- 3, not just the 1 pair that
+    # moved.
+    reordered_xml = _wrap_metric_test(
+        '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n    <bpmn:task id="C" name="C" />\n',
+        '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="260" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+        '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="100" y="200" width="100" height="80" /></bpmndi:BPMNShape>\n',
+    )
+    reordered = compute_alignment_metrics(ET.fromstring(reference_xml), ET.fromstring(reordered_xml))
+    expect("compute_alignment_metrics order_changes (A and B swapped)", reordered["order_changes"], 3)
 
     # shape_overlaps: two tasks whose bounds overlap by a known amount.
     layout = _metrics_for_xml(

@@ -112,6 +112,17 @@ or is missing degrades to an empty column with the error recorded; `check`
 still gates only `ours`, so a baseline's numbers are information, never a
 build failure.
 
+Passing `--engine ours-align=ours-align` adds a column for this project's
+own alignment mode (`--align`, see above), scored against every fixture's
+own input DI rather than the from-scratch column's semantics-only starting
+point. That column's report includes a third table, **Alignment**, that no
+other column populates: shapes compared, how far they moved, whether any
+pair changed relative order (must read 0 -- that is the mode's own
+contract), and how the grid/lattice/orthogonality metrics changed relative
+to the input. `ours-align` is a naming convention `resolve_engine_command`
+recognizes, the same way a bare `ours` command falls back to the locally
+built package.
+
 ## Published comparison report
 
 Every push to `main` renders the N-way comparison report over the curated
