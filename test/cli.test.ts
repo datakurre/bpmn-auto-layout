@@ -168,4 +168,74 @@ describe('cli', () => {
       }
     }
   });
+
+  it('prints version when -v or --version is passed', async () => {
+    let stdoutOutput = '';
+    const io: CliIo = {
+      stdout: (msg) => {
+        stdoutOutput += msg;
+      },
+      stderr: () => {},
+      readFile: () => '',
+      writeFile: () => {},
+    };
+
+    const code1 = await runCli(['-v'], io);
+    expect(code1).toBe(0);
+    expect(stdoutOutput).toBe('0.1.0\n');
+
+    stdoutOutput = '';
+    const code2 = await runCli(['--version'], io);
+    expect(code2).toBe(0);
+    expect(stdoutOutput).toBe('0.1.0\n');
+  });
+
+  it('supports in-place layout via -i and --in-place', async () => {
+    let writtenFile = '';
+    let writtenContent = '';
+    const io: CliIo = {
+      stdout: () => {},
+      stderr: () => {},
+      readFile: () => sampleBpmn,
+      writeFile: (file, content) => {
+        writtenFile = file;
+        writtenContent = content;
+      },
+    };
+
+    const code1 = await runCli(['-i', 'process.bpmn'], io);
+    expect(code1).toBe(0);
+    expect(writtenFile).toBe('process.bpmn');
+    expect(writtenContent).toContain('Process_1');
+
+    writtenFile = '';
+    writtenContent = '';
+    const code2 = await runCli(['--in-place', 'process.bpmn'], io);
+    expect(code2).toBe(0);
+    expect(writtenFile).toBe('process.bpmn');
+    expect(writtenContent).toContain('Process_1');
+  });
+
+  it('supports custom grid spacing via -s and --spacing', async () => {
+    let writtenContent = '';
+    const io: CliIo = {
+      stdout: () => {},
+      stderr: () => {},
+      readFile: () => sampleBpmn,
+      writeFile: (_, content) => {
+        writtenContent = content;
+      },
+    };
+
+    const code1 = await runCli(['-s', '80', 'in.bpmn', 'out.bpmn'], io);
+    expect(code1).toBe(0);
+    expect(writtenContent).toContain('Process_1');
+
+    const code2 = await runCli(['--spacing', '100', 'in.bpmn', 'out.bpmn'], io);
+    expect(code2).toBe(0);
+    expect(writtenContent).toContain('Process_1');
+
+    const codeDangling = await runCli(['in.bpmn', '-s'], io);
+    expect(codeDangling).toBe(0);
+  });
 });

@@ -1,11 +1,5 @@
-import { BpmnModdle } from 'bpmn-moddle';
-
-export interface AutoLayoutOptions {
-  /**
-   * Additional Moddle extensions to register
-   */
-  moddleExtensions?: Record<string, any>;
-}
+import { LayoutEngine } from './layout-engine';
+import type { AutoLayoutOptions } from './types';
 
 /**
  * Layout BPMN 2.0 XML diagram.
@@ -15,13 +9,14 @@ export interface AutoLayoutOptions {
  * @returns Promise resolving to the layouted BPMN 2.0 XML string
  */
 export async function layoutProcess(xml: string, options?: AutoLayoutOptions): Promise<string> {
-  const moddle = new BpmnModdle(options?.moddleExtensions);
-  const { rootElement } = await moddle.fromXML(xml);
-
-  const { xml: outputXml } = await moddle.toXML(rootElement, { format: true });
-  return outputXml;
+  const engine = new LayoutEngine(options);
+  return engine.layout(xml);
 }
 
 export { BpmnModdle } from 'bpmn-moddle';
 export { default as BpmnViewer } from 'bpmn-js';
+export { LayoutEngine } from './layout-engine';
+export { BpmnBuilder } from './bpmn-builder';
+export { scoreDiagram } from './layout-metrics';
+export type { AutoLayoutOptions, Bounds, Point, DiagramQualityScore } from './types';
 export default layoutProcess;

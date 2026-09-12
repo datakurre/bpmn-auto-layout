@@ -1,0 +1,40 @@
+stages:
+  - test
+  - deploy
+
+default:
+  image: nixos/nix:latest
+  before_script:
+    - mkdir -p ~/.config/nix
+    - echo "experimental-features = nix-command flakes" >> ~/.config/nix/nix.conf
+    - nix-env -iA nixpkgs.git || true
+
+variables:
+  NIX_CONFIG: 'experimental-features = nix-command flakes'
+
+# Run full test suite, linting, and 100% coverage verification in Nix devShell
+test:
+  stage: test
+  script:
+    - nix develop --command sh -c "npm ci && npm run typecheck && npm run build && npm test && npm run lint && npm run format:check"
+  artifacts:
+    paths:
+      - coverage/
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+# Deploy visual gallery to GitLab Pages
+pages:
+  stage: deploy
+  image: node:22-alpine
+  dependencies:
+    - test
+  script:
+    - node scripts/generate-gallery.mjs
+  artifacts:
+    paths:
+      - public
+  rules:
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
