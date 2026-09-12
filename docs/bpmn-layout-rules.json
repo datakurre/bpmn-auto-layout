@@ -57,6 +57,12 @@
       "rule": "Sequential flow-node paths use a uniform 50 px edge-to-edge clearance, matching the default horizontal spacing used by bpmn-js for newly placed flow nodes. Node widths contribute half-widths on both sides of each gap."
     },
     {
+      "id": "layout.spacing.gaps-vs-grid-canonical",
+      "label": "implementation-derived",
+      "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:22-44", "packages/bpmn-auto-layout/src/node-placement.ts:617-656"],
+      "rule": "The exact 50 px edge-to-edge flow gap (layout.spacing.default-flow-gap) is canonical; the 120 px semantic column pitch (layout.defaults.grid-and-tracks) is best-effort and yields whenever the two conflict, which they do for any two nodes of differing widths. snapNodesToGrid only pulls a node's center onto the 120 px pitch when it is already within 2 px of it -- explicitly to avoid disturbing the fractional placement that keeps gaps even -- and enforceFlowGaps then re-establishes the exact gap afterward, which can pull a center back off that pitch. This was an implicit consequence of running those two passes in that order, not a stated rule, until #70 asked which of the two targets named in #8 is the one to keep when they cannot both hold; recorded here per #70 so a future change has something to check itself against. Consequently every fixture in the corpus has some node off the 120 px grid (mean deviation ~23 px) while a majority (63 of 96 measured for #70) have every flow gap exactly 50 px -- that split is what this rule predicts, not a defect either metric should be read as reporting on its own."
+    },
+    {
       "id": "layout.tracks.dynamic-clearance",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:651-673"],
@@ -66,7 +72,7 @@
       "id": "layout.subprocess.children",
       "label": "implementation-derived",
       "source_lines": ["packages/bpmn-auto-layout/src/node-placement.ts:444-519", "packages/bpmn-auto-layout/src/node-placement.ts:570-735"],
-      "rule": "Expanded subprocesses are laid out recursively. computeProcessLayout is called on the subprocess flowElements in local coordinates; the resulting bounding box plus SUBPROCESS_PAD_H=40 px left/right and SUBPROCESS_PAD_V=30 px top/bottom determines the container size (minimum 360x200). After the outer layout finalizes parent positions, layoutSubProcessChildrenRecursive translates child node layouts to absolute coordinates in the parent layoutNodes map with isSubProcessChild=true, preserving grid-sized translations and centered content when the minimum container is larger than the child bounds."
+      "rule": "Expanded subprocesses are laid out recursively. computeProcessLayout is called on the subprocess flowElements in local coordinates; the resulting bounding box plus SUBPROCESS_PAD_H=40 px left/right and SUBPROCESS_PAD_V=30 px top/bottom determines the container size (minimum 360x200). layoutSubprocessBudgeted runs this once unbudgeted and, only if the result's width:height ratio exceeds SUBPROCESS_MAX_ASPECT_RATIO=6, derives a width budget targeting LANDSCAPE_A4_RATIO from that layout's own content area and lays out again with the budget applied (#67): buildTrackColMapsWithDim's spine assignment then wraps onto a fresh row of tracks, WRAP_ROW_TRACK_GAP=3 tracks apart, instead of extending columns indefinitely, whenever the next spine node would exceed the budget and has no lane hint (#65 stays a hard constraint the budget cannot override). The resulting ProcessLayoutResult is cached per subprocess id and reused rather than recomputed. After the outer layout finalizes parent positions, layoutSubProcessChildrenRecursive translates the (possibly wrapped) child node layouts to absolute coordinates in the parent layoutNodes map with isSubProcessChild=true, preserving grid-sized translations and centered content when the minimum container is larger than the child bounds."
     },
     {
       "id": "layout.boundary-events.attachment",

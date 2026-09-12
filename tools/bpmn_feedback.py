@@ -2476,6 +2476,20 @@ def metric_selftests() -> None:
         if actual != expected:
             failures.append(f"{name}: expected {expected!r}, got {actual!r}")
 
+    # grid_center_x_deviation: one node centered exactly on the 120px column
+    # pitch (deviation 0) and one centered 5px off it -- pins #70's finding
+    # that this metric, though defined since #8, was never itself checked
+    # against hand-built DI.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="25" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="150" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("grid_center_x_deviation_avg (one on-grid, one 5px off)", layout["grid_center_x_deviation_avg"], 2.5)
+    expect("grid_center_x_deviation_max (one on-grid, one 5px off)", layout["grid_center_x_deviation_max"], 5)
+
     # shape_overlaps: two tasks whose bounds overlap by a known amount.
     layout = _metrics_for_xml(
         _wrap_metric_test(
