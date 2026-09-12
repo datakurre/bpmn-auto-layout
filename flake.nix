@@ -40,7 +40,9 @@
         };
         bpmn-auto-layout = {
           type = "app";
-          program = "${self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-auto-layout}/bin/bpmn-auto-layout";
+          program = "${
+            self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-auto-layout
+          }/bin/bpmn-auto-layout";
         };
       });
 
