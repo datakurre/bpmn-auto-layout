@@ -1,0 +1,68 @@
+{
+  "name": "bpmn-auto-layout",
+  "version": "0.1.0",
+  "description": "Auto-layout BPMN 2.0 diagrams, generating missing DI information",
+  "type": "module",
+  "main": "dist/index.cjs",
+  "module": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "bin": {
+    "bpmn-auto-layout": "dist/cli.js"
+  },
+  "scripts": {
+    "build": "node esbuild.config.mjs && tsc -p tsconfig.build.json",
+    "typecheck": "tsc --noEmit",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint src/ test/",
+    "lint:fix": "eslint src/ test/ --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepare": "npm run build"
+  },
+  "files": [
+    "dist/",
+    "README.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "bpmn",
+    "bpmn-js",
+    "bpmn-moddle",
+    "layout",
+    "auto-layout",
+    "diagram"
+  ],
+  "author": "Asko Soukka <asko.soukka@iki.fi>",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/datakurre/bpmn-auto-layout.git"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "bpmn-js": "^18.28.0",
+    "bpmn-moddle": "^10.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.2",
+    "@types/bpmn-moddle": "^10.0.0",
+    "@types/node": "^22.10.2",
+    "esbuild": "^0.28.2",
+    "eslint": "^9.39.2",
+    "eslint-plugin-unicorn": "^63.0.0",
+    "prettier": "^3.8.1",
+    "typescript": "^5.7.2",
+    "typescript-eslint": "^8.54.0",
+    "vitest": "^4.0.18"
+  }
+}
