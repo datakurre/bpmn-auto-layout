@@ -3,6 +3,7 @@ import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
 import { assignCoordinates } from '../graph/coordinate-assignment';
 import { routeOrthogonalEdge } from '../graph/orthogonal-router';
+import { routeGatewayOutgoingEdges, type GatewayFlowInfo } from '../graph/gateway-router';
 import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
 import type { AutoLayoutOptions, Bounds, Point } from '../types';
 
@@ -80,7 +81,12 @@ export function layoutScope(
     shapes.push({ element: bEvent, bounds: boundsMap.get(bEvent.id)! });
   }
 
-  const routedEdges = routeScopeEdges(sequenceFlows, boundaryEvents, boundsMap);
+  const routedEdges = routeScopeEdges(sequenceFlows, {
+    regularNodes,
+    boundaryEvents,
+    boundsMap,
+    feedbackEdges,
+  });
   edges.push(...routedEdges);
 
   const bounding = computeScopeBoundingBox(shapes);
@@ -109,29 +115,114 @@ function extractNodeToLaneMap(scopeElement: any): Map<string, number> | undefine
   return nodeToLane;
 }
 
-function routeScopeEdges(
+interface ScopeRouteContext {
+  regularNodes: any[];
+  boundaryEvents: any[];
+  boundsMap: Map<string, Bounds>;
+  feedbackEdges?: Set<string>;
+}
+
+interface PartitionedFlows {
+  gatewayFlows: Map<string, GatewayFlowInfo[]>;
+  otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>;
+}
+
+function getRefId(ref: any): string | undefined {
+  return ref?.id || ref;
+}
+
+function partitionScopeFlows(
   sequenceFlows: any[],
-  boundaryEvents: any[],
-  boundsMap: Map<string, Bounds>
-): Array<{ element: any; waypoints: Point[] }> {
-  const edges: Array<{ element: any; waypoints: Point[] }> = [];
-  const allBounds = Array.from(boundsMap.values());
+  gatewaySet: Set<string>,
+  ctx: ScopeRouteContext
+): PartitionedFlows {
+  const gatewayFlows = new Map<string, GatewayFlowInfo[]>();
+  const otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }> = [];
 
   for (const flow of sequenceFlows) {
-    const srcId = flow.sourceRef?.id || flow.sourceRef;
-    const tgtId = flow.targetRef?.id || flow.targetRef;
-    const srcBounds = boundsMap.get(srcId);
-    const tgtBounds = boundsMap.get(tgtId);
+    const srcId = getRefId(flow.sourceRef);
+    const tgtId = getRefId(flow.targetRef);
+    const srcBounds = ctx.boundsMap.get(srcId!);
+    const tgtBounds = ctx.boundsMap.get(tgtId!);
 
     if (srcBounds && tgtBounds) {
-      const isFromBoundary = boundaryEvents.some((b: any) => b.id === srcId);
-      const waypoints = isFromBoundary
-        ? routeBoundaryExit(srcBounds, tgtBounds)
-        : routeOrthogonalEdge(srcBounds, tgtBounds, allBounds);
-      edges.push({ element: flow, waypoints });
+      if (gatewaySet.has(srcId!)) {
+        const list = gatewayFlows.get(srcId!) || [];
+        list.push({
+          flow,
+          targetBounds: tgtBounds,
+          isFeedback: ctx.feedbackEdges?.has(flow.id),
+        });
+        gatewayFlows.set(srcId!, list);
+      } else {
+        otherFlows.push({ flow, srcId: srcId!, srcBounds, tgtBounds });
+      }
     }
   }
+
+  return { gatewayFlows, otherFlows };
+}
+
+function routeAllGatewayFlows(
+  gatewayFlows: Map<string, GatewayFlowInfo[]>,
+  sequenceFlows: any[],
+  ctx: ScopeRouteContext
+): Array<{ element: any; waypoints: Point[] }> {
+  const edges: Array<{ element: any; waypoints: Point[] }> = [];
+  const allBounds = Array.from(ctx.boundsMap.values());
+
+  for (const [gwId, flows] of gatewayFlows.entries()) {
+    const gwBounds = ctx.boundsMap.get(gwId)!;
+    const hasIncomingFeedback = sequenceFlows.some((f) => {
+      const tgtId = getRefId(f.targetRef);
+      return tgtId === gwId && Boolean(ctx.feedbackEdges?.has(f.id));
+    });
+
+    const routeMap = routeGatewayOutgoingEdges(flows, {
+      gatewayBounds: gwBounds,
+      allBounds,
+      hasIncomingFeedback,
+    });
+
+    for (const f of flows) {
+      const waypoints = routeMap.get(f.flow.id)!;
+      edges.push({ element: f.flow, waypoints });
+    }
+  }
+
   return edges;
+}
+
+function routeOtherFlows(
+  otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>,
+  boundaryEvents: any[],
+  allBounds: Bounds[]
+): Array<{ element: any; waypoints: Point[] }> {
+  const edges: Array<{ element: any; waypoints: Point[] }> = [];
+  for (const { flow, srcId, srcBounds, tgtBounds } of otherFlows) {
+    const isFromBoundary = boundaryEvents.some((b: any) => b.id === srcId);
+    const waypoints = isFromBoundary
+      ? routeBoundaryExit(srcBounds, tgtBounds)
+      : routeOrthogonalEdge(srcBounds, tgtBounds, allBounds);
+    edges.push({ element: flow, waypoints });
+  }
+  return edges;
+}
+
+function routeScopeEdges(
+  sequenceFlows: any[],
+  ctx: ScopeRouteContext
+): Array<{ element: any; waypoints: Point[] }> {
+  const allBounds = Array.from(ctx.boundsMap.values());
+  const gatewaySet = new Set(
+    ctx.regularNodes.filter((n) => n.$type?.endsWith('Gateway')).map((n) => n.id)
+  );
+
+  const { gatewayFlows, otherFlows } = partitionScopeFlows(sequenceFlows, gatewaySet, ctx);
+  const gwEdges = routeAllGatewayFlows(gatewayFlows, sequenceFlows, ctx);
+  const otherEdges = routeOtherFlows(otherFlows, ctx.boundaryEvents, allBounds);
+
+  return [...gwEdges, ...otherEdges];
 }
 
 function buildScopeGraph(
@@ -151,7 +242,7 @@ function buildScopeGraph(
 function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[]): void {
   for (const bEvent of boundaryEvents) {
     graph.addNode(bEvent.id, bEvent);
-    const hostId = bEvent.attachedToRef?.id || bEvent.attachedToRef;
+    const hostId = getRefId(bEvent.attachedToRef);
     if (hostId && graph.getNode(hostId)) {
       graph.addEdge({
         id: `_attach_${bEvent.id}`,
@@ -165,8 +256,8 @@ function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[]): voi
 
 function addSequenceFlowEdges(graph: DirectedGraph, sequenceFlows: any[]): void {
   for (const flow of sequenceFlows) {
-    const srcId = flow.sourceRef?.id || flow.sourceRef;
-    const tgtId = flow.targetRef?.id || flow.targetRef;
+    const srcId = getRefId(flow.sourceRef);
+    const tgtId = getRefId(flow.targetRef);
     if (srcId && tgtId && graph.getNode(srcId) && graph.getNode(tgtId)) {
       graph.addEdge({
         id: flow.id,
