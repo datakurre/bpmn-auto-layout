@@ -13,6 +13,7 @@ import shlex
 import shutil
 import subprocess
 import tempfile
+from collections import Counter
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,6 +32,28 @@ for prefix, uri in NS.items():
     ET.register_namespace(prefix, uri)
 
 CONTAINER_TYPES = {"lane", "participant", "subProcess"}
+FLOW_NODE_TYPES = {
+    "task",
+    "userTask",
+    "serviceTask",
+    "sendTask",
+    "receiveTask",
+    "manualTask",
+    "scriptTask",
+    "businessRuleTask",
+    "callActivity",
+    "subProcess",
+    "startEvent",
+    "endEvent",
+    "intermediateCatchEvent",
+    "intermediateThrowEvent",
+    "boundaryEvent",
+    "exclusiveGateway",
+    "inclusiveGateway",
+    "parallelGateway",
+    "eventBasedGateway",
+    "complexGateway",
+}
 ROUTE_UNIT = 50
 
 
@@ -1646,11 +1669,115 @@ def stability(base_input: Path, variant_input: Path, layout_command: list[str]) 
     return stability_report(base_target, variant_target)
 
 
+def validate_fixture_references(xml: str) -> list[str]:
+    """Check a fixture's internal references before anything is laid out.
+
+    The corpus is checked for element-type coverage, and its layout output is
+    checked for geometry, but nothing has ever checked that a fixture is
+    internally consistent BPMN. A dangling <outgoing> pointing at an element
+    that did not exist shipped in data-artifacts.bpmn until it was noticed by
+    hand, making bpmn-moddle report "unresolved reference" on every parse,
+    because no gate looked. These are the cheap structural checks an editor
+    would make, run against the files as committed.
+    """
+    root = ET.fromstring(xml)
+    problems: list[str] = []
+
+    ids = [element.get("id") for element in root.iter() if element.get("id")]
+    known = set(ids)
+    counts = Counter(ids)
+    problems.extend(f"duplicate id '{name}'" for name in sorted(counts) if counts[name] > 1)
+
+    for name in ("sequenceFlow", "messageFlow", "association"):
+        for element in root.iter(q("bpmn", name)):
+            for attribute in ("sourceRef", "targetRef"):
+                ref = element.get(attribute)
+                if ref and ref not in known:
+                    problems.append(f"{element.get('id')}: {attribute} '{ref}' does not exist")
+
+    for boundary in root.iter(q("bpmn", "boundaryEvent")):
+        host = boundary.get("attachedToRef")
+        if host and host not in known:
+            problems.append(f"{boundary.get('id')}: attachedToRef '{host}' does not exist")
+
+    claimed: dict[str, str] = {}
+    for lane in root.iter(q("bpmn", "lane")):
+        lane_id = lane.get("id", "")
+        for ref in lane.findall(q("bpmn", "flowNodeRef")):
+            member = (ref.text or "").strip()
+            if not member:
+                continue
+            if member not in known:
+                problems.append(f"lane {lane_id}: flowNodeRef '{member}' does not exist")
+            elif member in claimed:
+                problems.append(f"'{member}' is claimed by lane {claimed[member]} and lane {lane_id}")
+            else:
+                claimed[member] = lane_id
+
+    flows = {
+        flow.get("id", ""): (flow.get("sourceRef"), flow.get("targetRef"))
+        for flow in root.iter(q("bpmn", "sequenceFlow"))
+    }
+    for element in root.iter():
+        element_id = element.get("id")
+        if not element_id or local_name(element.tag) not in FLOW_NODE_TYPES:
+            continue
+        # <incoming>/<outgoing> reference sequence flows only. Listing an
+        # association or a stale id there is what bpmn-moddle reports as an
+        # unresolved reference.
+        for attribute, expected in (
+            ("incoming", {fid for fid, (_, target) in flows.items() if target == element_id}),
+            ("outgoing", {fid for fid, (source, _) in flows.items() if source == element_id}),
+        ):
+            declared = {
+                child.text.strip()
+                for child in element
+                if local_name(child.tag) == attribute and child.text and child.text.strip()
+            }
+            if declared != expected:
+                problems.append(
+                    f"{element_id}: <{attribute}> lists {sorted(declared)} "
+                    f"but the sequence flows say {sorted(expected)}"
+                )
+
+    for di in root.iter():
+        target = di.get("bpmnElement")
+        if target and local_name(di.tag) in {"BPMNShape", "BPMNEdge"} and target not in known:
+            problems.append(f"DI {di.get('id')}: bpmnElement '{target}' does not exist")
+
+    return problems
+
+
+def assert_fixture_references(fixtures: dict[str, str], label: str) -> None:
+    """Fail loudly when any fixture in the set is not internally consistent."""
+    failures = [
+        f"{filename}: {problem}"
+        for filename, xml in sorted(fixtures.items())
+        for problem in validate_fixture_references(xml)
+    ]
+    if failures:
+        raise SystemExit(
+            f"{label} fixtures have broken references:\n" + "\n".join(f"  {failure}" for failure in failures)
+        )
+
+
 def selftest(layout_command: list[str] | None = None, structure_only: bool = False) -> None:
     first = persisted_fixtures()
     second = persisted_fixtures()
     if first != second:
         raise SystemExit("persisted fixture set changed while being read")
+    assert_fixture_references(first, "persisted")
+    # A checker that only ever sees clean input can rot into a no-op without
+    # anyone noticing -- which is how selftest itself once printed OK while
+    # verifying nothing (#43). Prove the reference check still bites.
+    canary = first[sorted(first)[0]].replace(
+        "</bpmn:process>",
+        '<bpmn:sequenceFlow id="Selftest_Canary" sourceRef="Selftest_Missing" targetRef="Selftest_Missing" />'
+        "</bpmn:process>",
+        1,
+    )
+    if not validate_fixture_references(canary):
+        raise SystemExit("reference validation no longer detects a dangling sourceRef")
     scratch = Path(".bpmn-feedback") / "selftest"
     scratch.mkdir(parents=True, exist_ok=True)
     targets: dict[str, Path] = {}
@@ -2203,6 +2330,7 @@ def regression(layout_command: list[str] | None = None, structure_only: bool = F
     REGRESSION_CHECKS whenever an iteration finds a new minimal, single-
     concern reproduction worth keeping (see AGENTS.md)."""
     fixtures = regression_fixtures()
+    assert_fixture_references(fixtures, "regression")
     unchecked = sorted(set(fixtures) - set(REGRESSION_CHECKS))
     if unchecked:
         raise SystemExit(f"regression fixtures with no invariant check registered: {', '.join(unchecked)}")
