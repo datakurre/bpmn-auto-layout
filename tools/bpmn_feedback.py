@@ -1201,6 +1201,58 @@ def engine_version(name: str, command: list[str]) -> str:
     return "unknown"
 
 
+def di_geometry_signature(xml: str) -> list[tuple[str | None, ...]]:
+    """Every DI coordinate value in document order, as a signature that is
+    independent of formatting/whitespace/attribute order -- used to detect
+    a fixture whose committed DI was seeded directly from an engine's own
+    output rather than authored independently (#62). Returns [] on unparsable
+    input rather than raising: an outer caller decides what that means."""
+    try:
+        root = ET.fromstring(xml)
+    except ET.ParseError:
+        return []
+    signature: list[tuple[str | None, ...]] = []
+    for element in root.iter():
+        tag = local_name(element.tag)
+        if tag == "Bounds":
+            signature.append(("Bounds", element.get("x"), element.get("y"), element.get("width"), element.get("height")))
+        elif tag == "waypoint":
+            signature.append(("waypoint", element.get("x"), element.get("y")))
+    return signature
+
+
+# A fixture seeded from an engine run stays detectable even after an
+# unrelated engine fix nudges a handful of coordinates -- exact identity is
+# the strong signal, but requiring it would let one routing tweak quietly
+# un-flag a fixture that was never independently authored in the first
+# place (confirmed while building this: nested-subprocess-exceptions.bpmn,
+# named as self-seeded in #62, fell to 73/77 matching entries after this
+# session's own #59 routing fix -- still obviously the same seed run, not a
+# coincidence between two independent authors).
+NEAR_SEEDED_THRESHOLD = 0.85
+
+
+def original_seeded_reason(original_xml: str, engine_xml: str) -> str | None:
+    """None if `original_xml`'s committed DI looks independently authored;
+    otherwise a human-readable reason it doesn't (#62): its geometry is
+    identical, or nearly identical, to a fresh run of this same engine on
+    the same semantics. A source with no DI at all (empty signature) is
+    never "seeded" -- just DI-less; source_has_di already excludes that
+    case before this is ever called, but empty-vs-empty would otherwise
+    compare as a 100% match and misreport every DI-less pair."""
+    original_signature = di_geometry_signature(original_xml)
+    if not original_signature:
+        return None
+    engine_signature = di_geometry_signature(engine_xml)
+    if original_signature == engine_signature:
+        return "seeded from this engine, not an independent reference"
+    if len(original_signature) == len(engine_signature) and original_signature:
+        matching = sum(1 for a, b in zip(original_signature, engine_signature) if a == b)
+        if matching / len(original_signature) >= NEAR_SEEDED_THRESHOLD:
+            return "nearly identical to this engine's own output, likely seeded from an earlier run -- not an independent reference"
+    return None
+
+
 def source_has_di(source: Path) -> bool:
     """Whether `source` already carries diagram interchange -- used to skip
     the "original" comparison column for a source that has none, per #53's
@@ -1270,6 +1322,7 @@ def render_report(args: argparse.Namespace) -> Path:
                     "svg": str(original_svg.relative_to(workdir)),
                     "metrics": collect_metrics(original_bpmn),
                     "error": None,
+                    "na_reason": None,
                 }
 
             for name, command in resolved_commands.items():
@@ -1288,6 +1341,22 @@ def render_report(args: argparse.Namespace) -> Path:
                         column["metrics"] = collect_metrics(engine_bpmn)
                 column["error"] = error
                 entry["engines"][name] = column  # type: ignore[index]
+
+            # The "original" column exists to be an independent third point
+            # of comparison. If its committed DI is actually a copy of our
+            # own engine's output for this same source, it is not
+            # independent -- showing it as agreement would be corroboration
+            # theater (#62). Compare geometry, not bytes: engines[name]["bpmn"]
+            # was already re-serialized by moddle-xml, so formatting can
+            # differ even when nothing about the geometry did.
+            original = entry.get("original")
+            ours = entry["engines"].get("ours")  # type: ignore[index]
+            if original and ours and ours.get("bpmn"):
+                original_xml = (workdir / original["bpmn"]).read_text(encoding="utf8")  # type: ignore[index]
+                ours_xml = (workdir / ours["bpmn"]).read_text(encoding="utf8")
+                seeded_reason = original_seeded_reason(original_xml, ours_xml)
+                if seeded_reason:
+                    original["na_reason"] = f"{seeded_reason} (#62)"  # type: ignore[index]
 
             entries.append(entry)
 
@@ -1395,7 +1464,17 @@ def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
 EXCESS_TURNS_PATH: tuple[str, ...] = ("layout", "excess_turns")
 
 
-def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None, error: str | None) -> str:
+def format_metric_cell(
+    path: tuple[str, ...],
+    metrics: dict[str, object] | None,
+    error: str | None,
+    na_reason: str | None = None,
+) -> str:
+    if na_reason is not None:
+        # A whole-column exclusion (e.g. #62's self-seeded "original") wins
+        # over any per-metric value -- the column was never meant to be
+        # scored at all, so there is nothing for a per-metric reason to add.
+        return f"n/a ({na_reason})"
     if error is not None:
         return "error"
     if path in LABEL_DEPENDENT_METRIC_PATHS and not get_metric(metrics, ("layout", "labels")):
@@ -1415,18 +1494,20 @@ def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None,
     return str(value)
 
 
-ReportColumn = tuple[str, dict[str, object] | None, str | None]
+ReportColumn = tuple[str, dict[str, object] | None, str | None, str | None]
 
 
 def metric_rows(paths: list[tuple[str, tuple[str, ...]]], columns: list[ReportColumn]) -> str:
     """Render one row per metric in `paths` across N named (name, metrics,
-    error) columns -- generalized from the original fixed (original,
-    transformed) pair so a report can compare any number of engines (#53),
-    and reused across the validity/aesthetics/other tables (#55)."""
+    error, na_reason) columns -- generalized from the original fixed
+    (original, transformed) pair so a report can compare any number of
+    engines (#53), and reused across the validity/aesthetics/other tables
+    (#55)."""
     rows = []
     for label, path in paths:
         cells = "".join(
-            f"<td>{html.escape(format_metric_cell(path, metrics, error))}</td>" for _name, metrics, error in columns
+            f"<td>{html.escape(format_metric_cell(path, metrics, error, na_reason))}</td>"
+            for _name, metrics, error, na_reason in columns
         )
         rows.append(f"<tr><th>{html.escape(label)}</th>{cells}</tr>")
     return "\n".join(rows)
@@ -1445,14 +1526,16 @@ def report_html(metrics_doc: dict[str, object]) -> str:
         figures: list[str] = []
         original = entry.get("original")
         if original:
-            columns.append(("original", original["metrics"], original["error"]))
+            na_reason = original.get("na_reason")
+            columns.append(("original", original["metrics"], original["error"], na_reason))
+            caption = "original" if not na_reason else f"original ({html.escape(na_reason)})"
             figures.append(
-                f'<figure><figcaption>original</figcaption>'
+                f'<figure><figcaption>{caption}</figcaption>'
                 f'<img src="{html.escape(original["svg"])}" alt="original BPMN image for {title}"></figure>'
             )
         for name in engine_names:
             column = entry["engines"][name]  # type: ignore[index]
-            columns.append((name, column["metrics"], column["error"]))
+            columns.append((name, column["metrics"], column["error"], None))
             if column["svg"]:
                 figures.append(
                     f'<figure><figcaption>{html.escape(name)}</figcaption>'
@@ -1463,11 +1546,12 @@ def report_html(metrics_doc: dict[str, object]) -> str:
                     f'<figure><figcaption>{html.escape(name)}</figcaption>'
                     f'<p class="engine-error">{html.escape(column["error"] or "no output")}</p></figure>'
                 )
-        header_cells = "".join(f"<th>{html.escape(name)}</th>" for name, _metrics, _error in columns)
+        header_cells = "".join(f"<th>{html.escape(name)}</th>" for name, _metrics, _error, _na_reason in columns)
         details = "".join(
             f"<details><summary>{html.escape(name)} metrics JSON</summary>"
-            f"<pre>{html.escape(json.dumps(metrics, indent=2, sort_keys=True) if metrics is not None else (error or 'n/a'))}</pre></details>"
-            for name, metrics, error in columns
+            f"<pre>{(html.escape('n/a (' + na_reason + ') -- not used for comparison; raw metrics below for reference:') + chr(10) + chr(10)) if na_reason else ''}"
+            f"{html.escape(json.dumps(metrics, indent=2, sort_keys=True) if metrics is not None else (error or 'n/a'))}</pre></details>"
+            for name, metrics, error, na_reason in columns
         )
         sections.append(
             f"""
@@ -1832,6 +1916,19 @@ def selftest(layout_command: list[str] | None = None, structure_only: bool = Fal
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
+
+    # A curated fixture's committed DI is supposed to be an independent
+    # reference -- both for human visual review and as the report's
+    # "original" column (#62). One seeded directly from this engine's own
+    # output is neither: print it (never fail on it -- the fixture is still
+    # valid BPMN, and the fix is a judgment call about the corpus, not a
+    # build defect) so it stays visible rather than silently drifting back
+    # in the next time someone adds a fixture the same way.
+    if engine_ran:
+        for filename, xml in first.items():
+            seeded_reason = original_seeded_reason(xml, targets[filename].read_text(encoding="utf8"))
+            if seeded_reason:
+                print(f"selftest notice: {filename} {seeded_reason} (#62)")
 
     # Referential integrity (#57): no dangling refs, no duplicate ids, no
     # <incoming>/<outgoing> mismatch, across every fixture family --
@@ -2316,6 +2413,45 @@ def metric_selftests() -> None:
         "referential_integrity_problems (unresolved <incoming> is caught)",
         any("F_WRONG" in p for p in broken_problems),
         True,
+    )
+
+    # original_seeded_reason (#62): a curated fixture's "original" column is
+    # only a fair, independent reference if its committed DI wasn't itself
+    # produced by this engine. Exact and near-identical geometry must both
+    # be caught; genuinely different geometry must not be.
+    shapes = "".join(
+        f'<bpmndi:BPMNShape bpmnElement="S{i}"><dc:Bounds x="{i * 10}" y="0" width="100" height="80" /></bpmndi:BPMNShape>'
+        for i in range(10)
+    )
+    identical_a = (
+        '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" '
+        'xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" '
+        'xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="D"><bpmndi:BPMNDiagram><bpmndi:BPMNPlane>'
+        f"{shapes}"
+        "</bpmndi:BPMNPlane></bpmndi:BPMNDiagram></bpmn:definitions>"
+    )
+    identical_b = identical_a.replace('id="D"', 'id="D2"')  # a formatting difference, not a geometry one
+    expect(
+        "original_seeded_reason (byte-identical geometry is caught)",
+        original_seeded_reason(identical_a, identical_b) is not None,
+        True,
+    )
+    near_miss = identical_a.replace('x="0" y="0"', 'x="1" y="0"', 1)  # 1 of 10 shapes nudged 1px
+    expect(
+        "original_seeded_reason (one nudged coordinate out of many is still caught)",
+        original_seeded_reason(identical_a, near_miss) is not None,
+        True,
+    )
+    unrelated = identical_a.replace(shapes, shapes.replace("y=\"0\"", "y=\"500\""))
+    expect(
+        "original_seeded_reason (genuinely different geometry is not flagged)",
+        original_seeded_reason(identical_a, unrelated),
+        None,
+    )
+    expect(
+        "original_seeded_reason (no DI at all is not 'seeded', just DI-less)",
+        original_seeded_reason("<bpmn:definitions xmlns:bpmn=\"http://www.omg.org/spec/BPMN/20100524/MODEL\" />", ""),
+        None,
     )
 
     if failures:

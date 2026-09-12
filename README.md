@@ -103,6 +103,14 @@ the validity/aesthetics bias statement -- it is a static artifact of
 Publishing requires GitHub Pages enabled for this repository with source set
 to "GitHub Actions" (a one-time repository setting under Settings -> Pages).
 
+The `original` column exists to be an independent third point of comparison.
+If a curated fixture's committed DI turns out to be identical, or nearly
+identical, to a fresh run of our own engine on the same semantics, that
+fixture's `original` column reads `n/a (seeded from this engine...)` instead
+of a number -- showing it as agreement with itself would misrepresent it as
+independent corroboration. `selftest` prints (never fails on) the same
+detection for the persisted corpus.
+
 ## Generated benchmark corpus
 
 Three fixture directories, three owners: `fixtures/*.bpmn` are the curated,
