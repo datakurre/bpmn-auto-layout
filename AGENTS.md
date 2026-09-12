@@ -49,7 +49,14 @@ The ESLint configuration enforces:
 - **TypeScript hygiene**: `@typescript-eslint/consistent-type-imports`, `@typescript-eslint/no-unused-vars` (error on unused args/vars/errors unless `_` prefixed), `@typescript-eslint/no-shadow`.
 - **Unicorn rules**: `unicorn/prefer-node-protocol`, `unicorn/prefer-export-from`, `unicorn/no-useless-spread`, `unicorn/prefer-array-find`, `unicorn/prefer-includes`, etc.
 
-### 3. Agent Verification Checklist
+### 3. Snapshot Testing: BPMN XML Ground Truth & Visual PNGs
+
+- **Ground Truth**: Regression test assertions compare normalized BPMN 2.0 XML with Diagram Interchange (`test/snapshots/*.bpmn`). This guarantees 100% deterministic testing across development containers and CI runners without OS-level rasterization font discrepancies.
+- **Visual Artifacts**: Every snapshot maintains an accompanying `test/snapshots/*.png`. When running `UPDATE_SNAPSHOTS=true npm test` or when a PNG snapshot is missing, `test/helpers/snapshot-helper.ts` automatically renders it via `bpmn-to-image`.
+- **Batch Rendering**: Run `nix develop --command npm run snapshots:render` to regenerate all `test/snapshots/*.png` files directly from their BPMN XML sources.
+- **Agent Visual Inspection**: Agents can inspect rendered snapshots with `view_file` on `test/snapshots/<name>.png` to visually verify layout quality.
+
+### 4. Agent Verification Checklist
 
 Before reporting work complete, always run:
 

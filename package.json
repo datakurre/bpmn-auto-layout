@@ -26,6 +26,8 @@
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
+    "snapshots:update": "UPDATE_SNAPSHOTS=true vitest run",
+    "snapshots:render": "node scripts/render-snapshots.mjs",
     "gallery": "node scripts/generate-gallery.mjs",
     "prepare": "npm run build"
   },
