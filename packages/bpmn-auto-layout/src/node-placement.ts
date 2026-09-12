@@ -81,6 +81,16 @@ export function packIndependentComponents(
     const target = flow.targetRef?.id;
     if (source && target && parent.has(source) && parent.has(target)) union(source, target);
   }
+  // A boundary event's attachment to its host is not a sequence flow, so
+  // without this its whole branch reads as disconnected from the main
+  // diagram and gets relocated into the generic "row below" treatment below
+  // -- stranding it, and everything downstream of it, away from the host it
+  // actually belongs next to (#66).
+  for (const node of topNodes) {
+    if (node.$type !== "bpmn:BoundaryEvent") continue;
+    const hostId = node.attachedToRef?.id;
+    if (hostId && parent.has(hostId)) union(node.id, hostId);
+  }
 
   const components = new Map<string, any[]>();
   for (const node of topNodes) {

@@ -2332,10 +2332,39 @@ def check_lane_branch_lands_in_its_own_band(root: ET.Element) -> list[str]:
     return []
 
 
+def check_boundary_branch_successor_is_direct(root: ET.Element) -> list[str]:
+    """Pins #66: a boundary event's attachment to its host is not a
+    sequence-flow edge, so packIndependentComponents used to read the whole
+    branch (boundary event, its target, and everything downstream) as a
+    component disconnected from the main diagram and relocate it into a
+    generic row below everything -- while a separate pass then patched only
+    the boundary event's immediate target back near its host, stranding
+    that target's own successor at the relocated position. With two such
+    branches side by side, the stranded successor's route had to climb over
+    the topmost channel and back down, crossing the second branch's channel
+    twice. Asserts Flow_Task2_End2 -- the first branch's second hop -- stays
+    a direct 2-point route, i.e. End_2 was placed right next to Task_2
+    rather than left behind."""
+    flow_id = "Flow_Task2_End2"
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            if edge.get("bpmnElement") != flow_id:
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            if len(points) > 2:
+                return [f"{flow_id} expected a direct route, got {len(points)} points: {points}"]
+            return []
+    return [f"{flow_id} has no BPMNEdge in the laid-out diagram"]
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "lane-branch-membership.bpmn": check_lane_branch_lands_in_its_own_band,
+    "boundary-branch-stays-with-host.bpmn": check_boundary_branch_successor_is_direct,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,

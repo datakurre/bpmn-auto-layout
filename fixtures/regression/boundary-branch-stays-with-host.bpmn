@@ -1,0 +1,112 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_BoundaryBranchStaysWithHost" targetNamespace="https://github.com/datakurre/bpmn-auto-layout/feedback-fixtures/regression">
+  <bpmn:process id="Process_BoundaryBranchStaysWithHost" name="Two boundary branches leaving one region must not cross each other's channel (#66)" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start">
+      <bpmn:outgoing>Flow_Start_Task1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:task id="Task_1" name="First step">
+      <bpmn:incoming>Flow_Start_Task1</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task1_Task3</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:boundaryEvent id="Boundary_1" name="Timeout 1" attachedToRef="Task_1">
+      <bpmn:timerEventDefinition />
+      <bpmn:outgoing>Flow_Boundary1_Task2</bpmn:outgoing>
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_2" name="Handle timeout 1">
+      <bpmn:incoming>Flow_Boundary1_Task2</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task2_End2</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_2" name="Timed out 1">
+      <bpmn:incoming>Flow_Task2_End2</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:task id="Task_3" name="Second step">
+      <bpmn:incoming>Flow_Task1_Task3</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task3_EndMain</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:boundaryEvent id="Boundary_2" name="Timeout 2" attachedToRef="Task_3">
+      <bpmn:timerEventDefinition />
+      <bpmn:outgoing>Flow_Boundary2_Task4</bpmn:outgoing>
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_4" name="Handle timeout 2">
+      <bpmn:incoming>Flow_Boundary2_Task4</bpmn:incoming>
+      <bpmn:outgoing>Flow_Task4_End4</bpmn:outgoing>
+    </bpmn:task>
+    <bpmn:endEvent id="End_4" name="Timed out 2">
+      <bpmn:incoming>Flow_Task4_End4</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:endEvent id="End_Main" name="Done">
+      <bpmn:incoming>Flow_Task3_EndMain</bpmn:incoming>
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_Start_Task1" sourceRef="Start_1" targetRef="Task_1" />
+    <bpmn:sequenceFlow id="Flow_Task1_Task3" sourceRef="Task_1" targetRef="Task_3" />
+    <bpmn:sequenceFlow id="Flow_Boundary1_Task2" sourceRef="Boundary_1" targetRef="Task_2" />
+    <bpmn:sequenceFlow id="Flow_Task2_End2" sourceRef="Task_2" targetRef="End_2" />
+    <bpmn:sequenceFlow id="Flow_Task3_EndMain" sourceRef="Task_3" targetRef="End_Main" />
+    <bpmn:sequenceFlow id="Flow_Boundary2_Task4" sourceRef="Boundary_2" targetRef="Task_4" />
+    <bpmn:sequenceFlow id="Flow_Task4_End4" sourceRef="Task_4" targetRef="End_4" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_Process_BoundaryBranchStaysWithHost">
+    <bpmndi:BPMNPlane id="BPMNPlane_Process_BoundaryBranchStaysWithHost" bpmnElement="Process_BoundaryBranchStaysWithHost">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="62" y="82" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_1_di" bpmnElement="Task_1">
+        <dc:Bounds x="150" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_1_di" bpmnElement="Boundary_1">
+        <dc:Bounds x="182" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_2_di" bpmnElement="Task_2">
+        <dc:Bounds x="330" y="0" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_2_di" bpmnElement="End_2">
+        <dc:Bounds x="480" y="22" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_3_di" bpmnElement="Task_3">
+        <dc:Bounds x="300" y="60" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_2_di" bpmnElement="Boundary_2">
+        <dc:Bounds x="332" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_4_di" bpmnElement="Task_4">
+        <dc:Bounds x="480" y="0" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_4_di" bpmnElement="End_4">
+        <dc:Bounds x="630" y="22" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Main_di" bpmnElement="End_Main">
+        <dc:Bounds x="450" y="82" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Start_Task1_di" bpmnElement="Flow_Start_Task1">
+        <di:waypoint x="98" y="100" />
+        <di:waypoint x="150" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Task1_Task3_di" bpmnElement="Flow_Task1_Task3">
+        <di:waypoint x="250" y="100" />
+        <di:waypoint x="300" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Boundary1_Task2_di" bpmnElement="Flow_Boundary1_Task2">
+        <di:waypoint x="200" y="122" />
+        <di:waypoint x="200" y="40" />
+        <di:waypoint x="330" y="40" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Task2_End2_di" bpmnElement="Flow_Task2_End2">
+        <di:waypoint x="430" y="40" />
+        <di:waypoint x="480" y="40" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Task3_EndMain_di" bpmnElement="Flow_Task3_EndMain">
+        <di:waypoint x="400" y="100" />
+        <di:waypoint x="450" y="100" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Boundary2_Task4_di" bpmnElement="Flow_Boundary2_Task4">
+        <di:waypoint x="350" y="122" />
+        <di:waypoint x="350" y="40" />
+        <di:waypoint x="480" y="40" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Task4_End4_di" bpmnElement="Flow_Task4_End4">
+        <di:waypoint x="580" y="40" />
+        <di:waypoint x="630" y="40" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
