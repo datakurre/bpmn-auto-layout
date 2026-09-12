@@ -53,6 +53,7 @@ export function packIndependentComponents(
   topNodes: any[],
   topFlows: any[],
   mainNodeId: string | undefined,
+  laneMemberIds: Set<string> = new Set(),
 ): void {
   if (topNodes.length < 2 || !mainNodeId) return;
 
@@ -89,7 +90,12 @@ export function packIndependentComponents(
   const mainKey = find(mainNodeId);
   const secondary = [...components.entries()]
     .filter(([key]) => key !== mainKey)
-    .map(([, members]) => members);
+    .map(([, members]) => members)
+    // A disconnected component with a declared lane member already has a
+    // correct, hard-constrained track/y from buildTrackColMapsWithDim (#65)
+    // -- repositioning it into a generic "row below the diagram" would
+    // relocate it out of its own lane's band.
+    .filter((members) => !members.some((node) => laneMemberIds.has(node.id)));
   if (secondary.length === 0) return;
 
   const idsFor = (members: any[]): Set<string> => {
@@ -365,12 +371,12 @@ function buildTrackColMapsWithDim(
     const hostTrack = host ? nodeTrack.get(host.id) : undefined;
     const hostCol = host ? nodeCol.get(host.id) : undefined;
     if (hostTrack === undefined || hostCol === undefined) continue;
-    nodeTrack.set(boundary.id, hostTrack);
+    nodeTrack.set(boundary.id, preferredTracks.get(boundary.id) ?? hostTrack);
     nodeCol.set(boundary.id, hostCol);
     for (const flow of outgoingFlows.get(boundary.id) || []) {
       const targetId = flow.targetRef?.id;
       if (!targetId || nodeTrack.has(targetId)) continue;
-      nodeTrack.set(targetId, hostTrack - 1);
+      nodeTrack.set(targetId, preferredTracks.get(targetId) ?? hostTrack - 1);
       nodeCol.set(targetId, hostCol + 1);
       queue.push(targetId);
     }
@@ -401,7 +407,7 @@ function buildTrackColMapsWithDim(
         );
         const isTerminalExceptionBranch = isExceptionBranch && targetNode?.$type === "bpmn:EndEvent";
         const isUpwardExceptionBranch = isExceptionBranch && !isTerminalExceptionBranch;
-        if (spineSet.has(parentId) && !spineSet.has(targetId)) {
+        if (spineSet.has(parentId) && !spineSet.has(targetId) && !preferredTracks.has(targetId)) {
           const isSpannedByBackEdge = Array.from(backEdges).some((bId) => {
             const bFlow = topFlows.find((f) => f.id === bId);
             if (!bFlow) return false;
@@ -440,7 +446,7 @@ function buildTrackColMapsWithDim(
     if (!nodeCol.has(node.id)) {
       maxCol += 1;
       nodeCol.set(node.id, maxCol);
-      nodeTrack.set(node.id, 0);
+      nodeTrack.set(node.id, preferredTracks.get(node.id) ?? 0);
     }
   }
 
@@ -734,6 +740,7 @@ function placeBoundaryBranchesAbove(
   topNodes: any[],
   topFlows: any[],
   trackGap: number,
+  preferredTracks: Map<string, number>,
 ): void {
   const outgoingFlows = new Map<string, any[]>();
   const incomingFlows = new Map<string, any[]>();
@@ -751,6 +758,7 @@ function placeBoundaryBranchesAbove(
     const outgoing = outgoingFlows.get(boundary.id)?.[0];
     const target = outgoing ? layoutNodes.get(outgoing.targetRef?.id) : undefined;
     if (!host || !target || !outgoing) continue;
+    if (preferredTracks.has(target.id)) continue;
     const targetIncoming = incomingFlows.get(target.id) || [];
     if (targetIncoming.some((flow) => flow.sourceRef?.id !== boundary.id)) continue;
     const primaryFlow = topFlows.find((flow) => flow.sourceRef?.id === host.id);
@@ -840,6 +848,7 @@ export function computeProcessLayout(
   const { spineNodeIds, spineSet } = selectSpine(startEvent, outgoingFlows, nodesById, backEdges);
 
   // 3. Track and column assignment — use effectiveDim so subprocess sizes drive spacing
+  const laneOrderIndex = leafLaneOrderIndex(process.laneSets || []);
   const { nodeTrack, nodeCol } = buildTrackColMapsWithDim(
     topNodes,
     topFlows,
@@ -850,7 +859,7 @@ export function computeProcessLayout(
     backEdges,
     opts.colWidth,
     effectiveDim,
-    leafLaneOrderIndex(process.laneSets || []),
+    laneOrderIndex,
   );
 
   // 4. Compute pixel coordinates
@@ -902,10 +911,16 @@ export function computeProcessLayout(
     });
   }
 
-  packIndependentComponents(layoutNodes, topNodes, topFlows, startEvent?.id);
+  packIndependentComponents(
+    layoutNodes,
+    topNodes,
+    topFlows,
+    startEvent?.id,
+    new Set(laneOrderIndex.keys()),
+  );
   snapNodesToGrid(layoutNodes, opts.colWidth, opts.gridSize);
   enforceFlowGaps(layoutNodes, topNodes, topFlows);
-  placeBoundaryBranchesAbove(layoutNodes, topNodes, topFlows, opts.trackGap);
+  placeBoundaryBranchesAbove(layoutNodes, topNodes, topFlows, opts.trackGap, laneOrderIndex);
   attachBoundaryEvents(layoutNodes, topNodes, topFlows);
 
   // 5. Now that the outer layout is finalized, install subprocess children

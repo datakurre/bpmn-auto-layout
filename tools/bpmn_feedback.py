@@ -2292,9 +2292,50 @@ def check_loop_back_diamond_picks_the_named_retry_edge(root: ET.Element) -> list
     return problems
 
 
+def check_lane_branch_lands_in_its_own_band(root: ET.Element) -> list[str]:
+    """Pins #65 (the half of #3 that never landed): a gateway on the spine
+    has one branch target declared in a *different* lane than the gateway's
+    own. buildTrackColMapsWithDim used to overwrite that branch's track
+    unconditionally with the structural parentTrack+/-1 heuristic, discarding
+    the lane hint for exactly this case -- the one #3 asked to make a hard
+    constraint. Asserts Task_Reject's shape falls fully inside Lane_Exceptions'
+    band, not Lane_Requests'."""
+    bounds_by_element: dict[str, tuple[float, float, float, float]] = {}
+    lane_bounds: dict[str, tuple[float, float, float, float]] = {}
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for shape in plane.findall(q("bpmndi", "BPMNShape")):
+            element_id = shape.get("bpmnElement")
+            bounds = shape.find(q("dc", "Bounds"))
+            if not element_id or bounds is None:
+                continue
+            box = (
+                float(bounds.get("x", "0")),
+                float(bounds.get("y", "0")),
+                float(bounds.get("width", "0")),
+                float(bounds.get("height", "0")),
+            )
+            if element_id in ("Lane_Requests", "Lane_Exceptions"):
+                lane_bounds[element_id] = box
+            else:
+                bounds_by_element[element_id] = box
+    reject = bounds_by_element.get("Task_Reject")
+    exceptions_band = lane_bounds.get("Lane_Exceptions")
+    if not reject or not exceptions_band:
+        return ["Task_Reject or Lane_Exceptions has no BPMNShape in the laid-out diagram"]
+    rx, ry, rw, rh = reject
+    lx, ly, lw, lh = exceptions_band
+    if ry < ly - 0.5 or ry + rh > ly + lh + 0.5:
+        return [
+            f"Task_Reject (y={ry}..{ry + rh}) does not fall inside Lane_Exceptions' band "
+            f"(y={ly}..{ly + lh}) -- the branch's lane hint was overridden",
+        ]
+    return []
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
+    "lane-branch-membership.bpmn": check_lane_branch_lands_in_its_own_band,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
