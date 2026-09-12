@@ -70,7 +70,30 @@ export function layoutProcessLanes(
   };
 }
 
-export function routeMessageFlow(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
+function isMessageCorridorBlocked(
+  x: number,
+  yRange: [number, number],
+  ctx: { ignore: Bounds[]; obstacles?: Bounds[] }
+): boolean {
+  if (!ctx.obstacles) {
+    return false;
+  }
+  const [y1, y2] = yRange;
+  const minY = Math.min(y1, y2);
+  const maxY = Math.max(y1, y2);
+  return ctx.obstacles.some(
+    (b) =>
+      !ctx.ignore.includes(b) && x > b.x && x < b.x + b.width && b.y + b.height > minY && b.y < maxY
+  );
+}
+
+export function routeMessageFlow(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  allBounds?: Bounds[]
+): Point[] {
+  const ignore = [sourceBounds, targetBounds];
+
   // Source is above target
   if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
     const srcBottom: Point = {
@@ -87,6 +110,26 @@ export function routeMessageFlow(sourceBounds: Bounds, targetBounds: Bounds): Po
     }
 
     const midY = Math.round((srcBottom.y + tgtTop.y) / 2);
+    const blocked = isMessageCorridorBlocked(srcBottom.x, [srcBottom.y, midY], {
+      ignore,
+      obstacles: allBounds,
+    });
+
+    if (blocked) {
+      const srcRight: Point = {
+        x: sourceBounds.x + sourceBounds.width,
+        y: Math.round(sourceBounds.y + sourceBounds.height / 2),
+      };
+      const stepX = sourceBounds.x + sourceBounds.width + 20;
+      return [
+        srcRight,
+        { x: stepX, y: srcRight.y },
+        { x: stepX, y: midY },
+        { x: tgtTop.x, y: midY },
+        tgtTop,
+      ];
+    }
+
     return [srcBottom, { x: srcBottom.x, y: midY }, { x: tgtTop.x, y: midY }, tgtTop];
   }
 
@@ -105,5 +148,25 @@ export function routeMessageFlow(sourceBounds: Bounds, targetBounds: Bounds): Po
   }
 
   const midY = Math.round((srcTop.y + tgtBottom.y) / 2);
+  const blocked = isMessageCorridorBlocked(srcTop.x, [srcTop.y, midY], {
+    ignore,
+    obstacles: allBounds,
+  });
+
+  if (blocked) {
+    const srcRight: Point = {
+      x: sourceBounds.x + sourceBounds.width,
+      y: Math.round(sourceBounds.y + sourceBounds.height / 2),
+    };
+    const stepX = sourceBounds.x + sourceBounds.width + 20;
+    return [
+      srcRight,
+      { x: stepX, y: srcRight.y },
+      { x: stepX, y: midY },
+      { x: tgtBottom.x, y: midY },
+      tgtBottom,
+    ];
+  }
+
   return [srcTop, { x: srcTop.x, y: midY }, { x: tgtBottom.x, y: midY }, tgtBottom];
 }

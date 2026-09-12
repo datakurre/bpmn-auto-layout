@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Proc_Loan" isExecutable="false">
+    <bpmn:startEvent id="Start_App" name="Loan Application" />
+    <bpmn:task id="Task_Intake" name="Verify Intake Form" />
+    <bpmn:parallelGateway id="Fork_Checks" name="Parallel Checks" />
+    <bpmn:task id="Task_KYC" name="Identity &#38; AML Check" />
+    <bpmn:task id="Task_Credit_Bureau" name="Credit Bureau Inquiry" />
+    <bpmn:task id="Task_Income" name="Income Verification" />
+    <bpmn:parallelGateway id="Join_Checks" name="Checks Synced" />
+    <bpmn:exclusiveGateway id="Gateway_Risk_Tier" name="Risk Tier?" />
+    <bpmn:task id="Task_Fast_Approve" name="Standard Automated Approval" />
+    <bpmn:task id="Task_Fast_Decline" name="Automated Decline Notice" />
+    <bpmn:endEvent id="End_Declined" name="Application Rejected" />
+    <bpmn:task id="Task_Manual_Review" name="Manual Underwriting Review" />
+    <bpmn:boundaryEvent id="Timer_Review_SLA" name="24h SLA" attachedToRef="Task_Manual_Review" />
+    <bpmn:task id="Task_Expedite" name="Expedite to Senior Team" />
+    <bpmn:exclusiveGateway id="Gateway_Underwriter" name="Underwriter Decision" />
+    <bpmn:task id="Task_Request_Collateral" name="Negotiate Collateral" />
+    <bpmn:exclusiveGateway id="Join_Approve" name="Approve Branch" />
+    <bpmn:task id="Task_Prepare_Contract" name="Prepare Loan Agreement" />
+    <bpmn:endEvent id="End_Approved" name="Loan Disbursed" />
+    <bpmn:sequenceFlow id="LF1" sourceRef="Start_App" targetRef="Task_Intake" />
+    <bpmn:sequenceFlow id="LF2" sourceRef="Task_Intake" targetRef="Fork_Checks" />
+    <bpmn:sequenceFlow id="LF_Check_1" sourceRef="Fork_Checks" targetRef="Task_KYC" />
+    <bpmn:sequenceFlow id="LF_Check_2" sourceRef="Fork_Checks" targetRef="Task_Credit_Bureau" />
+    <bpmn:sequenceFlow id="LF_Check_3" sourceRef="Fork_Checks" targetRef="Task_Income" />
+    <bpmn:sequenceFlow id="LF_Join_1" sourceRef="Task_KYC" targetRef="Join_Checks" />
+    <bpmn:sequenceFlow id="LF_Join_2" sourceRef="Task_Credit_Bureau" targetRef="Join_Checks" />
+    <bpmn:sequenceFlow id="LF_Join_3" sourceRef="Task_Income" targetRef="Join_Checks" />
+    <bpmn:sequenceFlow id="LF_To_Risk" sourceRef="Join_Checks" targetRef="Gateway_Risk_Tier" />
+    <bpmn:sequenceFlow id="LF_Low_Risk" sourceRef="Gateway_Risk_Tier" targetRef="Task_Fast_Approve" />
+    <bpmn:sequenceFlow id="LF_High_Risk" sourceRef="Gateway_Risk_Tier" targetRef="Task_Fast_Decline" />
+    <bpmn:sequenceFlow id="LF_Med_Risk" sourceRef="Gateway_Risk_Tier" targetRef="Task_Manual_Review" />
+    <bpmn:sequenceFlow id="LF_Decline_End" sourceRef="Task_Fast_Decline" targetRef="End_Declined" />
+    <bpmn:sequenceFlow id="LF_SLA_Flow" sourceRef="Timer_Review_SLA" targetRef="Task_Expedite" />
+    <bpmn:sequenceFlow id="LF_To_UW" sourceRef="Task_Manual_Review" targetRef="Gateway_Underwriter" />
+    <bpmn:sequenceFlow id="LF_UW_Approve" sourceRef="Gateway_Underwriter" targetRef="Join_Approve" />
+    <bpmn:sequenceFlow id="LF_UW_Decline" sourceRef="Gateway_Underwriter" targetRef="Task_Fast_Decline" />
+    <bpmn:sequenceFlow id="LF_UW_Cond" sourceRef="Gateway_Underwriter" targetRef="Task_Request_Collateral" />
+    <bpmn:sequenceFlow id="LF_Loop_UW" sourceRef="Task_Request_Collateral" targetRef="Task_Manual_Review" />
+    <bpmn:sequenceFlow id="LF_Auto_Approve" sourceRef="Task_Fast_Approve" targetRef="Join_Approve" />
+    <bpmn:sequenceFlow id="LF_Contract" sourceRef="Join_Approve" targetRef="Task_Prepare_Contract" />
+    <bpmn:sequenceFlow id="LF_Success_End" sourceRef="Task_Prepare_Contract" targetRef="End_Approved" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Proc_Loan">
+      <bpmndi:BPMNShape id="Start_App_di" bpmnElement="Start_App">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Intake_di" bpmnElement="Task_Intake">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Fork_Checks_di" bpmnElement="Fork_Checks">
+        <dc:Bounds x="356" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_KYC_di" bpmnElement="Task_KYC">
+        <dc:Bounds x="466" y="-20" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Credit_Bureau_di" bpmnElement="Task_Credit_Bureau">
+        <dc:Bounds x="466" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Income_di" bpmnElement="Task_Income">
+        <dc:Bounds x="466" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_Checks_di" bpmnElement="Join_Checks">
+        <dc:Bounds x="626" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Risk_Tier_di" bpmnElement="Gateway_Risk_Tier">
+        <dc:Bounds x="736" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fast_Approve_di" bpmnElement="Task_Fast_Approve">
+        <dc:Bounds x="846" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Fast_Decline_di" bpmnElement="Task_Fast_Decline">
+        <dc:Bounds x="1116" y="340" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Declined_di" bpmnElement="End_Declined">
+        <dc:Bounds x="1308" y="362" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Manual_Review_di" bpmnElement="Task_Manual_Review">
+        <dc:Bounds x="846" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Expedite_di" bpmnElement="Task_Expedite">
+        <dc:Bounds x="1116" y="580" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Underwriter_di" bpmnElement="Gateway_Underwriter">
+        <dc:Bounds x="1006" y="235" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Request_Collateral_di" bpmnElement="Task_Request_Collateral">
+        <dc:Bounds x="1116" y="460" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_Approve_di" bpmnElement="Join_Approve">
+        <dc:Bounds x="1141" y="235" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Prepare_Contract_di" bpmnElement="Task_Prepare_Contract">
+        <dc:Bounds x="1276" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Approved_di" bpmnElement="End_Approved">
+        <dc:Bounds x="1436" y="242" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Timer_Review_SLA_di" bpmnElement="Timer_Review_SLA">
+        <dc:Bounds x="878" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="LF_Check_1_di" bpmnElement="LF_Check_1">
+        <di:waypoint x="381" y="115" />
+        <di:waypoint x="381" y="20" />
+        <di:waypoint x="466" y="20" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Check_2_di" bpmnElement="LF_Check_2">
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="466" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Check_3_di" bpmnElement="LF_Check_3">
+        <di:waypoint x="381" y="165" />
+        <di:waypoint x="381" y="260" />
+        <di:waypoint x="466" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_To_Risk_di" bpmnElement="LF_To_Risk">
+        <di:waypoint x="676" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Low_Risk_di" bpmnElement="LF_Low_Risk">
+        <di:waypoint x="786" y="140" />
+        <di:waypoint x="846" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_High_Risk_di" bpmnElement="LF_High_Risk">
+        <di:waypoint x="761" y="165" />
+        <di:waypoint x="761" y="380" />
+        <di:waypoint x="1116" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Med_Risk_di" bpmnElement="LF_Med_Risk">
+        <di:waypoint x="786" y="140" />
+        <di:waypoint x="826" y="140" />
+        <di:waypoint x="826" y="260" />
+        <di:waypoint x="846" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_UW_Approve_di" bpmnElement="LF_UW_Approve">
+        <di:waypoint x="1056" y="260" />
+        <di:waypoint x="1141" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_UW_Decline_di" bpmnElement="LF_UW_Decline">
+        <di:waypoint x="1056" y="260" />
+        <di:waypoint x="1096" y="260" />
+        <di:waypoint x="1096" y="380" />
+        <di:waypoint x="1116" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_UW_Cond_di" bpmnElement="LF_UW_Cond">
+        <di:waypoint x="1031" y="285" />
+        <di:waypoint x="1031" y="500" />
+        <di:waypoint x="1116" y="500" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Contract_di" bpmnElement="LF_Contract">
+        <di:waypoint x="1191" y="260" />
+        <di:waypoint x="1276" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF2_di" bpmnElement="LF2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Join_1_di" bpmnElement="LF_Join_1">
+        <di:waypoint x="566" y="20" />
+        <di:waypoint x="651" y="20" />
+        <di:waypoint x="651" y="115" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Join_2_di" bpmnElement="LF_Join_2">
+        <di:waypoint x="566" y="140" />
+        <di:waypoint x="626" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Join_3_di" bpmnElement="LF_Join_3">
+        <di:waypoint x="566" y="260" />
+        <di:waypoint x="651" y="260" />
+        <di:waypoint x="651" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_To_UW_di" bpmnElement="LF_To_UW">
+        <di:waypoint x="946" y="260" />
+        <di:waypoint x="1006" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Auto_Approve_di" bpmnElement="LF_Auto_Approve">
+        <di:waypoint x="946" y="140" />
+        <di:waypoint x="1166" y="140" />
+        <di:waypoint x="1166" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF1_di" bpmnElement="LF1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Decline_End_di" bpmnElement="LF_Decline_End">
+        <di:waypoint x="1216" y="380" />
+        <di:waypoint x="1308" y="380" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_SLA_Flow_di" bpmnElement="LF_SLA_Flow">
+        <di:waypoint x="896" y="318" />
+        <di:waypoint x="896" y="620" />
+        <di:waypoint x="1116" y="620" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Loop_UW_di" bpmnElement="LF_Loop_UW">
+        <di:waypoint x="1216" y="500" />
+        <di:waypoint x="1236" y="500" />
+        <di:waypoint x="1236" y="700" />
+        <di:waypoint x="896" y="700" />
+        <di:waypoint x="896" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="LF_Success_End_di" bpmnElement="LF_Success_End">
+        <di:waypoint x="1376" y="260" />
+        <di:waypoint x="1436" y="260" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

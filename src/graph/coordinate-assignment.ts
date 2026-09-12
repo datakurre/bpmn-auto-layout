@@ -285,7 +285,7 @@ function resolveRankCollisions(
     const prevTrack = tracks.get(prevId) || 0;
     let currTrack = tracks.get(currId) || 0;
 
-    if (currTrack <= prevTrack) {
+    if (currTrack < prevTrack + 1) {
       currTrack = prevTrack + 1;
       tracks.set(currId, currTrack);
     }

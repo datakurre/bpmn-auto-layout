@@ -152,6 +152,38 @@ const SNAPSHOT_METADATA = {
     description: 'Idempotent passes produce bitwise-identical XML outputs and SHA256 image hashes.',
     tags: ['Bitwise Idempotent', 'Deterministic', 'Pixel Identical'],
   },
+  '09-order-fulfillment.png': {
+    title: 'E-Commerce Order Fulfillment',
+    iteration: '09',
+    category: 'Complex Workflows',
+    description:
+      'End-to-end order processing combining parallel splits, feedback retry cycles, an embedded expanded subprocess, and multiple cancellation/fulfillment terminal nodes.',
+    tags: ['Parallel Fork', 'Retry Loop', 'Subprocess', 'Multi-End'],
+  },
+  '09-incident-management.png': {
+    title: '3-Lane Incident Management',
+    iteration: '09',
+    category: 'Complex Workflows',
+    description:
+      'Multi-lane cross-functional pool with forward escalation, backward clarification loops, boundary timer escalation, and multi-lane skip flows.',
+    tags: ['3 Swimlanes', 'Bidirectional Flows', 'Boundary Timer', 'Escalation'],
+  },
+  '09-b2b-procurement.png': {
+    title: 'B2B Supply Chain Collaboration',
+    iteration: '09',
+    category: 'Complex Workflows',
+    description:
+      'Multi-pool B2B choreography with 4 swimlanes across 2 enterprises, coordinated by 6 bidirectional inter-pool message flows.',
+    tags: ['2 Pools', '4 Lanes', 'Message Flows', 'Choreography'],
+  },
+  '09-loan-approval-matrix.png': {
+    title: 'Multi-Gateway Loan Decision Matrix',
+    iteration: '09',
+    category: 'Complex Workflows',
+    description:
+      'Dense 6-gateway decision matrix with 3-tier risk classification, parallel KYC checks, manual underwriting review with SLA timer, and collateral negotiation loops.',
+    tags: ['6 Gateways', 'Decision Tree', 'Dense Graph', 'Multi-Tier'],
+  },
 };
 
 export function generateGallery() {
@@ -613,7 +645,7 @@ function generateHtml({ items, categories, hasCoverage }) {
     <div class="container">
       <h1>BPMN 2.0 Deterministic Orthogonal Auto-Layout</h1>
       <p class="subtitle">
-        Visual gallery of bitwise-deterministic layout progression across all 8 development milestones, verified with 100% test coverage and mathematical invariants.
+        Visual gallery of bitwise-deterministic layout progression across all 9 development milestones, verified with 100% test coverage and mathematical invariants.
       </p>
 
       <div class="metrics-bar">
@@ -621,7 +653,7 @@ function generateHtml({ items, categories, hasCoverage }) {
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
             <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
           </svg>
-          89 Tests Passing
+          93 Tests Passing
         </div>
         <div class="metric-chip success">
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">

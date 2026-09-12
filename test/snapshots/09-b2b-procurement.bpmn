@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Buyer" name="Buyer Enterprise" processRef="Proc_Buyer" />
+    <bpmn:participant id="Pool_Supplier" name="Supplier Partner" processRef="Proc_Supplier" />
+    <bpmn:messageFlow id="Msg_PO" sourceRef="Buyer_Draft_PO" targetRef="Supplier_Check_Capacity" />
+    <bpmn:messageFlow id="Msg_Quote" sourceRef="Supplier_Draft_Quote" targetRef="Buyer_Review_Quote" />
+    <bpmn:messageFlow id="Msg_Confirm" sourceRef="Supplier_Confirm_Order" targetRef="Buyer_Review_Quote" />
+    <bpmn:messageFlow id="Msg_Guarantee" sourceRef="Buyer_Issue_Guarantee" targetRef="Supplier_Produce" />
+    <bpmn:messageFlow id="Msg_Shipment" sourceRef="Supplier_Dispatch" targetRef="Buyer_Receive_Notice" />
+    <bpmn:messageFlow id="Msg_Invoice" sourceRef="Supplier_Send_Invoice" targetRef="Buyer_Process_Invoice" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Buyer" isExecutable="false">
+    <bpmn:laneSet id="Proc_Buyer_LaneSet">
+      <bpmn:lane id="Lane_Purchasing" name="Purchasing Department">
+        <bpmn:flowNodeRef>Buyer_Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Draft_PO</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Review_Quote</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Gateway_Terms</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Cancel_End</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Receive_Notice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Inspect_Goods</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_End_Success</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Finance" name="Finance Department">
+        <bpmn:flowNodeRef>Buyer_Issue_Guarantee</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Buyer_Process_Invoice</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Buyer_Start" name="Material Needed" />
+    <bpmn:task id="Buyer_Draft_PO" name="Draft Purchase Order" />
+    <bpmn:task id="Buyer_Review_Quote" name="Review Quotation" />
+    <bpmn:exclusiveGateway id="Buyer_Gateway_Terms" name="Terms OK?" />
+    <bpmn:endEvent id="Buyer_Cancel_End" name="Procurement Cancelled" />
+    <bpmn:task id="Buyer_Receive_Notice" name="Acknowledge Shipment" />
+    <bpmn:task id="Buyer_Inspect_Goods" name="Inspect Received Goods" />
+    <bpmn:endEvent id="Buyer_End_Success" name="Procurement Completed" />
+    <bpmn:task id="Buyer_Issue_Guarantee" name="Issue Payment Guarantee" />
+    <bpmn:task id="Buyer_Process_Invoice" name="Reconcile &#38; Pay Invoice" />
+    <bpmn:sequenceFlow id="BF1" sourceRef="Buyer_Start" targetRef="Buyer_Draft_PO" />
+    <bpmn:sequenceFlow id="BF2" sourceRef="Buyer_Draft_PO" targetRef="Buyer_Review_Quote" />
+    <bpmn:sequenceFlow id="BF3" sourceRef="Buyer_Review_Quote" targetRef="Buyer_Gateway_Terms" />
+    <bpmn:sequenceFlow id="BF_Reject" sourceRef="Buyer_Gateway_Terms" targetRef="Buyer_Cancel_End" />
+    <bpmn:sequenceFlow id="BF_Cross_Finance" sourceRef="Buyer_Gateway_Terms" targetRef="Buyer_Issue_Guarantee" />
+    <bpmn:sequenceFlow id="BF_Await_Shipment" sourceRef="Buyer_Issue_Guarantee" targetRef="Buyer_Receive_Notice" />
+    <bpmn:sequenceFlow id="BF_Inspect" sourceRef="Buyer_Receive_Notice" targetRef="Buyer_Inspect_Goods" />
+    <bpmn:sequenceFlow id="BF_Cross_Pay" sourceRef="Buyer_Inspect_Goods" targetRef="Buyer_Process_Invoice" />
+    <bpmn:sequenceFlow id="BF_Complete" sourceRef="Buyer_Process_Invoice" targetRef="Buyer_End_Success" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Supplier" name="Supplier Partner Process" isExecutable="false">
+    <bpmn:laneSet id="Proc_Supplier_LaneSet">
+      <bpmn:lane id="Lane_Sales" name="Sales Operations">
+        <bpmn:flowNodeRef>Supplier_Check_Capacity</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_Gateway_Price</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_Draft_Quote</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_Confirm_Order</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Logistics" name="Logistics &#38; Billing">
+        <bpmn:flowNodeRef>Supplier_Produce</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_Dispatch</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_Send_Invoice</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Supplier_End</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:task id="Supplier_Check_Capacity" name="Assess Stock &#38; Pricing" />
+    <bpmn:exclusiveGateway id="Supplier_Gateway_Price" name="Price Changed?" />
+    <bpmn:task id="Supplier_Draft_Quote" name="Prepare Revised Quotation" />
+    <bpmn:task id="Supplier_Confirm_Order" name="Confirm Standard Order" />
+    <bpmn:task id="Supplier_Produce" name="Manufacture &#38; Pack Goods" />
+    <bpmn:task id="Supplier_Dispatch" name="Ship Consignment" />
+    <bpmn:task id="Supplier_Send_Invoice" name="Issue Final Invoice" />
+    <bpmn:endEvent id="Supplier_End" name="Order Executed" />
+    <bpmn:sequenceFlow id="SF1" sourceRef="Supplier_Check_Capacity" targetRef="Supplier_Gateway_Price" />
+    <bpmn:sequenceFlow id="SF_Quote" sourceRef="Supplier_Gateway_Price" targetRef="Supplier_Draft_Quote" />
+    <bpmn:sequenceFlow id="SF_Std" sourceRef="Supplier_Gateway_Price" targetRef="Supplier_Confirm_Order" />
+    <bpmn:sequenceFlow id="SF_To_Prod_1" sourceRef="Supplier_Draft_Quote" targetRef="Supplier_Produce" />
+    <bpmn:sequenceFlow id="SF_To_Prod_2" sourceRef="Supplier_Confirm_Order" targetRef="Supplier_Produce" />
+    <bpmn:sequenceFlow id="SF_Dispatch" sourceRef="Supplier_Produce" targetRef="Supplier_Dispatch" />
+    <bpmn:sequenceFlow id="SF_Invoice" sourceRef="Supplier_Dispatch" targetRef="Supplier_Send_Invoice" />
+    <bpmn:sequenceFlow id="SF_Done" sourceRef="Supplier_Send_Invoice" targetRef="Supplier_End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Buyer_di" bpmnElement="Pool_Buyer">
+        <dc:Bounds x="100" y="80" width="1322" height="278" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Purchasing_di" bpmnElement="Lane_Purchasing">
+        <dc:Bounds x="130" y="80" width="1292" height="158" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Finance_di" bpmnElement="Lane_Finance">
+        <dc:Bounds x="130" y="238" width="1292" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Start_di" bpmnElement="Buyer_Start">
+        <dc:Bounds x="180" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Draft_PO_di" bpmnElement="Buyer_Draft_PO">
+        <dc:Bounds x="276" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Review_Quote_di" bpmnElement="Buyer_Review_Quote">
+        <dc:Bounds x="436" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Gateway_Terms_di" bpmnElement="Buyer_Gateway_Terms">
+        <dc:Bounds x="596" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Cancel_End_di" bpmnElement="Buyer_Cancel_End">
+        <dc:Bounds x="738" y="182" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Receive_Notice_di" bpmnElement="Buyer_Receive_Notice">
+        <dc:Bounds x="866" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Inspect_Goods_di" bpmnElement="Buyer_Inspect_Goods">
+        <dc:Bounds x="1026" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_End_Success_di" bpmnElement="Buyer_End_Success">
+        <dc:Bounds x="1346" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Issue_Guarantee_di" bpmnElement="Buyer_Issue_Guarantee">
+        <dc:Bounds x="706" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Buyer_Process_Invoice_di" bpmnElement="Buyer_Process_Invoice">
+        <dc:Bounds x="1186" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BF_Reject_di" bpmnElement="BF_Reject">
+        <di:waypoint x="646" y="140" />
+        <di:waypoint x="692" y="140" />
+        <di:waypoint x="692" y="200" />
+        <di:waypoint x="738" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_Cross_Finance_di" bpmnElement="BF_Cross_Finance">
+        <di:waypoint x="621" y="165" />
+        <di:waypoint x="621" y="320" />
+        <di:waypoint x="706" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF3_di" bpmnElement="BF3">
+        <di:waypoint x="536" y="140" />
+        <di:waypoint x="596" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF1_di" bpmnElement="BF1">
+        <di:waypoint x="216" y="140" />
+        <di:waypoint x="276" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF2_di" bpmnElement="BF2">
+        <di:waypoint x="376" y="140" />
+        <di:waypoint x="436" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_Await_Shipment_di" bpmnElement="BF_Await_Shipment">
+        <di:waypoint x="806" y="320" />
+        <di:waypoint x="836" y="320" />
+        <di:waypoint x="836" y="140" />
+        <di:waypoint x="866" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_Inspect_di" bpmnElement="BF_Inspect">
+        <di:waypoint x="966" y="140" />
+        <di:waypoint x="1026" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_Cross_Pay_di" bpmnElement="BF_Cross_Pay">
+        <di:waypoint x="1126" y="140" />
+        <di:waypoint x="1156" y="140" />
+        <di:waypoint x="1156" y="320" />
+        <di:waypoint x="1186" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_Complete_di" bpmnElement="BF_Complete">
+        <di:waypoint x="1286" y="320" />
+        <di:waypoint x="1316" y="320" />
+        <di:waypoint x="1316" y="140" />
+        <di:waypoint x="1346" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Pool_Supplier_di" bpmnElement="Pool_Supplier">
+        <dc:Bounds x="100" y="418" width="1066" height="360" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales">
+        <dc:Bounds x="130" y="418" width="1036" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Logistics_di" bpmnElement="Lane_Logistics">
+        <dc:Bounds x="130" y="658" width="1036" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Check_Capacity_di" bpmnElement="Supplier_Check_Capacity">
+        <dc:Bounds x="180" y="498" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Gateway_Price_di" bpmnElement="Supplier_Gateway_Price">
+        <dc:Bounds x="340" y="513" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Draft_Quote_di" bpmnElement="Supplier_Draft_Quote">
+        <dc:Bounds x="450" y="438" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Confirm_Order_di" bpmnElement="Supplier_Confirm_Order">
+        <dc:Bounds x="450" y="558" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Produce_di" bpmnElement="Supplier_Produce">
+        <dc:Bounds x="610" y="678" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Dispatch_di" bpmnElement="Supplier_Dispatch">
+        <dc:Bounds x="770" y="678" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Send_Invoice_di" bpmnElement="Supplier_Send_Invoice">
+        <dc:Bounds x="930" y="678" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_End_di" bpmnElement="Supplier_End">
+        <dc:Bounds x="1090" y="700" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="SF_Quote_di" bpmnElement="SF_Quote">
+        <di:waypoint x="365" y="513" />
+        <di:waypoint x="365" y="478" />
+        <di:waypoint x="450" y="478" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_Std_di" bpmnElement="SF_Std">
+        <di:waypoint x="365" y="563" />
+        <di:waypoint x="365" y="598" />
+        <di:waypoint x="450" y="598" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF1_di" bpmnElement="SF1">
+        <di:waypoint x="280" y="538" />
+        <di:waypoint x="340" y="538" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_To_Prod_1_di" bpmnElement="SF_To_Prod_1">
+        <di:waypoint x="550" y="478" />
+        <di:waypoint x="580" y="478" />
+        <di:waypoint x="580" y="718" />
+        <di:waypoint x="610" y="718" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_To_Prod_2_di" bpmnElement="SF_To_Prod_2">
+        <di:waypoint x="550" y="598" />
+        <di:waypoint x="580" y="598" />
+        <di:waypoint x="580" y="718" />
+        <di:waypoint x="610" y="718" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_Dispatch_di" bpmnElement="SF_Dispatch">
+        <di:waypoint x="710" y="718" />
+        <di:waypoint x="770" y="718" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_Invoice_di" bpmnElement="SF_Invoice">
+        <di:waypoint x="870" y="718" />
+        <di:waypoint x="930" y="718" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_Done_di" bpmnElement="SF_Done">
+        <di:waypoint x="1030" y="718" />
+        <di:waypoint x="1090" y="718" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_PO_di" bpmnElement="Msg_PO">
+        <di:waypoint x="326" y="180" />
+        <di:waypoint x="326" y="339" />
+        <di:waypoint x="230" y="339" />
+        <di:waypoint x="230" y="498" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Quote_di" bpmnElement="Msg_Quote">
+        <di:waypoint x="500" y="438" />
+        <di:waypoint x="500" y="309" />
+        <di:waypoint x="486" y="309" />
+        <di:waypoint x="486" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Confirm_di" bpmnElement="Msg_Confirm">
+        <di:waypoint x="550" y="598" />
+        <di:waypoint x="570" y="598" />
+        <di:waypoint x="570" y="369" />
+        <di:waypoint x="486" y="369" />
+        <di:waypoint x="486" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Guarantee_di" bpmnElement="Msg_Guarantee">
+        <di:waypoint x="756" y="360" />
+        <di:waypoint x="756" y="519" />
+        <di:waypoint x="660" y="519" />
+        <di:waypoint x="660" y="678" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Shipment_di" bpmnElement="Msg_Shipment">
+        <di:waypoint x="820" y="678" />
+        <di:waypoint x="820" y="429" />
+        <di:waypoint x="916" y="429" />
+        <di:waypoint x="916" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Msg_Invoice_di" bpmnElement="Msg_Invoice">
+        <di:waypoint x="980" y="678" />
+        <di:waypoint x="980" y="519" />
+        <di:waypoint x="1236" y="519" />
+        <di:waypoint x="1236" y="360" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

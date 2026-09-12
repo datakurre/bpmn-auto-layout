@@ -1,0 +1,208 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Proc_Order" isExecutable="false">
+    <bpmn:startEvent id="Start_Order" name="Order Received" />
+    <bpmn:task id="Task_Validate" name="Validate Order Data" />
+    <bpmn:parallelGateway id="Split_Parallel" name="Split Checks" />
+    <bpmn:task id="Task_Auth_Payment" name="Authorize Payment" />
+    <bpmn:exclusiveGateway id="Gateway_Payment" name="Payment OK?" />
+    <bpmn:task id="Task_Payment_Failed" name="Notify Payment Failed" />
+    <bpmn:endEvent id="End_Order_Cancelled" name="Order Cancelled" />
+    <bpmn:task id="Task_Check_Stock" name="Check Inventory" />
+    <bpmn:exclusiveGateway id="Gateway_Stock" name="In Stock?" />
+    <bpmn:task id="Task_Backorder" name="Request Backorder" />
+    <bpmn:task id="Task_Reserve_Stock" name="Reserve Items" />
+    <bpmn:parallelGateway id="Join_Parallel" name="Sync Checks" />
+    <bpmn:subProcess id="Sub_Fulfillment" name="Fulfillment &#38; Packing">
+      <bpmn:startEvent id="Sub_Start" name="Fulfillment Start" />
+      <bpmn:task id="Sub_Pick" name="Pick Items from Warehouse" />
+      <bpmn:task id="Sub_Pack" name="Package Goods" />
+      <bpmn:task id="Sub_Label" name="Print Shipping Label" />
+      <bpmn:endEvent id="Sub_End" name="Ready to Ship" />
+      <bpmn:sequenceFlow id="SF1" sourceRef="Sub_Start" targetRef="Sub_Pick" />
+      <bpmn:sequenceFlow id="SF2" sourceRef="Sub_Pick" targetRef="Sub_Pack" />
+      <bpmn:sequenceFlow id="SF3" sourceRef="Sub_Pack" targetRef="Sub_Label" />
+      <bpmn:sequenceFlow id="SF4" sourceRef="Sub_Label" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:task id="Task_Update_ERP" name="Update ERP &#38; Tracking" />
+    <bpmn:task id="Task_Notify_Customer" name="Send Shipment Notice" />
+    <bpmn:endEvent id="End_Order_Fulfilled" name="Order Delivered" />
+    <bpmn:sequenceFlow id="F1" sourceRef="Start_Order" targetRef="Task_Validate" />
+    <bpmn:sequenceFlow id="F2" sourceRef="Task_Validate" targetRef="Split_Parallel" />
+    <bpmn:sequenceFlow id="F_Pay_1" sourceRef="Split_Parallel" targetRef="Task_Auth_Payment" />
+    <bpmn:sequenceFlow id="F_Pay_2" sourceRef="Task_Auth_Payment" targetRef="Gateway_Payment" />
+    <bpmn:sequenceFlow id="F_Pay_Fail" sourceRef="Gateway_Payment" targetRef="Task_Payment_Failed" />
+    <bpmn:sequenceFlow id="F_Pay_Cancel" sourceRef="Task_Payment_Failed" targetRef="End_Order_Cancelled" />
+    <bpmn:sequenceFlow id="F_Pay_OK" sourceRef="Gateway_Payment" targetRef="Join_Parallel" />
+    <bpmn:sequenceFlow id="F_Stock_1" sourceRef="Split_Parallel" targetRef="Task_Check_Stock" />
+    <bpmn:sequenceFlow id="F_Stock_2" sourceRef="Task_Check_Stock" targetRef="Gateway_Stock" />
+    <bpmn:sequenceFlow id="F_Stock_Wait" sourceRef="Gateway_Stock" targetRef="Task_Backorder" />
+    <bpmn:sequenceFlow id="F_Stock_Retry" sourceRef="Task_Backorder" targetRef="Task_Check_Stock" />
+    <bpmn:sequenceFlow id="F_Stock_OK" sourceRef="Gateway_Stock" targetRef="Task_Reserve_Stock" />
+    <bpmn:sequenceFlow id="F_Stock_Join" sourceRef="Task_Reserve_Stock" targetRef="Join_Parallel" />
+    <bpmn:sequenceFlow id="F_Sync" sourceRef="Join_Parallel" targetRef="Sub_Fulfillment" />
+    <bpmn:sequenceFlow id="F_Post_Sub" sourceRef="Sub_Fulfillment" targetRef="Task_Update_ERP" />
+    <bpmn:sequenceFlow id="F_ERP" sourceRef="Task_Update_ERP" targetRef="Task_Notify_Customer" />
+    <bpmn:sequenceFlow id="F_Done" sourceRef="Task_Notify_Customer" targetRef="End_Order_Fulfilled" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Proc_Order">
+      <bpmndi:BPMNShape id="Start_Order_di" bpmnElement="Start_Order">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Split_Parallel_di" bpmnElement="Split_Parallel">
+        <dc:Bounds x="356" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Auth_Payment_di" bpmnElement="Task_Auth_Payment">
+        <dc:Bounds x="466" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Payment_di" bpmnElement="Gateway_Payment">
+        <dc:Bounds x="626" y="55" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Payment_Failed_di" bpmnElement="Task_Payment_Failed">
+        <dc:Bounds x="736" y="-20" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Order_Cancelled_di" bpmnElement="End_Order_Cancelled">
+        <dc:Bounds x="903" y="2" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Check_Stock_di" bpmnElement="Task_Check_Stock">
+        <dc:Bounds x="466" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Stock_di" bpmnElement="Gateway_Stock">
+        <dc:Bounds x="626" y="175" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Backorder_di" bpmnElement="Task_Backorder">
+        <dc:Bounds x="736" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Reserve_Stock_di" bpmnElement="Task_Reserve_Stock">
+        <dc:Bounds x="736" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_Parallel_di" bpmnElement="Join_Parallel">
+        <dc:Bounds x="896" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Fulfillment_di" bpmnElement="Sub_Fulfillment" isExpanded="true">
+        <dc:Bounds x="1006" y="60" width="672" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="1036" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Pick_di" bpmnElement="Sub_Pick">
+        <dc:Bounds x="1132" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Pack_di" bpmnElement="Sub_Pack">
+        <dc:Bounds x="1292" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Label_di" bpmnElement="Sub_Label">
+        <dc:Bounds x="1452" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="1612" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Update_ERP_di" bpmnElement="Task_Update_ERP">
+        <dc:Bounds x="1738" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Notify_Customer_di" bpmnElement="Task_Notify_Customer">
+        <dc:Bounds x="1898" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Order_Fulfilled_di" bpmnElement="End_Order_Fulfilled">
+        <dc:Bounds x="2058" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="SF1_di" bpmnElement="SF1">
+        <di:waypoint x="1072" y="135" />
+        <di:waypoint x="1132" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF2_di" bpmnElement="SF2">
+        <di:waypoint x="1232" y="135" />
+        <di:waypoint x="1292" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF3_di" bpmnElement="SF3">
+        <di:waypoint x="1392" y="135" />
+        <di:waypoint x="1452" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF4_di" bpmnElement="SF4">
+        <di:waypoint x="1552" y="135" />
+        <di:waypoint x="1612" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Pay_1_di" bpmnElement="F_Pay_1">
+        <di:waypoint x="381" y="115" />
+        <di:waypoint x="381" y="80" />
+        <di:waypoint x="466" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_1_di" bpmnElement="F_Stock_1">
+        <di:waypoint x="381" y="165" />
+        <di:waypoint x="381" y="200" />
+        <di:waypoint x="466" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Pay_Fail_di" bpmnElement="F_Pay_Fail">
+        <di:waypoint x="651" y="55" />
+        <di:waypoint x="651" y="20" />
+        <di:waypoint x="736" y="20" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Pay_OK_di" bpmnElement="F_Pay_OK">
+        <di:waypoint x="676" y="80" />
+        <di:waypoint x="866" y="80" />
+        <di:waypoint x="866" y="140" />
+        <di:waypoint x="896" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_Wait_di" bpmnElement="F_Stock_Wait">
+        <di:waypoint x="651" y="225" />
+        <di:waypoint x="651" y="260" />
+        <di:waypoint x="736" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_OK_di" bpmnElement="F_Stock_OK">
+        <di:waypoint x="651" y="175" />
+        <di:waypoint x="651" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Sync_di" bpmnElement="F_Sync">
+        <di:waypoint x="946" y="140" />
+        <di:waypoint x="1006" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_di" bpmnElement="F2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Pay_2_di" bpmnElement="F_Pay_2">
+        <di:waypoint x="566" y="80" />
+        <di:waypoint x="626" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_2_di" bpmnElement="F_Stock_2">
+        <di:waypoint x="566" y="200" />
+        <di:waypoint x="626" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_Join_di" bpmnElement="F_Stock_Join">
+        <di:waypoint x="836" y="140" />
+        <di:waypoint x="896" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Pay_Cancel_di" bpmnElement="F_Pay_Cancel">
+        <di:waypoint x="836" y="20" />
+        <di:waypoint x="903" y="20" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Stock_Retry_di" bpmnElement="F_Stock_Retry">
+        <di:waypoint x="786" y="300" />
+        <di:waypoint x="786" y="340" />
+        <di:waypoint x="516" y="340" />
+        <di:waypoint x="516" y="240" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Post_Sub_di" bpmnElement="F_Post_Sub">
+        <di:waypoint x="1678" y="140" />
+        <di:waypoint x="1738" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_ERP_di" bpmnElement="F_ERP">
+        <di:waypoint x="1838" y="140" />
+        <di:waypoint x="1898" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Done_di" bpmnElement="F_Done">
+        <di:waypoint x="1998" y="140" />
+        <di:waypoint x="2058" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

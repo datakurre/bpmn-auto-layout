@@ -1,5 +1,83 @@
 import type { Bounds, Point } from '../types';
 
+interface ObstacleCheckContext {
+  ignore: Bounds;
+  obstacles?: Bounds[];
+}
+
+function hasObstacleBelow(pt: Point, endY: number, ctx: ObstacleCheckContext): boolean {
+  if (!ctx.obstacles) {
+    return false;
+  }
+  return ctx.obstacles.some(
+    (b) => b !== ctx.ignore && pt.x > b.x && pt.x < b.x + b.width && b.y >= pt.y && b.y < endY
+  );
+}
+
+function computeChannelY(sourceBounds: Bounds, targetBounds: Bounds, allBounds?: Bounds[]): number {
+  let maxBottomY = Math.max(
+    sourceBounds.y + sourceBounds.height,
+    targetBounds.y + targetBounds.height
+  );
+
+  if (allBounds) {
+    const minX = Math.min(sourceBounds.x, targetBounds.x);
+    const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
+    for (const b of allBounds) {
+      if (b.x + b.width >= minX && b.x <= maxX) {
+        maxBottomY = Math.max(maxBottomY, b.y + b.height);
+      }
+    }
+  }
+
+  return maxBottomY + 40;
+}
+
+interface FeedbackRouteContext {
+  channelY: number;
+  allBounds?: Bounds[];
+}
+
+function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteContext): Point[] {
+  const srcBottom: Point = {
+    x: Math.round(src.x + src.width / 2),
+    y: src.y + src.height,
+  };
+  const tgtBottom: Point = {
+    x: Math.round(tgt.x + tgt.width / 2),
+    y: tgt.y + tgt.height,
+  };
+
+  const srcBlocked = hasObstacleBelow(srcBottom, ctx.channelY, {
+    ignore: src,
+    obstacles: ctx.allBounds,
+  });
+  const tgtBlocked = hasObstacleBelow(tgtBottom, ctx.channelY, {
+    ignore: tgt,
+    obstacles: ctx.allBounds,
+  });
+
+  const waypoints: Point[] = [];
+
+  if (srcBlocked) {
+    const srcRight: Point = { x: src.x + src.width, y: Math.round(src.y + src.height / 2) };
+    const srcStepX = src.x + src.width + 20;
+    waypoints.push(srcRight, { x: srcStepX, y: srcRight.y }, { x: srcStepX, y: ctx.channelY });
+  } else {
+    waypoints.push(srcBottom, { x: srcBottom.x, y: ctx.channelY });
+  }
+
+  if (tgtBlocked) {
+    const tgtLeft: Point = { x: tgt.x, y: Math.round(tgt.y + tgt.height / 2) };
+    const tgtStepX = tgt.x - 20;
+    waypoints.push({ x: tgtStepX, y: ctx.channelY }, { x: tgtStepX, y: tgtLeft.y }, tgtLeft);
+  } else {
+    waypoints.push({ x: tgtBottom.x, y: ctx.channelY }, tgtBottom);
+  }
+
+  return waypoints;
+}
+
 export function routeOrthogonalEdge(
   sourceBounds: Bounds,
   targetBounds: Bounds,
@@ -29,31 +107,6 @@ export function routeOrthogonalEdge(
   }
 
   // Feedback loop (target is at or behind source)
-  // Compute clearance below all relevant shapes
-  let maxBottomY = Math.max(
-    sourceBounds.y + sourceBounds.height,
-    targetBounds.y + targetBounds.height
-  );
-
-  if (allBounds) {
-    const minX = Math.min(sourceBounds.x, targetBounds.x);
-    const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
-    for (const b of allBounds) {
-      if (b.x + b.width >= minX && b.x <= maxX) {
-        maxBottomY = Math.max(maxBottomY, b.y + b.height);
-      }
-    }
-  }
-
-  const channelY = maxBottomY + 40;
-  const srcBottom: Point = {
-    x: Math.round(sourceBounds.x + sourceBounds.width / 2),
-    y: sourceBounds.y + sourceBounds.height,
-  };
-  const tgtBottom: Point = {
-    x: Math.round(targetBounds.x + targetBounds.width / 2),
-    y: targetBounds.y + targetBounds.height,
-  };
-
-  return [srcBottom, { x: srcBottom.x, y: channelY }, { x: tgtBottom.x, y: channelY }, tgtBottom];
+  const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
+  return computeFeedbackWaypoints(sourceBounds, targetBounds, { channelY, allBounds });
 }

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
+import { routeMessageFlow } from '../src/hierarchy/swimlane-layout';
 import { expectImageSnapshotMatch } from './helpers/snapshot-helper';
 
 describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
@@ -66,5 +67,15 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
 
     expectImageSnapshotMatch(resultXml, '07-collaboration-message-flows');
+  });
+
+  it('routes message flow around intermediate obstacle when source is above target', () => {
+    const src = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt = { x: 300, y: 500, width: 100, height: 80 };
+    const obstacle = { x: 100, y: 200, width: 100, height: 80 };
+    const waypoints = routeMessageFlow(src, tgt, [src, tgt, obstacle]);
+    expect(waypoints).toHaveLength(5);
+    expect(waypoints[0]).toEqual({ x: 200, y: 140 });
+    expect(waypoints[1].x).toBe(220);
   });
 });

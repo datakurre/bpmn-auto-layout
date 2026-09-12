@@ -110,7 +110,10 @@ export class LayoutEngine {
       });
     }
 
-    this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, plane);
+    this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
+      plane,
+      participants,
+    });
   }
 
   private layoutParticipant(params: ParticipantLayoutParams): number {
@@ -203,8 +206,13 @@ export class LayoutEngine {
   private routeAllMessageFlows(
     messageFlows: any[],
     allShapesMap: Map<string, Bounds>,
-    plane: any
+    options: { plane: any; participants: any[] }
   ): void {
+    const participantIds = new Set(options.participants.map((p: any) => p.id));
+    const flowNodeBounds = Array.from(allShapesMap.entries())
+      .filter(([id]) => !participantIds.has(id))
+      .map(([, b]) => b);
+
     for (const flow of messageFlows) {
       const srcId = flow.sourceRef?.id || flow.sourceRef;
       const tgtId = flow.targetRef?.id || flow.targetRef;
@@ -212,8 +220,8 @@ export class LayoutEngine {
       const tgtBounds = allShapesMap.get(tgtId);
 
       if (srcBounds && tgtBounds) {
-        const waypoints = routeMessageFlow(srcBounds, tgtBounds);
-        this.diGenerator.addEdge(plane, flow, waypoints);
+        const waypoints = routeMessageFlow(srcBounds, tgtBounds, flowNodeBounds);
+        this.diGenerator.addEdge(options.plane, flow, waypoints);
       }
     }
   }
