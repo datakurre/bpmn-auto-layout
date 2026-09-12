@@ -157,14 +157,14 @@ const SNAPSHOT_METADATA = {
 export function generateGallery() {
   mkdirSync(publicSnapshotsDir, { recursive: true });
 
-  const files = existsSync(snapshotsDir)
-    ? readdirSync(snapshotsDir)
-        .filter((f) => f.endsWith('.png'))
-        .sort()
-    : [];
+  const allFiles = existsSync(snapshotsDir) ? readdirSync(snapshotsDir) : [];
+  const pngFiles = allFiles.filter((f) => f.endsWith('.png')).sort();
+  const bpmnFiles = new Set(allFiles.filter((f) => f.endsWith('.bpmn')));
 
-  for (const file of files) {
-    copyFileSync(join(snapshotsDir, file), join(publicSnapshotsDir, file));
+  for (const file of allFiles) {
+    if (file.endsWith('.png') || file.endsWith('.bpmn')) {
+      copyFileSync(join(snapshotsDir, file), join(publicSnapshotsDir, file));
+    }
   }
 
   let hasCoverage = false;
@@ -174,15 +174,18 @@ export function generateGallery() {
     hasCoverage = true;
   }
 
-  const items = files.map((file) => {
+  const items = pngFiles.map((file) => {
+    const baseName = file.replace('.png', '');
+    const bpmnFile = `${baseName}.bpmn`;
+    const hasBpmn = bpmnFiles.has(bpmnFile);
     const meta = SNAPSHOT_METADATA[file] || {
-      title: file.replace('.png', ''),
+      title: baseName,
       iteration: file.slice(0, 2),
       category: 'General',
       description: 'Rendered diagram snapshot.',
       tags: [],
     };
-    return { file, ...meta };
+    return { file, bpmnFile: hasBpmn ? bpmnFile : null, ...meta };
   });
 
   const categories = ['All', ...new Set(items.map((i) => i.category))];
@@ -197,7 +200,7 @@ function generateHtml({ items, categories, hasCoverage }) {
     .map(
       (item) => `
     <article class="card" data-category="${item.category}" data-iteration="${item.iteration}">
-      <div class="card-image-wrap" onclick="openModal('snapshots/${item.file}', '${escapeHtml(item.title)}')">
+      <div class="card-image-wrap" onclick="openModal('snapshots/${item.file}', '${escapeHtml(item.title)}', ${item.bpmnFile ? `'snapshots/${item.bpmnFile}'` : 'null'})">
         <img src="snapshots/${item.file}" alt="${escapeHtml(item.title)}" loading="lazy" />
         <div class="zoom-hint">Click to enlarge</div>
       </div>
@@ -208,8 +211,22 @@ function generateHtml({ items, categories, hasCoverage }) {
         </div>
         <h3 class="card-title">${escapeHtml(item.title)}</h3>
         <p class="card-desc">${escapeHtml(item.description)}</p>
-        <div class="card-tags">
-          ${item.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+        <div class="card-footer">
+          <div class="card-tags">
+            ${item.tags.map((t) => `<span class="tag">${escapeHtml(t)}</span>`).join('')}
+          </div>
+          ${
+            item.bpmnFile
+              ? `<a class="bpmn-btn" href="snapshots/${item.bpmnFile}" download title="Download BPMN 2.0 XML">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                  BPMN XML
+                </a>`
+              : ''
+          }
         </div>
       </div>
     </article>`
@@ -456,6 +473,15 @@ function generateHtml({ items, categories, hasCoverage }) {
       flex: 1;
     }
 
+    .card-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-top: auto;
+      flex-wrap: wrap;
+    }
+
     .card-tags {
       display: flex;
       flex-wrap: wrap;
@@ -469,6 +495,28 @@ function generateHtml({ items, categories, hasCoverage }) {
       font-size: 0.75rem;
       padding: 0.2rem 0.5rem;
       border-radius: 0.25rem;
+    }
+
+    .bpmn-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.35rem;
+      background: #1e293b;
+      border: 1px solid var(--border);
+      color: #93c5fd;
+      text-decoration: none;
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 0.25rem 0.6rem;
+      border-radius: 0.375rem;
+      transition: all 0.2s ease;
+      white-space: nowrap;
+    }
+
+    .bpmn-btn:hover {
+      background: var(--primary);
+      border-color: var(--primary);
+      color: #ffffff;
     }
 
     /* Modal / Lightbox */
@@ -503,7 +551,7 @@ function generateHtml({ items, categories, hasCoverage }) {
 
     .modal-content img {
       max-width: 100%;
-      max-height: calc(85vh - 5rem);
+      max-height: calc(85vh - 6rem);
       object-fit: contain;
     }
 
@@ -524,11 +572,30 @@ function generateHtml({ items, categories, hasCoverage }) {
       justify-content: center;
     }
 
+    .modal-footer {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      width: 100%;
+      margin-top: 1.25rem;
+      gap: 1rem;
+    }
+
     .modal-title {
       color: #0f172a;
       font-weight: 700;
-      margin-top: 1rem;
-      font-size: 1.1rem;
+      font-size: 1.15rem;
+    }
+
+    .bpmn-modal-btn {
+      padding: 0.45rem 0.9rem;
+      font-size: 0.85rem;
+      background: #0f172a;
+      color: #f8fafc;
+    }
+
+    .bpmn-modal-btn:hover {
+      background: var(--primary);
     }
 
     footer {
@@ -554,7 +621,7 @@ function generateHtml({ items, categories, hasCoverage }) {
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
             <path d="M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z"/>
           </svg>
-          59 Tests Passing
+          89 Tests Passing
         </div>
         <div class="metric-chip success">
           <svg width="16" height="16" fill="currentColor" viewBox="0 0 16 16">
@@ -597,7 +664,17 @@ function generateHtml({ items, categories, hasCoverage }) {
     <div class="modal-content" onclick="event.stopPropagation()">
       <button class="modal-close" onclick="closeModal(event)">&times;</button>
       <img id="modalImg" src="" alt="Enlarged diagram" />
-      <div class="modal-title" id="modalTitle"></div>
+      <div class="modal-footer">
+        <div class="modal-title" id="modalTitle"></div>
+        <a id="modalBpmnBtn" class="bpmn-btn bpmn-modal-btn" href="#" download>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          Download BPMN XML
+        </a>
+      </div>
     </div>
   </div>
 
@@ -627,12 +704,19 @@ function generateHtml({ items, categories, hasCoverage }) {
       });
     });
 
-    function openModal(src, title) {
+    function openModal(src, title, bpmnSrc) {
       const modal = document.getElementById('imageModal');
       const img = document.getElementById('modalImg');
       const titleEl = document.getElementById('modalTitle');
+      const bpmnBtn = document.getElementById('modalBpmnBtn');
       img.src = src;
       titleEl.textContent = title;
+      if (bpmnSrc) {
+        bpmnBtn.href = bpmnSrc;
+        bpmnBtn.style.display = 'inline-flex';
+      } else {
+        bpmnBtn.style.display = 'none';
+      }
       modal.classList.add('open');
     }
 

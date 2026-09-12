@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:exclusiveGateway id="Split_1" name="Branch" />
+    <bpmn:task id="Task_A1" name="Review Part 1" />
+    <bpmn:task id="Task_A2" name="Review Part 2" />
+    <bpmn:task id="Task_B1" name="Quick Fast-Track" />
+    <bpmn:exclusiveGateway id="Join_1" name="Converge" />
+    <bpmn:endEvent id="End_1" name="Done" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Split_1" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Split_1" targetRef="Task_A1" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_A1" targetRef="Task_A2" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_A2" targetRef="Join_1" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Split_1" targetRef="Task_B1" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_B1" targetRef="Join_1" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Join_1" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Split_1_di" bpmnElement="Split_1">
+        <dc:Bounds x="196" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A1_di" bpmnElement="Task_A1">
+        <dc:Bounds x="306" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A2_di" bpmnElement="Task_A2">
+        <dc:Bounds x="466" y="40" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_B1_di" bpmnElement="Task_B1">
+        <dc:Bounds x="306" y="160" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_1_di" bpmnElement="Join_1">
+        <dc:Bounds x="626" y="115" width="50" height="50" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="736" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="221" y="115" />
+        <di:waypoint x="221" y="80" />
+        <di:waypoint x="306" y="80" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="221" y="165" />
+        <di:waypoint x="221" y="200" />
+        <di:waypoint x="306" y="200" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="676" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="566" y="80" />
+        <di:waypoint x="651" y="80" />
+        <di:waypoint x="651" y="115" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="406" y="200" />
+        <di:waypoint x="651" y="200" />
+        <di:waypoint x="651" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="406" y="80" />
+        <di:waypoint x="466" y="80" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Customer" name="Customer" processRef="Proc_Customer" />
+    <bpmn:participant id="Pool_Merchant" name="Merchant" processRef="Proc_Merchant" />
+    <bpmn:messageFlow id="Msg_Order" sourceRef="Cust_Order" targetRef="Merch_Process" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Customer" isExecutable="false">
+    <bpmn:startEvent id="Cust_Start" name="Browse" />
+    <bpmn:task id="Cust_Order" name="Place Order" />
+    <bpmn:endEvent id="Cust_End" name="Receive Goods" />
+    <bpmn:sequenceFlow id="Cust_F1" sourceRef="Cust_Start" targetRef="Cust_Order" />
+    <bpmn:sequenceFlow id="Cust_F2" sourceRef="Cust_Order" targetRef="Cust_End" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Merchant" name="Merchant Process" isExecutable="false">
+    <bpmn:task id="Merch_Process" name="Fulfill Order" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Customer_di" bpmnElement="Pool_Customer">
+        <dc:Bounds x="100" y="80" width="452" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
+        <dc:Bounds x="150" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Order_di" bpmnElement="Cust_Order">
+        <dc:Bounds x="246" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_End_di" bpmnElement="Cust_End">
+        <dc:Bounds x="406" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Cust_F1_di" bpmnElement="Cust_F1">
+        <di:waypoint x="186" y="140" />
+        <di:waypoint x="246" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Cust_F2_di" bpmnElement="Cust_F2">
+        <di:waypoint x="346" y="140" />
+        <di:waypoint x="406" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNShape id="Pool_Merchant_di" bpmnElement="Pool_Merchant">
+        <dc:Bounds x="100" y="340" width="400" height="200" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Merch_Process_di" bpmnElement="Merch_Process">
+        <dc:Bounds x="150" y="360" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Msg_Order_di" bpmnElement="Msg_Order">
+        <di:waypoint x="296" y="180" />
+        <di:waypoint x="296" y="270" />
+        <di:waypoint x="200" y="270" />
+        <di:waypoint x="200" y="360" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

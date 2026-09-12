@@ -1,0 +1,77 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:subProcess id="Outer_Sub" name="Outer Scope">
+      <bpmn:startEvent id="Outer_Start" name="Begin Outer" />
+      <bpmn:subProcess id="Inner_Sub" name="Inner Scope">
+        <bpmn:startEvent id="Inner_Start" name="Begin Inner" />
+        <bpmn:task id="Inner_Task" name="Deep Compute" />
+        <bpmn:endEvent id="Inner_End" name="Finish Inner" />
+        <bpmn:sequenceFlow id="Inner_F1" sourceRef="Inner_Start" targetRef="Inner_Task" />
+        <bpmn:sequenceFlow id="Inner_F2" sourceRef="Inner_Task" targetRef="Inner_End" />
+      </bpmn:subProcess>
+      <bpmn:endEvent id="Outer_End" name="Finish Outer" />
+      <bpmn:sequenceFlow id="Outer_F1" sourceRef="Outer_Start" targetRef="Inner_Sub" />
+      <bpmn:sequenceFlow id="Outer_F2" sourceRef="Inner_Sub" targetRef="Outer_End" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End_1" name="Finish All" />
+    <bpmn:sequenceFlow id="Main_F1" sourceRef="Start_1" targetRef="Outer_Sub" />
+    <bpmn:sequenceFlow id="Main_F2" sourceRef="Outer_Sub" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Outer_Sub_di" bpmnElement="Outer_Sub" isExpanded="true">
+        <dc:Bounds x="196" y="25" width="604" height="230" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Outer_Start_di" bpmnElement="Outer_Start">
+        <dc:Bounds x="226" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_Sub_di" bpmnElement="Inner_Sub" isExpanded="true">
+        <dc:Bounds x="322" y="60" width="352" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_Start_di" bpmnElement="Inner_Start">
+        <dc:Bounds x="352" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_Task_di" bpmnElement="Inner_Task">
+        <dc:Bounds x="448" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Inner_End_di" bpmnElement="Inner_End">
+        <dc:Bounds x="608" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Outer_End_di" bpmnElement="Outer_End">
+        <dc:Bounds x="734" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="860" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Inner_F1_di" bpmnElement="Inner_F1">
+        <di:waypoint x="388" y="135" />
+        <di:waypoint x="448" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Inner_F2_di" bpmnElement="Inner_F2">
+        <di:waypoint x="548" y="135" />
+        <di:waypoint x="608" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Outer_F1_di" bpmnElement="Outer_F1">
+        <di:waypoint x="262" y="140" />
+        <di:waypoint x="322" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Outer_F2_di" bpmnElement="Outer_F2">
+        <di:waypoint x="674" y="140" />
+        <di:waypoint x="734" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Main_F1_di" bpmnElement="Main_F1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Main_F2_di" bpmnElement="Main_F2">
+        <di:waypoint x="800" y="140" />
+        <di:waypoint x="860" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

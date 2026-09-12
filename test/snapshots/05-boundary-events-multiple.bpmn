@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:task id="Task_Main" name="Call External API" />
+    <bpmn:endEvent id="End_Main" name="API Success" />
+    <bpmn:boundaryEvent id="Boundary_Error" name="404 Error" attachedToRef="Task_Main" />
+    <bpmn:boundaryEvent id="Boundary_Timer" name="Timeout" attachedToRef="Task_Main" />
+    <bpmn:endEvent id="End_Error" name="Failed" />
+    <bpmn:endEvent id="End_Timeout" name="Timed Out" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Main" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Main" targetRef="End_Main" />
+    <bpmn:sequenceFlow id="Flow_Err" sourceRef="Boundary_Error" targetRef="End_Error" />
+    <bpmn:sequenceFlow id="Flow_Time" sourceRef="Boundary_Timer" targetRef="End_Timeout" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Main_di" bpmnElement="Task_Main">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Main_di" bpmnElement="End_Main">
+        <dc:Bounds x="356" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Error_di" bpmnElement="End_Error">
+        <dc:Bounds x="452" y="242" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Timeout_di" bpmnElement="End_Timeout">
+        <dc:Bounds x="452" y="362" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Error_di" bpmnElement="Boundary_Error">
+        <dc:Bounds x="250" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Timer_di" bpmnElement="Boundary_Timer">
+        <dc:Bounds x="206" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Err_di" bpmnElement="Flow_Err">
+        <di:waypoint x="268" y="198" />
+        <di:waypoint x="268" y="260" />
+        <di:waypoint x="452" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Time_di" bpmnElement="Flow_Time">
+        <di:waypoint x="224" y="198" />
+        <di:waypoint x="224" y="380" />
+        <di:waypoint x="452" y="380" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

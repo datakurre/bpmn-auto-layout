@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="Start_Parent" name="Start" />
+    <bpmn:subProcess id="Sub_Order" name="Order Fulfillment">
+      <bpmn:startEvent id="Sub_Start" name="Order Placed" />
+      <bpmn:task id="Sub_Task" name="Pack Items" />
+      <bpmn:endEvent id="Sub_End" name="Items Packed" />
+      <bpmn:sequenceFlow id="Sub_Flow_1" sourceRef="Sub_Start" targetRef="Sub_Task" />
+      <bpmn:sequenceFlow id="Sub_Flow_2" sourceRef="Sub_Task" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:endEvent id="End_Parent" name="Delivered" />
+    <bpmn:sequenceFlow id="Parent_Flow_1" sourceRef="Start_Parent" targetRef="Sub_Order" />
+    <bpmn:sequenceFlow id="Parent_Flow_2" sourceRef="Sub_Order" targetRef="End_Parent" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_1">
+      <bpmndi:BPMNShape id="Start_Parent_di" bpmnElement="Start_Parent">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Order_di" bpmnElement="Sub_Order" isExpanded="true">
+        <dc:Bounds x="196" y="60" width="352" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="226" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Task_di" bpmnElement="Sub_Task">
+        <dc:Bounds x="322" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="482" y="117" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Parent_di" bpmnElement="End_Parent">
+        <dc:Bounds x="608" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Sub_Flow_1_di" bpmnElement="Sub_Flow_1">
+        <di:waypoint x="262" y="135" />
+        <di:waypoint x="322" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_2_di" bpmnElement="Sub_Flow_2">
+        <di:waypoint x="422" y="135" />
+        <di:waypoint x="482" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Parent_Flow_1_di" bpmnElement="Parent_Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Parent_Flow_2_di" bpmnElement="Parent_Flow_2">
+        <di:waypoint x="548" y="140" />
+        <di:waypoint x="608" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

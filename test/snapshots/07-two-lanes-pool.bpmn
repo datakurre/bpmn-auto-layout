@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Order" name="Order Department" processRef="Process_Order" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Order" isExecutable="false">
+    <bpmn:laneSet id="Process_Order_LaneSet">
+      <bpmn:lane id="Lane_Buyer" name="Buyer Lane">
+        <bpmn:flowNodeRef>Start_1</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Submit</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_1</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Approver" name="Approver Lane">
+        <bpmn:flowNodeRef>Task_Approve</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_1" name="Order Needed" />
+    <bpmn:task id="Task_Submit" name="Submit Order" />
+    <bpmn:task id="Task_Approve" name="Approve Order" />
+    <bpmn:endEvent id="End_1" name="Order Completed" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Submit" />
+    <bpmn:sequenceFlow id="Flow_Cross_1" sourceRef="Task_Submit" targetRef="Task_Approve" />
+    <bpmn:sequenceFlow id="Flow_Cross_2" sourceRef="Task_Approve" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Order_di" bpmnElement="Pool_Order">
+        <dc:Bounds x="100" y="80" width="572" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Buyer_di" bpmnElement="Lane_Buyer">
+        <dc:Bounds x="130" y="80" width="542" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Approver_di" bpmnElement="Lane_Approver">
+        <dc:Bounds x="130" y="200" width="542" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="180" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit">
+        <dc:Bounds x="276" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Approve_di" bpmnElement="Task_Approve">
+        <dc:Bounds x="436" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="596" y="122" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="216" y="140" />
+        <di:waypoint x="276" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cross_1_di" bpmnElement="Flow_Cross_1">
+        <di:waypoint x="376" y="140" />
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="406" y="260" />
+        <di:waypoint x="436" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cross_2_di" bpmnElement="Flow_Cross_2">
+        <di:waypoint x="536" y="260" />
+        <di:waypoint x="566" y="260" />
+        <di:waypoint x="566" y="140" />
+        <di:waypoint x="596" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

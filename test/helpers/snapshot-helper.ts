@@ -5,11 +5,25 @@ import { join } from 'node:path';
 
 const SNAPSHOTS_DIR = join(__dirname, '../snapshots');
 
-export function expectImageSnapshotMatch(xml: string, snapshotName: string): void {
-  if (!existsSync(SNAPSHOTS_DIR)) {
-    mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+function verifyBpmnSnapshot(xml: string, snapshotName: string, updateSnapshots: boolean): void {
+  const bpmnPath = join(SNAPSHOTS_DIR, `${snapshotName}.bpmn`);
+  const normalizedXml = xml.replace(/\r\n/g, '\n');
+
+  if (updateSnapshots || !existsSync(bpmnPath)) {
+    writeFileSync(bpmnPath, normalizedXml, 'utf8');
+    return;
   }
 
+  const baselineXml = readFileSync(bpmnPath, 'utf8').replace(/\r\n/g, '\n');
+  if (normalizedXml !== baselineXml) {
+    throw new Error(
+      `BPMN XML snapshot mismatch for "${snapshotName}".\n` +
+        `Run with UPDATE_SNAPSHOTS=true to update baselines if this change was intended.`
+    );
+  }
+}
+
+function verifyImageSnapshot(xml: string, snapshotName: string, updateSnapshots: boolean): void {
   const snapshotPath = join(SNAPSHOTS_DIR, `${snapshotName}.png`);
   const tempActualPath = `/tmp/${snapshotName}_actual.png`;
 
@@ -21,7 +35,6 @@ export function expectImageSnapshotMatch(xml: string, snapshotName: string): voi
     );
 
     const actualBuffer = readFileSync(tempActualPath);
-    const updateSnapshots = process.env.UPDATE_SNAPSHOTS === 'true';
 
     if (updateSnapshots || !existsSync(snapshotPath)) {
       writeFileSync(snapshotPath, actualBuffer);
@@ -43,3 +56,15 @@ export function expectImageSnapshotMatch(xml: string, snapshotName: string): voi
     }
   }
 }
+
+export function expectSnapshotMatch(xml: string, snapshotName: string): void {
+  if (!existsSync(SNAPSHOTS_DIR)) {
+    mkdirSync(SNAPSHOTS_DIR, { recursive: true });
+  }
+
+  const updateSnapshots = process.env.UPDATE_SNAPSHOTS === 'true';
+  verifyBpmnSnapshot(xml, snapshotName, updateSnapshots);
+  verifyImageSnapshot(xml, snapshotName, updateSnapshots);
+}
+
+export const expectImageSnapshotMatch = expectSnapshotMatch;
