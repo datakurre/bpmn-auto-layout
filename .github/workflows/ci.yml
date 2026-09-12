@@ -65,7 +65,7 @@ jobs:
           nix develop --command python3 tools/bpmn_feedback.py \
             report fixtures/*.bpmn \
             --engine upstream="node tools/upstream-baseline/run.mjs" \
-            --engine ours-align=ours-align
+            --engine ours-align="bpmn-auto-layout --align"
           nix develop --command python3 tools/bpmn_feedback.py check
 
   # Publishes the N-way comparison report as the project's public quality
@@ -95,7 +95,7 @@ jobs:
           nix develop --command python3 tools/bpmn_feedback.py \
             report fixtures/*.bpmn --clear-output --output-dir ./pages-report \
             --engine upstream="node tools/upstream-baseline/run.mjs" \
-            --engine ours-align=ours-align
+            --engine ours-align="bpmn-auto-layout --align"
       # The page is a static artifact of the report generator (#58's "no
       # second renderer to maintain"): whatever `report` writes is exactly
       # what gets published, engine names, resolved versions, commit, and

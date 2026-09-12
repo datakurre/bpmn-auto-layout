@@ -112,16 +112,19 @@ or is missing degrades to an empty column with the error recorded; `check`
 still gates only `ours`, so a baseline's numbers are information, never a
 build failure.
 
-Passing `--engine ours-align=ours-align` adds a column for this project's
-own alignment mode (`--align`, see above), scored against every fixture's
-own input DI rather than the from-scratch column's semantics-only starting
-point. That column's report includes a third table, **Alignment**, that no
-other column populates: shapes compared, how far they moved, whether any
-pair changed relative order (must read 0 -- that is the mode's own
-contract), and how the grid/lattice/orthogonality metrics changed relative
-to the input. `ours-align` is a naming convention `resolve_engine_command`
-recognizes, the same way a bare `ours` command falls back to the locally
-built package.
+Passing `--engine ours-align="bpmn-auto-layout --align"` adds a column for
+this project's own alignment mode (see above), scored against every
+fixture's own input DI rather than the from-scratch column's
+semantics-only starting point. That column's report includes a third
+table, **Alignment**, that no other column populates: shapes compared,
+how far they moved, whether any pair changed relative order (must read 0
+-- that is the mode's own contract), and how the grid/lattice/orthogonality
+metrics changed relative to the input. `ours-align` is a naming
+convention `is_align_engine`/`resolve_engine_command` recognize; an engine
+by that name whose command is not found on PATH (e.g. `--engine
+ours-align=ours-align` in a checkout with no CLI installed) falls back to
+running `alignProcess` from the locally built package directly, the same
+way a bare `ours` command falls back to `layoutProcess` there.
 
 ## Published comparison report
 
