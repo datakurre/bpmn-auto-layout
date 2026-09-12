@@ -69,6 +69,64 @@ Persisted source fixtures are stored directly under `fixtures/`; layout commands
 operate on ephemeral report copies so source BPMN cannot be overwritten by a
 broken layout implementation.
 
+## Comparing against another engine
+
+`report` accepts a repeatable `--engine NAME=COMMAND` option to lay out the
+same inputs with additional engines and score them identically alongside our
+own output (our own engine is always included as `ours` unless overridden):
+
+```sh
+nix develop --command npm ci --prefix tools/upstream-baseline
+nix develop --command python3 tools/bpmn_feedback.py report fixtures/*.bpmn \
+  --engine upstream="node tools/upstream-baseline/run.mjs"
+```
+
+`tools/upstream-baseline` is a pinned, isolated install of
+`bpmn-io/bpmn-auto-layout` -- the upstream project this repo shares a name
+with -- used as a fixed external comparison baseline. An engine that errors
+or is missing degrades to an empty column with the error recorded; `check`
+still gates only `ours`, so a baseline's numbers are information, never a
+build failure.
+
+## Published comparison report
+
+Every push to `main` renders the N-way comparison report over the curated
+fixture corpus (source vs. our own engine vs. the pinned upstream baseline)
+and publishes it to GitHub Pages -- the project's demo, its public quality
+record, and a regression signal that does not drift when we change our own
+metrics. A pull request renders the same report but uploads it as a
+downloadable workflow artifact instead of publishing it, so a PR's layout
+effect is visible without becoming the project's public claim. The page
+shows the measured commit and timestamp, each engine's resolved version, and
+the validity/aesthetics bias statement -- it is a static artifact of
+`tools/bpmn_feedback.py report` with no second renderer to maintain.
+Publishing requires GitHub Pages enabled for this repository with source set
+to "GitHub Actions" (a one-time repository setting under Settings -> Pages).
+
+## Generated benchmark corpus
+
+Three fixture directories, three owners: `fixtures/*.bpmn` are the curated,
+hand-reviewed corpus; `fixtures/regression/*.bpmn` are minimal, hand-written,
+one pinned invariant each; `fixtures/generated/*.bpmn` are produced entirely
+by `tools/corpus-generator/generate.mjs` and are never hand-edited.
+
+```sh
+nix develop --command npm ci --prefix tools/corpus-generator
+nix develop --command node tools/corpus-generator/generate.mjs --seed 1
+```
+
+Generates the full topology-class x size x label-load matrix (9 topologies --
+linear, branch/merge, nested branches, a loop back-edge, boundary events, an
+expanded subprocess, nested subprocesses, disconnected components, and
+pool+lanes -- at small/medium/large node counts, each with no/short/long
+labels) deterministically from the seed: same seed, byte-identical BPMN.
+Every generated file records its topology, size, and seed in a
+`<bpmn:documentation>` element and in its filename, and is checked for
+referential integrity (no dangling refs, no duplicate ids, no
+`<incoming>`/`<outgoing>` mismatch) before it is ever written. `selftest`
+re-checks the same invariant on every run. Pass `--topology`, `--size`, or
+`--label-load` to regenerate a single combination; see `--help` for details.
+
 Run a stdlib-only validation with:
 
 ```sh

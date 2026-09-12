@@ -8,11 +8,13 @@ import html
 import json
 import math
 import os
+import re
 import shlex
 import shutil
 import subprocess
 import tempfile
 from collections.abc import Callable
+from datetime import datetime, timezone
 from pathlib import Path
 from xml.etree import ElementTree as ET
 
@@ -54,6 +56,77 @@ def parse_xml(path: Path) -> ET.Element:
 
 def sha256_file(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def referential_integrity_problems(root: ET.Element) -> list[str]:
+    """Structural, engine-agnostic sanity check on the BPMN *semantics*
+    (never the DI): no duplicate ids, no dangling sourceRef/targetRef/
+    attachedToRef/processRef/flowNodeRef, and every <incoming>/<outgoing>
+    declaration agrees with the flow it names. Cheap (pure XML parsing, no
+    layout engine) so it can run on every fixture, including the generated
+    corpus (#57's own success criterion: "no dangling refs, no duplicate
+    ids, no <incoming>/<outgoing> mismatches")."""
+    problems: list[str] = []
+    ids: dict[str, ET.Element] = {}
+    for element in root.iter():
+        if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+            continue
+        element_id = element.get("id")
+        if not element_id:
+            continue
+        if element_id in ids:
+            problems.append(f"duplicate id: {element_id}")
+        else:
+            ids[element_id] = element
+
+    def resolves(ref: str | None) -> bool:
+        return bool(ref) and ref in ids
+
+    for flow in list(root.iter(q("bpmn", "sequenceFlow"))) + list(root.iter(q("bpmn", "messageFlow"))) + list(
+        root.iter(q("bpmn", "association"))
+    ):
+        flow_id = flow.get("id", "<unnamed>")
+        source_id = flow.get("sourceRef")
+        target_id = flow.get("targetRef")
+        if not resolves(source_id):
+            problems.append(f"{flow_id}: sourceRef does not resolve ({source_id})")
+        if not resolves(target_id):
+            problems.append(f"{flow_id}: targetRef does not resolve ({target_id})")
+
+    for element in root.iter():
+        if not element.tag.startswith("{" + NS["bpmn"] + "}"):
+            continue
+        element_id = element.get("id", "<unnamed>")
+        for incoming in element.findall(q("bpmn", "incoming")):
+            flow_id = (incoming.text or "").strip()
+            flow = ids.get(flow_id)
+            # `flow is None`, never `not flow`: an ET.Element with no
+            # subelements (every sequenceFlow here) is falsy under Python's
+            # bool() even when the lookup found it (ElementTree's __bool__
+            # is `len(children) > 0`, not "is this a real element") -- `not
+            # flow` would misreport every resolved flow as dangling.
+            if flow is None:
+                problems.append(f"{element_id}: <incoming> names unresolved flow {flow_id!r}")
+            elif flow.get("targetRef") != element.get("id"):
+                problems.append(f"{element_id}: <incoming> {flow_id} does not target this element")
+        for outgoing in element.findall(q("bpmn", "outgoing")):
+            flow_id = (outgoing.text or "").strip()
+            flow = ids.get(flow_id)
+            if flow is None:
+                problems.append(f"{element_id}: <outgoing> names unresolved flow {flow_id!r}")
+            elif flow.get("sourceRef") != element.get("id"):
+                problems.append(f"{element_id}: <outgoing> {flow_id} does not source from this element")
+        attached_to = element.get("attachedToRef")
+        if attached_to is not None and not resolves(attached_to):
+            problems.append(f"{element_id}: attachedToRef does not resolve ({attached_to})")
+        process_ref = element.get("processRef")
+        if process_ref is not None and not resolves(process_ref):
+            problems.append(f"{element_id}: processRef does not resolve ({process_ref})")
+        for flow_node_ref in element.findall(q("bpmn", "flowNodeRef")):
+            ref = (flow_node_ref.text or "").strip()
+            if not resolves(ref):
+                problems.append(f"{element_id}: flowNodeRef does not resolve ({ref!r})")
+    return problems
 
 
 def bounds_from(element: ET.Element) -> dict[str, float] | None:
@@ -148,6 +221,52 @@ def attach_side(point: tuple[float, float], box: dict[str, float]) -> str | None
     if abs(x - x1) < 0.5:
         return "right"
     return None
+
+
+def segment_direction(a: tuple[float, float], b: tuple[float, float]) -> tuple[str, int] | None:
+    """Which way a single orthogonal segment travels, as (axis, sign), or
+    None for a degenerate (near zero-length) segment. Used to tell a
+    genuine corner from a collinear pass-through waypoint (#56)."""
+    dx = b[0] - a[0]
+    dy = b[1] - a[1]
+    if abs(dx) < 0.5 and abs(dy) < 0.5:
+        return None
+    if abs(dx) >= abs(dy):
+        return ("x", 1 if dx > 0 else -1)
+    return ("y", 1 if dy > 0 else -1)
+
+
+def count_real_bends(points: list[tuple[float, float]]) -> tuple[int, list[tuple[float, float]]]:
+    """Count genuine direction changes in an orthogonal polyline, and
+    separately return any collinear intermediate waypoint found along the
+    way -- an intermediate point where the route does not actually turn.
+
+    #46 already excluded exact duplicate waypoints from bend/length counts
+    (a repeated point is a zero-length segment). This closes the same gap
+    for a collinear-but-not-duplicate point: `max(0, len(points) - 2)`
+    (the previous definition of total_bends, and of excess_turns' actual
+    bend count) silently counted every intermediate waypoint as a bend
+    whether or not the route actually turned there. Confirmed live in this
+    engine's own output during #56's cross-engine metric audit: a
+    MessageFlow with three collinear waypoints on a single straight line,
+    inflating its bend count by one for no geometric reason. The risk is
+    symmetric across engines -- any router that leaves a pass-through
+    waypoint (grid-snapping, a channel-plan artifact, a merge of two
+    formerly-distinct segments) would have its bend count inflated the same
+    way, understating a competitor or overstating ourselves depending on
+    which side it happens to occur."""
+    bends = 0
+    collinear: list[tuple[float, float]] = []
+    for i in range(1, len(points) - 1):
+        before = segment_direction(points[i - 1], points[i])
+        after = segment_direction(points[i], points[i + 1])
+        if before is None or after is None:
+            continue  # a degenerate segment is counted separately (#46)
+        if before == after:
+            collinear.append(points[i])
+        else:
+            bends += 1
+    return bends, collinear
 
 
 def min_bend_count(
@@ -508,8 +627,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
     max_lattice_remainder = 0.0
     degenerate_waypoints = 0
     degenerate_waypoint_details: list[dict[str, object]] = []
+    collinear_waypoints = 0
+    collinear_waypoint_details: list[dict[str, object]] = []
     horizontal_flow_gaps: list[float] = []
     excess_turns_total = 0
+    excess_turns_unscored = 0
+    excess_turns_unscored_details: list[str] = []
     excess_turn_details: list[dict[str, object]] = []
     detour_ratios: list[float] = []
     shapes_by_plane_target = {
@@ -559,7 +682,13 @@ def collect_metrics(path: Path) -> dict[str, object]:
         )
     for edge in edges:
         points = edge["points"]  # type: ignore[assignment]
-        total_bends += max(0, len(points) - 2)
+        real_bends, collinear_points = count_real_bends(points)  # type: ignore[arg-type]
+        total_bends += real_bends
+        for point in collinear_points:
+            collinear_waypoints += 1
+            collinear_waypoint_details.append(
+                {"edge": str(edge["bpmnElement"]), "point": [round(point[0], 2), round(point[1], 2)]}
+            )
         source_id, target_id = flow_endpoints.get(edge["bpmnElement"], (None, None))  # type: ignore[arg-type]
         source = shapes_by_plane_target.get((edge["plane"], source_id))
         target = shapes_by_plane_target.get((edge["plane"], target_id))
@@ -659,12 +788,20 @@ def collect_metrics(path: Path) -> dict[str, object]:
             source_side = attach_side(points[0], source_bounds)
             target_side = attach_side(points[-1], target_bounds)
             if source_side and target_side:
-                actual_bends = max(0, len(points) - 2)
                 baseline_bends = min_bend_count(points[0], source_side, points[-1], target_side)
-                excess = max(0, actual_bends - baseline_bends)
+                excess = max(0, real_bends - baseline_bends)
                 if excess > 0:
                     excess_turns_total += excess
                     excess_turn_details.append({"edge": str(edge["bpmnElement"]), "excess_turns": excess})
+            else:
+                # attach_side found neither endpoint sitting on its node's
+                # boundary -- no baseline could be computed for this edge, so
+                # it contributes neither to excess_turns_total nor silently
+                # to a false 0 (#56 item 3: a metric that cannot be computed
+                # for an edge must be visibly excluded, not folded into the
+                # count as if it scored perfectly).
+                excess_turns_unscored += 1
+                excess_turns_unscored_details.append(str(edge["bpmnElement"]))
             port_distance = abs(points[0][0] - points[-1][0]) + abs(points[0][1] - points[-1][1])
             if port_distance > 0.5:
                 detour_ratios.append(edge_manhattan / port_distance)
@@ -738,6 +875,7 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "edges": len(edges),
             "labels": len(labels),
             "canvas": canvas,
+            "canvas_area": round(canvas["width"] * canvas["height"], 2),
             "shape_overlaps": shape_overlaps,
             "shape_overlap_area": round(shape_overlap_area, 2),
             "node_containment_violations": node_containment_violations,
@@ -764,8 +902,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
             "non_orthogonal_segments": non_orthogonal_segments,
             "degenerate_waypoints": degenerate_waypoints,
             "degenerate_waypoint_details": degenerate_waypoint_details,
+            "collinear_waypoints": collinear_waypoints,
+            "collinear_waypoint_details": collinear_waypoint_details,
             "excess_turns": excess_turns_total,
             "excess_turn_details": excess_turn_details,
+            "excess_turns_unscored": excess_turns_unscored,
+            "excess_turns_unscored_details": excess_turns_unscored_details,
             "detour_ratio": {
                 "count": len(detour_ratios),
                 "min": round(min(detour_ratios), 2) if detour_ratios else None,
@@ -782,6 +924,12 @@ def collect_metrics(path: Path) -> dict[str, object]:
                 "min": min(horizontal_flow_gaps) if horizontal_flow_gaps else None,
                 "max": max(horizontal_flow_gaps) if horizontal_flow_gaps else None,
                 "avg": round(sum(horizontal_flow_gaps) / len(horizontal_flow_gaps), 2) if horizontal_flow_gaps else None,
+                # How much horizontal spacing between tracks varies within one
+                # diagram (max - min); an aesthetic preference (#55), not a
+                # validity concern -- 0 means every gap is identical.
+                "consistency": round(max(horizontal_flow_gaps) - min(horizontal_flow_gaps), 2)
+                if horizontal_flow_gaps
+                else None,
             },
             "grid_center_x_deviation_avg": round(sum(grid_deviations) / len(grid_deviations), 2) if grid_deviations else 0,
             "grid_center_x_deviation_max": round(max(grid_deviations), 2) if grid_deviations else 0,
@@ -802,6 +950,22 @@ def run_command(command: list[str], purpose: str) -> None:
             f"stdout:\n{completed.stdout}\n"
             f"stderr:\n{completed.stderr}"
         )
+
+
+def run_engine_command(command: list[str], purpose: str) -> str | None:
+    """Like run_command, but returns an error description instead of raising
+    when the command is missing or fails. An N-way engine comparison must
+    degrade a misbehaving or absent third-party engine to an empty column
+    for the fixtures it fails on, never abort the whole run for every other
+    engine and fixture (#53 item 4)."""
+    executable = shutil.which(command[0]) if command else None
+    if not executable:
+        return f"command not found on PATH: {command[0] if command else '<empty>'}"
+    completed = subprocess.run(command, text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=False)
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "").strip()
+        return f"{purpose} failed with exit code {completed.returncode}" + (f": {detail}" if detail else "")
+    return None
 
 
 def run_command_if_available(command: list[str], purpose: str) -> bool:
@@ -827,12 +991,51 @@ def repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
+def resolve_commit_sha() -> str:
+    """Best-effort git commit SHA for the checkout this report was rendered
+    from. A published comparison must show the measurement date and commit
+    so a reader can check whether a favourable trend coincided with a
+    metric edit (#58) -- "unknown" (never a stale or fabricated value) when
+    git is unavailable or this isn't a checkout at all."""
+    completed = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=repo_root(),
+        text=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        check=False,
+    )
+    if completed.returncode == 0:
+        return completed.stdout.strip()
+    return "unknown"
+
+
 def resolve_dist_index() -> Path | None:
     """The built layout engine, importable directly by `node` -- no CLI, no
     nix. Exists once `npm run build` has run inside packages/bpmn-auto-layout;
     None when the package has not been built here."""
     candidate = repo_root() / "packages" / "bpmn-auto-layout" / "dist" / "index.js"
     return candidate if candidate.is_file() else None
+
+
+def write_layout_via_node_script(dist_index: Path) -> Path:
+    """Write (to a fresh temp file the caller must clean up) a small ESM
+    script that imports layoutProcess from the built package directly and
+    transforms every file named on argv in place. Shared by layout_via_node
+    (batches every target in one process) and the report command's "ours"
+    fallback (invoked once per file, same calling convention as an external
+    --layout-command)."""
+    script = (
+        'import { readFile, writeFile } from "node:fs/promises";\n'
+        f"import {{ layoutProcess }} from {json.dumps(dist_index.resolve().as_posix())};\n"
+        "for (const file of process.argv.slice(2)) {\n"
+        '  const xml = await readFile(file, "utf8");\n'
+        "  await writeFile(file, await layoutProcess(xml));\n"
+        "}\n"
+    )
+    with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False, encoding="utf8") as handle:
+        handle.write(script)
+        return Path(handle.name)
 
 
 def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
@@ -844,17 +1047,7 @@ def layout_via_node(dist_index: Path, targets: list[Path]) -> None:
     node = shutil.which("node")
     if not node:
         raise SystemExit("node not found on PATH; cannot run the layout engine directly")
-    script = (
-        'import { readFile, writeFile } from "node:fs/promises";\n'
-        f"import {{ layoutProcess }} from {json.dumps(dist_index.resolve().as_posix())};\n"
-        "for (const file of process.argv.slice(2)) {\n"
-        '  const xml = await readFile(file, "utf8");\n'
-        "  await writeFile(file, await layoutProcess(xml));\n"
-        "}\n"
-    )
-    with tempfile.NamedTemporaryFile("w", suffix=".mjs", delete=False, encoding="utf8") as handle:
-        handle.write(script)
-        script_path = Path(handle.name)
+    script_path = write_layout_via_node_script(dist_index)
     try:
         completed = subprocess.run(
             [node, str(script_path), *[str(target) for target in targets]],
@@ -903,6 +1096,98 @@ def layout_fixtures(targets: list[Path], layout_command: list[str], structure_on
     )
 
 
+def parse_engine_specs(specs: list[str], default_layout_command: str) -> dict[str, list[str]]:
+    """Turn repeated --engine NAME=COMMAND options into an ordered
+    name -> command mapping, with our own engine ("ours") always present
+    and first -- from --layout-command by default, or overridden by an
+    explicit --engine ours=... spec -- so zero --engine flags keeps
+    today's behaviour (source vs our own output) and any additional
+    --engine entries are baselines layered on top (#53)."""
+    engines: dict[str, list[str]] = {"ours": split_command(default_layout_command)}
+    for spec in specs:
+        name, sep, command = spec.partition("=")
+        name = name.strip()
+        if not sep or not name:
+            raise SystemExit(f"--engine expects NAME=COMMAND, got: {spec!r}")
+        engines[name] = split_command(command)
+    return engines
+
+
+def resolve_engine_command(name: str, command: list[str]) -> list[str]:
+    """Resolve an engine's layout command for the report's own invocation
+    convention (`command + [file]`, in place). Falls back to running the
+    locally built package directly through node when this is our own engine
+    and its configured command isn't on PATH -- the same fallback
+    selftest/regression rely on (#43), extended here so N-way comparisons
+    also work without nix or a globally installed CLI."""
+    if name == "ours" and not (command and shutil.which(command[0])):
+        dist_index = resolve_dist_index()
+        if dist_index:
+            node = shutil.which("node")
+            if node:
+                return [node, str(write_layout_via_node_script(dist_index))]
+    return command
+
+
+def ours_version() -> str:
+    """The version to record for our own engine, regardless of how it was
+    actually invoked (CLI on PATH or the node/dist fallback) -- the package
+    manifest is the one source of truth for what "ours" means (#53, #54)."""
+    package_json = repo_root() / "packages" / "bpmn-auto-layout" / "package.json"
+    try:
+        return json.loads(package_json.read_text(encoding="utf8"))["version"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return "unknown"
+
+
+def installed_npm_package_version(node_modules_root: Path, package: str) -> str | None:
+    """Read the resolved version of `package` from a node_modules tree that
+    has already been `npm install`-ed, e.g. tools/upstream-baseline's pinned
+    bpmn-auto-layout@1.3.0 (#54) -- the manifest under node_modules is what
+    was actually installed, which is what a reproducible comparison must
+    record, not just what package.json asked for."""
+    package_json = node_modules_root / "node_modules" / package / "package.json"
+    try:
+        return json.loads(package_json.read_text(encoding="utf8"))["version"]
+    except (OSError, KeyError, json.JSONDecodeError):
+        return None
+
+
+def engine_version(name: str, command: list[str]) -> str:
+    """Best-effort resolved version for an engine, so a published comparison
+    records what was actually measured (#53, #54). A moving, unpinned
+    command (a bare package name with no @version) resolves to "unknown"
+    rather than a guess -- an unreproducible comparison should look
+    unreproducible, not silently pass as pinned."""
+    if name == "ours":
+        return ours_version()
+    for part in command:
+        match = re.search(r"@(\d[\w.\-]*)$", part)
+        if match:
+            return match.group(1)
+    # A wrapper script invoked by path (tools/upstream-baseline/run.mjs, the
+    # pinned bpmn-io/bpmn-auto-layout baseline) carries no @version in the
+    # command itself -- resolve it from what was actually npm-installed
+    # alongside the script instead.
+    for part in command:
+        script = Path(part)
+        if script.suffix == ".mjs" and script.is_file():
+            version = installed_npm_package_version(script.parent, "bpmn-auto-layout")
+            if version:
+                return version
+    return "unknown"
+
+
+def source_has_di(source: Path) -> bool:
+    """Whether `source` already carries diagram interchange -- used to skip
+    the "original" comparison column for a source that has none, per #53's
+    "the source diagram stays column 0 when it has DI"."""
+    try:
+        return "BPMNPlane" in source.read_text(encoding="utf8", errors="ignore")
+    except OSError:
+        return False
+
+
 def clear_reports(output_dir: str) -> None:
     root = Path(output_dir)
     if not root.exists():
@@ -913,6 +1198,10 @@ def clear_reports(output_dir: str) -> None:
 
 
 def render_report(args: argparse.Namespace) -> Path:
+    """Render an N-way comparison: the source diagram (when it carries DI)
+    alongside every configured engine's output, scored identically (#53).
+    Zero --engine flags keeps today's behaviour of one column, our own
+    engine, named "ours"."""
     report_root = Path(args.output_dir)
     report_root.mkdir(parents=True, exist_ok=True)
     if args.clear_output:
@@ -921,123 +1210,274 @@ def render_report(args: argparse.Namespace) -> Path:
     inputs = [Path(path) for path in args.inputs]
     if not inputs:
         inputs = [Path("fixtures") / filename for filename in sorted(persisted_fixtures())]
-    layout_command = split_command(args.layout_command)
     image_command = split_command(args.image_command)
 
-    entries: list[dict[str, object]] = []
-    for index, source in enumerate(inputs, start=1):
-        if not source.exists():
-            raise SystemExit(f"input BPMN does not exist: {source}")
-        part_dir = workdir / f"part-{index:02d}-{source.stem}"
-        part_dir.mkdir()
-        original_bpmn = part_dir / "original.bpmn"
-        transformed_bpmn = part_dir / "transformed.bpmn"
-        shutil.copyfile(source, original_bpmn)
-        shutil.copyfile(source, transformed_bpmn)
-        run_command(layout_command + [str(transformed_bpmn)], f"layout {source}")
-        original_svg = part_dir / "original.svg"
-        transformed_svg = part_dir / "transformed.svg"
-        run_command(image_command + [str(original_bpmn), str(original_svg)], f"render original {source}")
-        run_command(image_command + [str(transformed_bpmn), str(transformed_svg)], f"render transformed {source}")
-        original_metrics = collect_metrics(original_bpmn)
-        transformed_metrics = collect_metrics(transformed_bpmn)
-        entries.append(
-            {
+    raw_engine_commands = parse_engine_specs(getattr(args, "engines", []) or [], args.layout_command)
+    engine_versions = {name: engine_version(name, command) for name, command in raw_engine_commands.items()}
+    resolved_commands = {name: resolve_engine_command(name, command) for name, command in raw_engine_commands.items()}
+    cleanup_paths = [
+        Path(command[1])
+        for name, command in resolved_commands.items()
+        if command != raw_engine_commands[name] and len(command) > 1
+    ]
+
+    try:
+        entries: list[dict[str, object]] = []
+        for index, source in enumerate(inputs, start=1):
+            if not source.exists():
+                raise SystemExit(f"input BPMN does not exist: {source}")
+            part_dir = workdir / f"part-{index:02d}-{source.stem}"
+            part_dir.mkdir()
+
+            entry: dict[str, object] = {
                 "title": source.name,
                 "source": str(source),
                 "directory": part_dir.name,
-                "original_bpmn": str(original_bpmn.relative_to(workdir)),
-                "transformed_bpmn": str(transformed_bpmn.relative_to(workdir)),
-                "original_svg": str(original_svg.relative_to(workdir)),
-                "transformed_svg": str(transformed_svg.relative_to(workdir)),
-                "original_metrics": original_metrics,
-                "transformed_metrics": transformed_metrics,
+                "original": None,
+                "engines": {},
             }
-        )
 
-    metrics_doc = {"schema": "bpmn-layout-report/v1", "entries": entries}
-    (workdir / "metrics.json").write_text(json.dumps(metrics_doc, indent=2, sort_keys=True) + "\n", encoding="utf8")
-    (workdir / "index.html").write_text(report_html(metrics_doc), encoding="utf8")
-    return workdir / "index.html"
+            if source_has_di(source):
+                original_bpmn = part_dir / "original.bpmn"
+                shutil.copyfile(source, original_bpmn)
+                original_svg = part_dir / "original.svg"
+                run_command(image_command + [str(original_bpmn), str(original_svg)], f"render original {source}")
+                entry["original"] = {
+                    "bpmn": str(original_bpmn.relative_to(workdir)),
+                    "svg": str(original_svg.relative_to(workdir)),
+                    "metrics": collect_metrics(original_bpmn),
+                    "error": None,
+                }
+
+            for name, command in resolved_commands.items():
+                engine_bpmn = part_dir / f"{name}.bpmn"
+                shutil.copyfile(source, engine_bpmn)
+                column: dict[str, object] = {"bpmn": None, "svg": None, "metrics": None, "error": None}
+                error = run_engine_command(command + [str(engine_bpmn)], f"layout ({name}) {source}")
+                if error is None:
+                    engine_svg = part_dir / f"{name}.svg"
+                    error = run_engine_command(
+                        image_command + [str(engine_bpmn), str(engine_svg)], f"render ({name}) {source}"
+                    )
+                    if error is None:
+                        column["bpmn"] = str(engine_bpmn.relative_to(workdir))
+                        column["svg"] = str(engine_svg.relative_to(workdir))
+                        column["metrics"] = collect_metrics(engine_bpmn)
+                column["error"] = error
+                entry["engines"][name] = column  # type: ignore[index]
+
+            entries.append(entry)
+
+        metrics_doc = {
+            "schema": "bpmn-layout-report/v2",
+            "commit": resolve_commit_sha(),
+            "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "engines": [
+                {"name": name, "command": shlex.join(raw_engine_commands[name]), "version": engine_versions[name]}
+                for name in raw_engine_commands
+            ],
+            "entries": entries,
+        }
+        (workdir / "metrics.json").write_text(json.dumps(metrics_doc, indent=2, sort_keys=True) + "\n", encoding="utf8")
+        (workdir / "index.html").write_text(report_html(metrics_doc), encoding="utf8")
+        return workdir / "index.html"
+    finally:
+        for path in cleanup_paths:
+            path.unlink(missing_ok=True)
 
 
-def metric_rows(original: dict[str, object], transformed: dict[str, object]) -> str:
-    paths = [
-        ("diagrams", ("layout", "diagrams")),
-        ("shapes", ("layout", "shapes")),
-        ("edges", ("layout", "edges")),
-        ("labels", ("layout", "labels")),
-        ("shape overlaps", ("layout", "shape_overlaps")),
-        ("label overlaps", ("layout", "label_overlaps")),
-        ("edge crossings", ("layout", "edge_crossings")),
-        ("edge/shape intersections", ("layout", "edge_shape_intersections")),
-        ("node containment violations", ("layout", "node_containment_violations")),
-        ("label containment violations", ("layout", "label_containment_violations")),
-        ("total bends", ("layout", "total_bends")),
-        ("degenerate waypoints", ("layout", "degenerate_waypoints")),
-        ("excess turns", ("layout", "excess_turns")),
-        ("detour ratio average", ("layout", "detour_ratio", "avg")),
-        ("detour ratio maximum", ("layout", "detour_ratio", "max")),
-        ("total Manhattan length", ("layout", "total_manhattan_length")),
-        ("non-50px route segments", ("layout", "route_lattice", "non_multiple_segments")),
-        ("maximum route lattice remainder", ("layout", "route_lattice", "max_remainder")),
-        ("grid center-x avg deviation", ("layout", "grid_center_x_deviation_avg")),
-        ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
-        ("gateway label gap average", ("layout", "node_label_gap", "gateway", "avg")),
-        ("event label gap minimum", ("layout", "node_label_gap", "event", "min")),
-        ("gateway label gap minimum", ("layout", "node_label_gap", "gateway", "min")),
-        ("horizontal flow gap average", ("layout", "horizontal_flow_gap", "avg")),
-        ("horizontal flow gap minimum", ("layout", "horizontal_flow_gap", "min")),
-        ("horizontal flow gap maximum", ("layout", "horizontal_flow_gap", "max")),
-        ("missing named labels", ("layout", "named_label_coverage", "missing")),
-        ("sequence flows", ("semantic", "sequence_flows")),
-        ("message flows", ("semantic", "message_flows")),
-        ("lanes", ("semantic", "lanes")),
-        ("data references", ("semantic", "data_references")),
-    ]
+# #55: a public comparison that scores another engine on metrics derived
+# from our own failure modes is not credible unless it is honest about what
+# it is doing. Two tables, never one blended score:
+#
+# VALIDITY is spec-grounded and fair to any engine -- geometry any BPMN
+# renderer should get right, no house style involved.
+VALIDITY_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("shape overlaps", ("layout", "shape_overlaps")),
+    ("edge/shape intersections", ("layout", "edge_shape_intersections")),
+    ("edge/container intersections", ("layout", "edge_container_intersections")),
+    ("edge crossings", ("layout", "edge_crossings")),
+    ("non-orthogonal segments", ("layout", "non_orthogonal_segments")),
+    ("invalid edge attachments", ("layout", "invalid_edge_attachments")),
+    ("degenerate waypoints", ("layout", "degenerate_waypoints")),
+    ("node containment violations", ("layout", "node_containment_violations")),
+    ("label containment violations", ("layout", "label_containment_violations")),
+    ("missing named labels", ("layout", "named_label_coverage", "missing")),
+]
 
-    def get(doc: dict[str, object], path: tuple[str, ...]) -> object:
-        current: object = doc
-        for key in path:
-            current = current[key]  # type: ignore[index]
-        return current
+# AESTHETICS is our own §8 routing-priority preferences, explicitly labelled
+# as such -- an engine that makes different trade-offs (e.g. more bends to
+# avoid ever cutting through a shape) is not thereby wrong.
+AESTHETIC_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("total bends", ("layout", "total_bends")),
+    ("excess turns", ("layout", "excess_turns")),
+    ("total Manhattan length", ("layout", "total_manhattan_length")),
+    ("horizontal flow gap consistency (max-min)", ("layout", "horizontal_flow_gap", "consistency")),
+    ("canvas area", ("layout", "canvas_area")),
+]
 
+# Descriptive counts: not a judgment either way, just context for the tables
+# above. Implementation-specific conventions (route_lattice, grid deviation,
+# detour ratio, node/label gap) are deliberately excluded from both headline
+# tables -- they describe our own 50px-grid routing convention, which a
+# different engine has no reason to share, so scoring another engine against
+# them would not be a comparison, just a restatement of "it isn't us" (#55).
+OTHER_METRIC_PATHS: list[tuple[str, tuple[str, ...]]] = [
+    ("diagrams", ("layout", "diagrams")),
+    ("shapes", ("layout", "shapes")),
+    ("edges", ("layout", "edges")),
+    ("labels", ("layout", "labels")),
+    ("label overlaps", ("layout", "label_overlaps")),
+    ("label/shape intersections", ("layout", "label_shape_intersections")),
+    ("label/edge intersections", ("layout", "label_edge_intersections")),
+    ("detour ratio average", ("layout", "detour_ratio", "avg")),
+    ("detour ratio maximum", ("layout", "detour_ratio", "max")),
+    ("collinear pass-through waypoints", ("layout", "collinear_waypoints")),
+    ("non-50px route segments (our grid convention)", ("layout", "route_lattice", "non_multiple_segments")),
+    ("grid center-x avg deviation (our grid convention)", ("layout", "grid_center_x_deviation_avg")),
+    ("event label gap average", ("layout", "node_label_gap", "event", "avg")),
+    ("gateway label gap average", ("layout", "node_label_gap", "gateway", "avg")),
+    ("horizontal flow gap average", ("layout", "horizontal_flow_gap", "avg")),
+    ("sequence flows", ("semantic", "sequence_flows")),
+    ("message flows", ("semantic", "message_flows")),
+    ("lanes", ("semantic", "lanes")),
+    ("data references", ("semantic", "data_references")),
+]
+
+# Every label-collision metric reads as a vacuous 0 for an engine that emits
+# no BPMNLabel elements at all -- you cannot overlap a label you did not
+# draw. Rendered as n/a instead of 0 wherever one of these paths appears, in
+# any table (#55's central honesty fix: suppressing vacuous zeros).
+LABEL_DEPENDENT_METRIC_PATHS: set[tuple[str, ...]] = {
+    ("layout", "label_overlaps"),
+    ("layout", "label_shape_intersections"),
+    ("layout", "label_edge_intersections"),
+    ("layout", "label_containment_violations"),
+}
+
+
+def get_metric(doc: dict[str, object] | None, path: tuple[str, ...]) -> object:
+    """Look up a dotted metric path in a metrics document, returning None
+    (rather than raising) when the document is absent (an engine that
+    errored) or does not have that path -- a column that could not be
+    scored must read as missing, never crash the whole report (#53)."""
+    current: object = doc
+    for key in path:
+        if not isinstance(current, dict) or key not in current:
+            return None
+        current = current[key]
+    return current
+
+
+EXCESS_TURNS_PATH: tuple[str, ...] = ("layout", "excess_turns")
+
+
+def format_metric_cell(path: tuple[str, ...], metrics: dict[str, object] | None, error: str | None) -> str:
+    if error is not None:
+        return "error"
+    if path in LABEL_DEPENDENT_METRIC_PATHS and not get_metric(metrics, ("layout", "labels")):
+        return "n/a (emits no labels)"
+    value = get_metric(metrics, path)
+    if value is None:
+        return "n/a"
+    if path == EXCESS_TURNS_PATH:
+        # #56: an edge whose attach sides don't resolve to a boundary side
+        # (attach_side returns None) cannot get a baseline bend count, so it
+        # is excluded from `value` rather than silently read as 0 excess.
+        # Surface that exclusion instead of letting a clean-looking total
+        # imply full coverage.
+        unscored = get_metric(metrics, ("layout", "excess_turns_unscored")) or 0
+        if unscored:
+            return f"{value} (+{unscored} unscored)"
+    return str(value)
+
+
+ReportColumn = tuple[str, dict[str, object] | None, str | None]
+
+
+def metric_rows(paths: list[tuple[str, tuple[str, ...]]], columns: list[ReportColumn]) -> str:
+    """Render one row per metric in `paths` across N named (name, metrics,
+    error) columns -- generalized from the original fixed (original,
+    transformed) pair so a report can compare any number of engines (#53),
+    and reused across the validity/aesthetics/other tables (#55)."""
     rows = []
     for label, path in paths:
-        before = get(original, path)
-        after = get(transformed, path)
-        rows.append(f"<tr><th>{html.escape(label)}</th><td>{html.escape(str(before))}</td><td>{html.escape(str(after))}</td></tr>")
+        cells = "".join(
+            f"<td>{html.escape(format_metric_cell(path, metrics, error))}</td>" for _name, metrics, error in columns
+        )
+        rows.append(f"<tr><th>{html.escape(label)}</th>{cells}</tr>")
     return "\n".join(rows)
 
 
 def report_html(metrics_doc: dict[str, object]) -> str:
     entries = metrics_doc["entries"]  # type: ignore[index]
+    engines = metrics_doc.get("engines", [])  # type: ignore[union-attr]
+    engine_names = [engine["name"] for engine in engines]  # type: ignore[index]
+    commit = html.escape(str(metrics_doc.get("commit", "unknown")))
+    generated_at = html.escape(str(metrics_doc.get("generated_at", "unknown")))
     sections: list[str] = []
     for entry in entries:  # type: ignore[assignment]
         title = html.escape(entry["title"])
-        original_svg = html.escape(entry["original_svg"])
-        transformed_svg = html.escape(entry["transformed_svg"])
-        original_metrics = entry["original_metrics"]
-        transformed_metrics = entry["transformed_metrics"]
+        columns: list[ReportColumn] = []
+        figures: list[str] = []
+        original = entry.get("original")
+        if original:
+            columns.append(("original", original["metrics"], original["error"]))
+            figures.append(
+                f'<figure><figcaption>original</figcaption>'
+                f'<img src="{html.escape(original["svg"])}" alt="original BPMN image for {title}"></figure>'
+            )
+        for name in engine_names:
+            column = entry["engines"][name]  # type: ignore[index]
+            columns.append((name, column["metrics"], column["error"]))
+            if column["svg"]:
+                figures.append(
+                    f'<figure><figcaption>{html.escape(name)}</figcaption>'
+                    f'<img src="{html.escape(column["svg"])}" alt="{html.escape(name)} BPMN image for {title}"></figure>'
+                )
+            else:
+                figures.append(
+                    f'<figure><figcaption>{html.escape(name)}</figcaption>'
+                    f'<p class="engine-error">{html.escape(column["error"] or "no output")}</p></figure>'
+                )
+        header_cells = "".join(f"<th>{html.escape(name)}</th>" for name, _metrics, _error in columns)
+        details = "".join(
+            f"<details><summary>{html.escape(name)} metrics JSON</summary>"
+            f"<pre>{html.escape(json.dumps(metrics, indent=2, sort_keys=True) if metrics is not None else (error or 'n/a'))}</pre></details>"
+            for name, metrics, error in columns
+        )
         sections.append(
             f"""
 <section class="part">
   <h2>{title}</h2>
   <p><strong>Source:</strong> {html.escape(entry['source'])}</p>
   <h3>Images</h3>
-  <div class="images">
-    <figure><figcaption>Original</figcaption><img src="{original_svg}" alt="Original BPMN image for {title}"></figure>
-    <figure><figcaption>Transformed</figcaption><img src="{transformed_svg}" alt="Transformed BPMN image for {title}"></figure>
+  <div class="images" style="grid-template-columns: repeat({max(len(figures), 1)}, minmax(0, 1fr));">
+    {''.join(figures)}
   </div>
-  <h3>Deterministic metrics</h3>
-  <table><thead><tr><th>Metric</th><th>Original</th><th>Transformed</th></tr></thead><tbody>
-    {metric_rows(original_metrics, transformed_metrics)}
+  <h3>Validity <span class="table-note">(spec-grounded, fair to any engine)</span></h3>
+  <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+    {metric_rows(VALIDITY_METRIC_PATHS, columns)}
   </tbody></table>
-  <details><summary>Original metrics JSON</summary><pre>{html.escape(json.dumps(original_metrics, indent=2, sort_keys=True))}</pre></details>
-  <details><summary>Transformed metrics JSON</summary><pre>{html.escape(json.dumps(transformed_metrics, indent=2, sort_keys=True))}</pre></details>
+  <h3>Aesthetics <span class="table-note">(our own §8 routing priorities -- see bias note above)</span></h3>
+  <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+    {metric_rows(AESTHETIC_METRIC_PATHS, columns)}
+  </tbody></table>
+  <details>
+    <summary>Other metrics (descriptive counts and our own grid-convention internals, excluded from comparison)</summary>
+    <table><thead><tr><th>Metric</th>{header_cells}</tr></thead><tbody>
+      {metric_rows(OTHER_METRIC_PATHS, columns)}
+    </tbody></table>
+  </details>
+  {details}
 </section>
 """
         )
+    engine_meta = "".join(
+        f"<li><strong>{html.escape(engine['name'])}</strong>: "  # type: ignore[index]
+        f"<code>{html.escape(engine['command'])}</code> (version {html.escape(engine['version'])})</li>"  # type: ignore[index]
+        for engine in engines
+    )
     return f"""<!doctype html>
 <html lang="en">
 <head>
@@ -1046,10 +1486,13 @@ def report_html(metrics_doc: dict[str, object]) -> str:
 <style>
 body {{ font-family: sans-serif; margin: 2rem; color: #1f2328; }}
 .part {{ border-top: 1px solid #d0d7de; padding-top: 1.5rem; margin-top: 1.5rem; }}
-.images {{ display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }}
+.bias-note {{ background: #fff8c5; border: 1px solid #d4a72c; padding: 1rem; margin: 1rem 0; }}
+.table-note {{ font-weight: normal; color: #57606a; font-size: 0.85em; }}
+.images {{ display: grid; gap: 1rem; }}
 figure {{ margin: 0; border: 1px solid #d0d7de; padding: .75rem; overflow: auto; }}
 figcaption {{ font-weight: 600; margin-bottom: .5rem; }}
 img {{ max-width: 100%; background: white; }}
+.engine-error {{ color: #a40e26; font-family: monospace; white-space: pre-wrap; }}
 table {{ border-collapse: collapse; margin: 1rem 0; }}
 th, td {{ border: 1px solid #d0d7de; padding: .35rem .5rem; text-align: right; }}
 th:first-child {{ text-align: left; }}
@@ -1059,6 +1502,24 @@ pre {{ overflow: auto; background: #f6f8fa; padding: 1rem; }}
 <body>
 <h1>BPMN layout feedback report</h1>
 <p>This report is ephemeral and workspace-local. Metrics are also available in <a href="metrics.json">metrics.json</a>.</p>
+<div class="bias-note">
+  <strong>On comparing engines with these metrics:</strong> every metric here was developed
+  against this engine's own failure modes, so a raw score is not a fair engine-vs-engine ranking
+  on its own (#55). Each diagram below is scored in two separate tables instead of one number:
+  <strong>Validity</strong> is spec-grounded and should hold for any correct BPMN renderer;
+  <strong>Aesthetics</strong> encodes this project's own routing-priority preferences (§8) and is
+  labelled as such -- an engine that trades more bends for never cutting through a shape is not
+  thereby wrong. A metric an engine cannot meaningfully score (e.g. every label-collision metric,
+  for an engine that emits no label DI at all) reads as <code>n/a</code>, never a vacuous
+  <code>0</code>. Metrics describing only this engine's own 50px-grid routing convention are
+  excluded from both tables as not comparable. No combined score or ranking is computed anywhere
+  in this report.
+</div>
+<h2>Engines</h2>
+<p>Measured at commit <code>{commit}</code>, generated {generated_at}. A reader who wants to check whether
+a favourable trend coincided with a metric edit (rather than a layout edit) should diff this report's
+commit against <code>tools/bpmn_feedback.py</code>'s history (#58).</p>
+<ul>{engine_meta}</ul>
 {''.join(sections)}
 </body>
 </html>
@@ -1244,6 +1705,25 @@ def selftest(layout_command: list[str] | None = None, structure_only: bool = Fal
     collaboration_xml = first["collaboration-lanes-messages.bpmn"]
     if "Participant_Customer" not in collaboration_xml or "Participant_Supplier" not in collaboration_xml:
         raise SystemExit("collaboration fixture lost original pool participants")
+
+    # Referential integrity (#57): no dangling refs, no duplicate ids, no
+    # <incoming>/<outgoing> mismatch, across every fixture family --
+    # persisted, regression, and the generated corpus when it exists. Pure
+    # XML parsing, no layout engine, so it always runs regardless of
+    # --structure-only.
+    integrity_problems: list[str] = []
+    for family, fixtures in (
+        ("", first),
+        ("regression/", regression_fixtures()),
+        ("generated/", generated_fixtures()),
+    ):
+        for filename, xml in fixtures.items():
+            integrity_problems.extend(
+                f"{family}{filename}: {problem}" for problem in referential_integrity_problems(ET.fromstring(xml))
+            )
+    if integrity_problems:
+        raise SystemExit("referential integrity problems:\n" + "\n".join(f"  {p}" for p in integrity_problems))
+
     if engine_ran:
         print(
             f"selftest OK: {len(first)} persisted fixtures cover {len(required)} required element types "
@@ -1266,6 +1746,18 @@ def regression_fixtures() -> dict[str, str]:
     if not fixtures:
         raise SystemExit(f"no regression fixtures found under {fixture_dir}")
     return {fixture.name: fixture.read_text(encoding="utf8") for fixture in fixtures}
+
+
+def generated_fixtures() -> dict[str, str]:
+    """The parametric benchmark corpus under fixtures/generated/ (#57) --
+    unlike regression_fixtures, an empty or absent directory is not an
+    error: the corpus is optional until tools/corpus-generator has been run
+    at least once, and selftest must still pass on a checkout that predates
+    it."""
+    fixture_dir = Path("fixtures") / "generated"
+    if not fixture_dir.is_dir():
+        return {}
+    return {fixture.name: fixture.read_text(encoding="utf8") for fixture in sorted(fixture_dir.glob("*.bpmn"))}
 
 
 def shape_bounds_by_element(root: ET.Element) -> dict[str, dict[str, float]]:
@@ -1418,13 +1910,290 @@ def check_gateway_loop_bypasses_sibling_without_degenerate_waypoints(root: ET.El
     return check_gateway_bypass_avoids_sibling(root) + check_no_degenerate_waypoints(root)
 
 
+def check_gateway_straight_continuation_is_direct(root: ET.Element) -> list[str]:
+    """Pins #59: a gateway's outgoing flow to a same-track target with a
+    clear corridor between them must stay a direct 2-point route, whatever
+    the gateway's *other* branches do. The "Reassert only gateway channel
+    routes" pass used to overwrite this flow unconditionally whenever the
+    gateway had any other branch to a different track, forcing a 4+ point
+    channel detour around nothing -- the mere existence of an unrelated
+    branch should never affect a route that doesn't touch it."""
+    flow_id = "Flow_Continue_Next"
+    for plane in root.iter(q("bpmndi", "BPMNPlane")):
+        for edge in plane.findall(q("bpmndi", "BPMNEdge")):
+            if edge.get("bpmnElement") != flow_id:
+                continue
+            points = [
+                (float(point.get("x", "0")), float(point.get("y", "0")))
+                for point in edge.findall(q("di", "waypoint"))
+            ]
+            if len(points) != 2:
+                return [f"{flow_id} expected a direct 2-point route, got {len(points)} points: {points}"]
+            (x0, y0), (x1, y1) = points
+            if abs(y0 - y1) > 0.5:
+                return [f"{flow_id} expected a horizontal straight route, got {points}"]
+            return []
+    return [f"{flow_id} has no BPMNEdge in the laid-out diagram"]
+
+
 REGRESSION_CHECKS: dict[str, Callable[[ET.Element], list[str]]] = {
     "boundary-events-three-on-one-host.bpmn": check_boundary_events_distinct,
     "lanes-without-collaboration.bpmn": check_lane_bands_tile,
     "subprocess-internal-branch.bpmn": check_subprocess_internal_edges_stay_inside,
     "gateway-same-track-bypass.bpmn": check_gateway_bypass_avoids_sibling,
     "gateway-bidirectional-bypass.bpmn": check_gateway_loop_bypasses_sibling_without_degenerate_waypoints,
+    "gateway-straight-continuation.bpmn": check_gateway_straight_continuation_is_direct,
 }
+
+
+def _metrics_for_xml(xml: str) -> dict[str, object]:
+    """Run collect_metrics against an in-memory BPMN+DI string via a scratch
+    temp file. Backing tool for metric_selftests: each check builds its own
+    minimal, hand-verified DI rather than depending on any layout engine's
+    output (#56 item 4) -- every metric was previously validated only by
+    agreeing with the engine it was written against, which is circular."""
+    with tempfile.NamedTemporaryFile("w", suffix=".bpmn", delete=False, encoding="utf8") as handle:
+        handle.write(xml)
+        temp_path = Path(handle.name)
+    try:
+        return collect_metrics(temp_path)
+    finally:
+        temp_path.unlink(missing_ok=True)
+
+
+_METRIC_TEST_XML_HEADER = (
+    '<?xml version="1.0" encoding="UTF-8"?>\n'
+    '<bpmn:definitions xmlns:bpmn="{bpmn}" xmlns:bpmndi="{bpmndi}" xmlns:dc="{dc}" xmlns:di="{di}" '
+    'id="Definitions_MetricTest" targetNamespace="https://example.com/metric-test">\n'
+).format(**NS)
+
+
+def _wrap_metric_test(process_body: str, diagram_body: str) -> str:
+    return (
+        f"{_METRIC_TEST_XML_HEADER}"
+        f'  <bpmn:process id="Process_MetricTest" isExecutable="false">\n{process_body}  </bpmn:process>\n'
+        '  <bpmndi:BPMNDiagram id="Diagram_MetricTest">\n'
+        '    <bpmndi:BPMNPlane id="Plane_MetricTest" bpmnElement="Process_MetricTest">\n'
+        f"{diagram_body}    </bpmndi:BPMNPlane>\n"
+        "  </bpmndi:BPMNDiagram>\n"
+        "</bpmn:definitions>\n"
+    )
+
+
+def metric_selftests() -> None:
+    """Pin each audited metric to a value a human verified against
+    hand-built DI, independent of any layout engine (#56 item 4)."""
+    failures: list[str] = []
+    checks = 0
+
+    def expect(name: str, actual: object, expected: object) -> None:
+        nonlocal checks
+        checks += 1
+        if actual != expected:
+            failures.append(f"{name}: expected {expected!r}, got {actual!r}")
+
+    # shape_overlaps: two tasks whose bounds overlap by a known amount.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="50" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("shape_overlaps (two overlapping tasks)", layout["shape_overlaps"], 1)
+
+    # edge_shape_intersections: a flow between A and C drawn straight through
+    # B's bounds, where B is not one of the flow's own endpoints.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n    <bpmn:task id="C" name="C" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="C" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="150" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="300" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="100" y="40" />\n        <di:waypoint x="400" y="40" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("edge_shape_intersections (flow drawn through an uninvolved task)", layout["edge_shape_intersections"], 1)
+
+    # edge_crossings: an unrelated horizontal and vertical flow crossing in
+    # the interior of both segments, far from any node -- not the "routes
+    # converge at a shared node" geometry #48 exempts.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:task id="C" name="C" />\n    <bpmn:task id="D" name="D" />\n'
+            '    <bpmn:sequenceFlow id="Horizontal" sourceRef="A" targetRef="B" />\n'
+            '    <bpmn:sequenceFlow id="Vertical" sourceRef="C" targetRef="D" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-50" y="30" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="130" y="30" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="C_di" bpmnElement="C"><dc:Bounds x="30" y="-50" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="D_di" bpmnElement="D"><dc:Bounds x="30" y="130" width="20" height="20" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="Horizontal_di" bpmnElement="Horizontal">\n'
+            '        <di:waypoint x="0" y="50" />\n        <di:waypoint x="120" y="50" />\n'
+            "      </bpmndi:BPMNEdge>\n"
+            '      <bpmndi:BPMNEdge id="Vertical_di" bpmnElement="Vertical">\n'
+            '        <di:waypoint x="40" y="0" />\n        <di:waypoint x="40" y="120" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("edge_crossings (two unrelated flows crossing mid-route)", layout["edge_crossings"], 1)
+
+    # total_bends / collinear_waypoints: a real bend at (100,0), then a
+    # collinear pass-through waypoint at (100,100) that does not turn --
+    # confirmed live in this engine's own output during the #56 audit.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="100" y="150" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="0" y="0" />\n        <di:waypoint x="100" y="0" />\n'
+            '        <di:waypoint x="100" y="100" />\n        <di:waypoint x="100" y="150" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("total_bends (one real bend, one collinear pass-through)", layout["total_bends"], 1)
+    expect("collinear_waypoints (pass-through point excluded from total_bends)", layout["collinear_waypoints"], 1)
+
+    # degenerate_waypoints: a duplicated consecutive point contributes to
+    # neither total_bends nor collinear_waypoints (#46, reconfirmed by #56).
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="-100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="100" y="-40" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="0" y="0" />\n        <di:waypoint x="50" y="0" />\n'
+            '        <di:waypoint x="50" y="0" />\n        <di:waypoint x="100" y="0" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("degenerate_waypoints (duplicated consecutive point)", layout["degenerate_waypoints"], 1)
+    expect("total_bends (duplicated point is not a bend)", layout["total_bends"], 0)
+    expect("collinear_waypoints (duplicated point is not collinear either)", layout["collinear_waypoints"], 0)
+
+    # excess_turns: two ports facing each other, aligned so a straight route
+    # is geometrically possible (baseline 0 bends), but the drawn route
+    # takes 4 unnecessary bends -- min_bend_count's baseline must still
+    # reflect 0 so every one of the 4 is reported as excess.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n'
+            '    <bpmn:sequenceFlow id="F" sourceRef="A" targetRef="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A"><dc:Bounds x="0" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B"><dc:Bounds x="300" y="0" width="100" height="80" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNEdge id="F_di" bpmnElement="F">\n'
+            '        <di:waypoint x="100" y="40" />\n        <di:waypoint x="150" y="40" />\n'
+            '        <di:waypoint x="150" y="80" />\n        <di:waypoint x="250" y="80" />\n'
+            '        <di:waypoint x="250" y="40" />\n        <di:waypoint x="300" y="40" />\n'
+            "      </bpmndi:BPMNEdge>\n",
+        )
+    )["layout"]
+    expect("excess_turns (4 unnecessary bends where a straight route fit)", layout["excess_turns"], 4)
+    expect("excess_turns_unscored (both attach sides resolve cleanly)", layout["excess_turns_unscored"], 0)
+
+    # label_overlaps: two overlapping label boxes on unrelated elements.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:task id="A" name="A" />\n    <bpmn:task id="B" name="B" />\n',
+            '      <bpmndi:BPMNShape id="A_di" bpmnElement="A">\n'
+            '        <dc:Bounds x="0" y="0" width="100" height="80" />\n'
+            '        <bpmndi:BPMNLabel><dc:Bounds x="200" y="0" width="80" height="20" /></bpmndi:BPMNLabel>\n'
+            "      </bpmndi:BPMNShape>\n"
+            '      <bpmndi:BPMNShape id="B_di" bpmnElement="B">\n'
+            '        <dc:Bounds x="300" y="100" width="100" height="80" />\n'
+            '        <bpmndi:BPMNLabel><dc:Bounds x="240" y="10" width="80" height="20" /></bpmndi:BPMNLabel>\n'
+            "      </bpmndi:BPMNShape>\n",
+        )
+    )["layout"]
+    expect("label_overlaps (two overlapping label boxes)", layout["label_overlaps"], 1)
+
+    # node_containment_violations: a subprocess child shape that overflows
+    # its parent's bounds.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:subProcess id="Sub" name="Sub">\n      <bpmn:task id="Inner" name="Inner" />\n    </bpmn:subProcess>\n',
+            '      <bpmndi:BPMNShape id="Sub_di" bpmnElement="Sub"><dc:Bounds x="0" y="0" width="200" height="200" /></bpmndi:BPMNShape>\n'
+            '      <bpmndi:BPMNShape id="Inner_di" bpmnElement="Inner"><dc:Bounds x="150" y="150" width="100" height="100" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("node_containment_violations (subprocess child overflows its bounds)", layout["node_containment_violations"], 1)
+
+    # named_label_coverage.missing: a named gateway with no BPMNLabel at all
+    # -- a real, countable finding, not vacuous, even for an engine that
+    # emits zero labels (#54, #55): every named element without label DI is
+    # missing, whatever the reason.
+    layout = _metrics_for_xml(
+        _wrap_metric_test(
+            '    <bpmn:exclusiveGateway id="G" name="Decide?" />\n',
+            '      <bpmndi:BPMNShape id="G_di" bpmnElement="G"><dc:Bounds x="0" y="0" width="50" height="50" /></bpmndi:BPMNShape>\n',
+        )
+    )["layout"]
+    expect("named_label_coverage.missing (named gateway with no label DI)", layout["named_label_coverage"]["missing"], 1)
+
+    # format_metric_cell: the report-level n/a treatment (#55) is itself
+    # pinned here, independent of any fixture -- a label-collision metric
+    # reads as n/a when the column emits no labels, but named_label_coverage
+    # is never treated this way, and a genuine error always wins.
+    no_labels = {"layout": {"labels": 0, "label_overlaps": 0, "named_label_coverage": {"missing": 3}}}
+    has_labels = {"layout": {"labels": 2, "label_overlaps": 1, "named_label_coverage": {"missing": 0}}}
+    expect(
+        "format_metric_cell (label_overlaps, no labels emitted)",
+        format_metric_cell(("layout", "label_overlaps"), no_labels, None),
+        "n/a (emits no labels)",
+    )
+    expect(
+        "format_metric_cell (label_overlaps, labels emitted)",
+        format_metric_cell(("layout", "label_overlaps"), has_labels, None),
+        "1",
+    )
+    expect(
+        "format_metric_cell (named_label_coverage.missing is never label-dependent n/a)",
+        format_metric_cell(("layout", "named_label_coverage", "missing"), no_labels, None),
+        "3",
+    )
+    expect(
+        "format_metric_cell (an engine error always wins over a value)",
+        format_metric_cell(("layout", "shape_overlaps"), has_labels, "boom"),
+        "error",
+    )
+
+    # referential_integrity_problems (#57): pins both directions -- a real
+    # dangling ref/incoming mismatch is caught, and a resolved sequenceFlow
+    # (a leaf element with no children) is never misreported as dangling.
+    # ET.Element's __bool__ is `len(children) > 0`, not "was this found" --
+    # `if not element:` on a found-but-childless element is a live trap this
+    # test exists to catch (found live in this codebase during #57: a real
+    # regression fixture's every flow was misreported as unresolved).
+    clean_root = ET.fromstring(
+        '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D">'
+        '<bpmn:process id="P"><bpmn:startEvent id="S"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>'
+        '<bpmn:task id="T"><bpmn:incoming>F1</bpmn:incoming></bpmn:task>'
+        '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="T" /></bpmn:process></bpmn:definitions>'
+    )
+    expect("referential_integrity_problems (a fully resolved diagram)", referential_integrity_problems(clean_root), [])
+    broken_root = ET.fromstring(
+        '<?xml version="1.0"?><bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="D">'
+        '<bpmn:process id="P"><bpmn:startEvent id="S"><bpmn:outgoing>F1</bpmn:outgoing></bpmn:startEvent>'
+        '<bpmn:task id="T"><bpmn:incoming>F_WRONG</bpmn:incoming></bpmn:task>'
+        '<bpmn:sequenceFlow id="F1" sourceRef="S" targetRef="MISSING" /></bpmn:process></bpmn:definitions>'
+    )
+    broken_problems = referential_integrity_problems(broken_root)
+    expect("referential_integrity_problems (dangling targetRef is caught)", any("targetRef" in p for p in broken_problems), True)
+    expect(
+        "referential_integrity_problems (unresolved <incoming> is caught)",
+        any("F_WRONG" in p for p in broken_problems),
+        True,
+    )
+
+    if failures:
+        raise SystemExit("metric selftests failed:\n" + "\n".join(f"  {failure}" for failure in failures))
+    print(f"metric selftests OK: {checks} checks passed against hand-built DI, independent of any layout engine")
 
 
 def regression(layout_command: list[str] | None = None, structure_only: bool = False) -> None:
@@ -1478,6 +2247,7 @@ def latest_report(output_dir: str) -> Path:
 # change: pass/fail behavior (exit non-zero if any failure exists) is unchanged
 # (see #29).
 METRIC_PRIORITY_LEVEL: dict[str, int] = {
+    "ours_engine_error": 1,
     "node_containment_violations": 1,
     "label_containment_violations": 1,
     "invalid_edge_attachments": 1,
@@ -1493,6 +2263,7 @@ METRIC_PRIORITY_LEVEL: dict[str, int] = {
     "non_orthogonal_segments": 3,
     "missing_named_labels": 5,
     "excess_turns": 6,
+    "collinear_waypoints": 6,
 }
 
 
@@ -1511,7 +2282,18 @@ def check_report(args: argparse.Namespace) -> None:
 
     for entry in document.get("entries", []):
         title = entry.get("title", entry.get("source", "diagram"))
-        layout = entry["transformed_metrics"]["layout"]
+        # check_report gates only our own engine ("ours") -- a baseline's
+        # failures are information for the comparison report, never a build
+        # failure (#53). Our own engine erroring out entirely is itself a
+        # gate failure: a report where "ours" produced no output cannot
+        # certify anything.
+        ours = entry.get("engines", {}).get("ours")
+        if ours is None:
+            raise SystemExit(f"{title}: report has no 'ours' engine column to check")
+        if ours.get("metrics") is None:
+            add("ours_engine_error", f"{title}: our own engine failed to produce output: {ours.get('error')}")
+            continue
+        layout = ours["metrics"]["layout"]
         for metric in (
             "edge_crossings",
             "edge_shape_intersections",
@@ -1519,6 +2301,7 @@ def check_report(args: argparse.Namespace) -> None:
             "invalid_edge_attachments",
             "non_orthogonal_segments",
             "degenerate_waypoints",
+            "collinear_waypoints",
             "label_overlaps",
             "invalid_label_bounds",
             "shape_overlaps",
@@ -1549,6 +2332,8 @@ def check_report(args: argparse.Namespace) -> None:
             add("edge_shape_intersections", f"{title}: {detail['edge']} intersects {detail['shape']}")
         for detail in layout.get("degenerate_waypoint_details", []):
             add("degenerate_waypoints", f"{title}: {detail['edge']} has a duplicated waypoint at {detail['point']}")
+        for detail in layout.get("collinear_waypoint_details", []):
+            add("collinear_waypoints", f"{title}: {detail['edge']} has a collinear pass-through waypoint at {detail['point']}")
         for detail in layout.get("edge_container_intersection_details", []):
             add("edge_container_intersections", f"{title}: {detail['edge']} intersects container {detail['container']}")
         for detail in layout.get("invalid_edge_attachment_details", []):
@@ -1560,6 +2345,18 @@ def check_report(args: argparse.Namespace) -> None:
         missing = layout["named_label_coverage"]["missing"]
         if missing > 0:
             add("missing_named_labels", f"{title}: missing_named_labels={missing}")
+    # A pinned baseline (e.g. the upstream bpmn-io/bpmn-auto-layout engine,
+    # #54) that starts erroring on a fixture it used to handle is a real
+    # signal -- a new upstream release broke, or someone's local install
+    # drifted -- but it is not a build failure of *our* engine, so it must
+    # never affect the exit code (#53's "a baseline's failures are
+    # information"). Print it instead: visible in CI logs on every run
+    # rather than silently altering what the comparison measures.
+    for entry in document.get("entries", []):
+        title = entry.get("title", entry.get("source", "diagram"))
+        for name, column in entry.get("engines", {}).items():
+            if name != "ours" and column.get("error"):
+                print(f"baseline engine {name!r} failed on {title}: {column['error']}")
     if failures:
         failures.sort(key=lambda item: item[0])
         lines = [f"  [L{level}] {text}" if level != 99 else f"  {text}" for level, text in failures]
@@ -1575,15 +2372,29 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("inputs", nargs="*", help="BPMN files; omitted means persisted fixtures")
     report.add_argument("--output-dir", default=".bpmn-feedback/reports", help="workspace-local ephemeral report directory root")
     report.add_argument("--clear-output", action="store_true", help="remove previous report directories before rendering")
-    report.add_argument("--layout-command", default="bpmn-auto-layout", help="layout command, shell-style string")
+    report.add_argument("--layout-command", default="bpmn-auto-layout", help="our own engine's layout command, shell-style string")
+    report.add_argument(
+        "--engine",
+        action="append",
+        dest="engines",
+        default=[],
+        metavar="NAME=COMMAND",
+        help='additional named engine to compare against, e.g. --engine upstream="npx bpmn-auto-layout@1.3.0" '
+        "(repeatable; our own engine is always included as 'ours' unless overridden with --engine ours=...)",
+    )
     report.add_argument("--image-command", default="bpmn-to-image", help="image command, shell-style string")
 
     latest = subparsers.add_parser("latest", help="print the newest report index path")
     latest.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
 
-    check = subparsers.add_parser("check", help="fail if transformed report metrics contain layout defects")
+    check = subparsers.add_parser("check", help="fail if our own engine's report metrics contain layout defects")
     check.add_argument("--report", help="report HTML path or report directory; omitted means newest report")
     check.add_argument("--output-dir", default=".bpmn-feedback/reports", help="report directory root")
+
+    subparsers.add_parser(
+        "metric-selftest",
+        help="pin every audited metric to a value verified against hand-built DI, independent of any layout engine",
+    )
 
     selftest_parser = subparsers.add_parser(
         "selftest",
@@ -1639,6 +2450,8 @@ def main(argv: list[str] | None = None) -> int:
         print(latest_report(args.output_dir))
     elif args.command == "check":
         check_report(args)
+    elif args.command == "metric-selftest":
+        metric_selftests()
     elif args.command == "selftest":
         selftest(split_command(args.layout_command), args.structure_only)
     elif args.command == "regression":

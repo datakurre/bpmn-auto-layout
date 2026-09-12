@@ -35,6 +35,14 @@ correct.
    nix develop --command python3 tools/bpmn_feedback.py regression
    ```
 
+   `metric-selftest` (no engine required) separately pins every metric
+   `collect_metrics` computes to a value verified against hand-built DI --
+   run it after changing anything in `collect_metrics` itself:
+
+   ```sh
+   python3 tools/bpmn_feedback.py metric-selftest
+   ```
+
 3. Change the TypeScript implementation in
    `packages/bpmn-auto-layout/src/`. Keep placement and routing deterministic:
    the same BPMN input and options must produce the same BPMN DI.
@@ -101,3 +109,12 @@ before changing code. Improve the first-version tool when a recurring review
 question cannot be represented, a metric is misleading, or a report makes
 comparison difficult; keep the feedback schema versioned and preserve
 backward-readable JSON where practical.
+
+### 4. Regenerate the parametric benchmark corpus
+
+`fixtures/generated/*.bpmn` is produced entirely by
+`tools/corpus-generator/generate.mjs` -- never hand-edit a file there;
+regenerate it instead (see README.md's "Generated benchmark corpus" section
+for the full topology/size/label-load matrix and invocation). `selftest`
+re-validates the generated corpus's referential integrity on every run
+alongside the curated and regression fixtures.

@@ -150,6 +150,15 @@
                 bpmn-feedback regression --layout-command bpmn-auto-layout
                 touch $out
               '';
+
+          # Pins every collect_metrics metric to a value verified against
+          # hand-built DI (#56) -- no layout engine needed, so this check
+          # can never flake and stays hermetic without a fixtures/ copy.
+          metric-selftest =
+            pkgs.runCommand "bpmn-auto-layout-metric-selftest" { nativeBuildInputs = [ feedback ]; } ''
+              bpmn-feedback metric-selftest
+              touch $out
+            '';
         }
       );
 
@@ -162,6 +171,12 @@
             pkgs.gnumake
             pkgs.python3
             self.packages.${pkgs.stdenv.hostPlatform.system}.bpmn-feedback-ui
+            # `node`/`npm` on PATH for tools/upstream-baseline (#54): the
+            # pinned bpmn-io/bpmn-auto-layout comparison baseline is a plain
+            # npm install kept deliberately outside the nix package graph
+            # (a moving external engine is not something to vendor
+            # hermetically), installed and run through this instead.
+            pkgs.nodejs
           ];
         };
       });
