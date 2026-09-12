@@ -1,4 +1,4 @@
-# Agent Guide: Using `bpmn-to-image`
+# Agent Guide: Using `bpmn-to-image` & Codebase Standards
 
 This repository provides a Nix development shell containing Node.js, npm, and [`bpmn-to-image`](https://github.com/datakurre/bpmn-to-image) on `PATH`.
 
@@ -20,6 +20,41 @@ To verify the tools:
 
 ```bash
 nix develop --command sh -c "bpmn-to-image --version && node --version && npm --version"
+```
+
+---
+
+## Codebase Standards & Agent Guardrails
+
+To keep the codebase lean, robust, and maintainable, this repository strictly enforces ESLint rules and 100% test coverage.
+
+### 1. 100% Test Coverage Requirement
+
+Vitest is configured with `v8` coverage thresholds set to **100%** for:
+
+- **Lines**: 100%
+- **Statements**: 100%
+- **Functions**: 100%
+- **Branches**: 100%
+
+Running `npm test` automatically calculates coverage across all files in `src/`. If any line or branch is uncovered, the test suite will fail. Ensure every new function, option, and branch has corresponding unit tests.
+
+### 2. ESLint Rules for Lean & Maintainable Code
+
+The ESLint configuration enforces:
+
+- **Complexity limits**: `complexity` (max 15), `max-depth` (max 4), `max-params` (max 3), `max-nested-callbacks` (max 3). Keep functions short, focused, and avoid deep nesting.
+- **Anti-bloat / early returns**: `no-else-return`, `no-lonely-if`, `no-useless-return`, `no-useless-concat`, `no-unneeded-ternary`, `curly: ['error', 'all']`.
+- **Modern syntax**: `object-shorthand`, `prefer-template`, `prefer-arrow-callback`, `prefer-const`, `no-var`.
+- **TypeScript hygiene**: `@typescript-eslint/consistent-type-imports`, `@typescript-eslint/no-unused-vars` (error on unused args/vars/errors unless `_` prefixed), `@typescript-eslint/no-shadow`.
+- **Unicorn rules**: `unicorn/prefer-node-protocol`, `unicorn/prefer-export-from`, `unicorn/no-useless-spread`, `unicorn/prefer-array-find`, `unicorn/prefer-includes`, etc.
+
+### 3. Agent Verification Checklist
+
+Before reporting work complete, always run:
+
+```bash
+nix develop --command sh -c "npm run typecheck && npm run build && npm test && npm run lint && npm run format:check"
 ```
 
 ---

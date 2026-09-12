@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { layoutProcess, BpmnModdle, BpmnViewer } from '../src/index';
+import defaultLayoutProcess, { layoutProcess, BpmnModdle, BpmnViewer } from '../src/index';
 
 const sampleBpmn = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
@@ -14,10 +14,18 @@ describe('bpmn-auto-layout', () => {
     expect(BpmnViewer).toBeDefined();
   });
 
-  it('can parse and process sample BPMN XML', async () => {
+  it('can parse and process sample BPMN XML without options', async () => {
     const result = await layoutProcess(sampleBpmn);
     expect(result).toContain('bpmn:definitions');
     expect(result).toContain('Process_1');
     expect(result).toContain('StartEvent_1');
+  });
+
+  it('supports custom moddle extensions option and default export', async () => {
+    const result = await defaultLayoutProcess(sampleBpmn, {
+      moddleExtensions: {},
+    });
+    expect(result).toContain('bpmn:definitions');
+    expect(result).toContain('Process_1');
   });
 });

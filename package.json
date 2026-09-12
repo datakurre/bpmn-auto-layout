@@ -24,6 +24,7 @@
     "lint": "eslint src/ test/",
     "lint:fix": "eslint src/ test/ --fix",
     "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
     "test:watch": "vitest",
     "prepare": "npm run build"
   },
@@ -57,6 +58,7 @@
     "@eslint/js": "^9.39.2",
     "@types/bpmn-moddle": "^10.0.0",
     "@types/node": "^22.10.2",
+    "@vitest/coverage-v8": "^4.1.11",
     "esbuild": "^0.28.2",
     "eslint": "^9.39.2",
     "eslint-plugin-unicorn": "^63.0.0",

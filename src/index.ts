@@ -1,5 +1,4 @@
 import { BpmnModdle } from 'bpmn-moddle';
-import BpmnViewer from 'bpmn-js';
 
 export interface AutoLayoutOptions {
   /**
@@ -23,5 +22,6 @@ export async function layoutProcess(xml: string, options?: AutoLayoutOptions): P
   return outputXml;
 }
 
-export { BpmnModdle, BpmnViewer };
+export { BpmnModdle } from 'bpmn-moddle';
+export { default as BpmnViewer } from 'bpmn-js';
 export default layoutProcess;
