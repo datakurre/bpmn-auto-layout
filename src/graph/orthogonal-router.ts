@@ -130,7 +130,34 @@ export function routeOrthogonalEdge(
     return [srcExit, { x: stepX, y: srcExit.y }, { x: stepX, y: tgtEntry.y }, tgtEntry];
   }
 
+  // Forward wrapped edge (target is on a lower row and behind source)
+  if (sourceBounds.y + sourceBounds.height + 20 <= targetBounds.y) {
+    return routeForwardWrappedEdge(sourceBounds, targetBounds);
+  }
+
   // Feedback loop (target is at or behind source)
   const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
   return computeFeedbackWaypoints(sourceBounds, targetBounds, { channelY, allBounds });
+}
+
+function routeForwardWrappedEdge(src: Bounds, tgt: Bounds): Point[] {
+  const srcRight: Point = {
+    x: src.x + src.width,
+    y: Math.round(src.y + src.height / 2),
+  };
+  const tgtLeft: Point = {
+    x: tgt.x,
+    y: Math.round(tgt.y + tgt.height / 2),
+  };
+  const midY = Math.round((src.y + src.height + tgt.y) / 2);
+  const stepSrcX = srcRight.x + 20;
+  const stepTgtX = tgtLeft.x - 20;
+  return [
+    srcRight,
+    { x: stepSrcX, y: srcRight.y },
+    { x: stepSrcX, y: midY },
+    { x: stepTgtX, y: midY },
+    { x: stepTgtX, y: tgtLeft.y },
+    tgtLeft,
+  ];
 }

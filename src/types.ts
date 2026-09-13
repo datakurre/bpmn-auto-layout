@@ -36,6 +36,11 @@ export interface AutoLayoutOptions {
    * Additional Moddle extensions to register.
    */
   moddleExtensions?: Record<string, any>;
+
+  /**
+   * Maximum width budget before wrapping flow nodes onto multiple rows.
+   */
+  widthBudget?: number;
 }
 
 export interface HardViolations {

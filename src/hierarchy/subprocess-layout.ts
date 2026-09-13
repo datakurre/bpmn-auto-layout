@@ -9,6 +9,7 @@ import {
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
+import { insertDummyNodes } from '../graph/dummy-nodes';
 import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
 import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
 import {
@@ -592,7 +593,9 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const ranks = assignLayers(graph, feedbackEdges);
   const nodeToLane = extractNodeToLaneMap(scopeElement);
 
-  const calculatedBounds = assignCoordinatesWithCustomDimensions(graph, ranks, {
+  const { augmentedGraph, augmentedRanks } = insertDummyNodes(graph, ranks, { feedbackEdges });
+
+  const calculatedBounds = assignCoordinatesWithCustomDimensions(augmentedGraph, augmentedRanks, {
     options,
     feedbackEdges,
     subDimensions,
@@ -634,6 +637,9 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   }
 }
 
+const SUBPROCESS_MAX_ASPECT_RATIO = 6;
+const SUBPROCESS_TARGET_ASPECT_RATIO = 2;
+
 function layoutChildSubProcesses(
   subProcesses: any[],
   options?: AutoLayoutOptions,
@@ -646,7 +652,13 @@ function layoutChildSubProcesses(
   const subDimensions = customDimensions ?? new Map<string, { width: number; height: number }>();
 
   for (const sub of subProcesses) {
-    const childResult = layoutScope(sub, options, subDimensions);
+    let childResult = layoutScope(sub, options, subDimensions);
+    const containerRatio = childResult.width / childResult.height;
+    if (containerRatio > SUBPROCESS_MAX_ASPECT_RATIO) {
+      const area = childResult.width * childResult.height;
+      const widthBudget = Math.max(600, Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO));
+      childResult = layoutScope(sub, { ...options, widthBudget }, subDimensions);
+    }
     childScopeResults.set(sub.id, childResult);
     subDimensions.set(sub.id, { width: childResult.width, height: childResult.height });
   }

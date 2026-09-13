@@ -1,5 +1,6 @@
 import type { DirectedGraph } from './graph';
 import { getElementDimensions, DEFAULT_GRID_SPACING } from '../di-constants';
+import { alignMergeNodeTrack } from './dummy-nodes';
 import type { AutoLayoutOptions, Bounds } from '../types';
 
 export interface CoordinateOptions extends AutoLayoutOptions {
@@ -18,6 +19,7 @@ interface ColConfig {
   maxRank: number;
   startX: number;
   gridSpacing: number;
+  widthBudget?: number;
 }
 
 export function assignCoordinates(
@@ -31,17 +33,18 @@ export function assignCoordinates(
   const startX = hasLanes ? 180 : 100;
 
   const { rankGroups, maxRank } = groupNodesByRank(nodes, ranks);
-  const { colWidths, colX } = computeColumnPositions(graph, rankGroups, {
+  const { colWidths, colX, rankRows } = computeColumnPositions(graph, rankGroups, {
     maxRank,
     startX,
     gridSpacing,
+    widthBudget: hasLanes ? undefined : options?.widthBudget,
   });
 
   const tracks = hasLanes
     ? computeLaneAwareTracks(graph, ranks, options!)
     : computeFlatTracks(graph, ranks, options?.feedbackEdges);
 
-  return computeFinalBounds(nodes, tracks, { colWidths, colX, ranks });
+  return computeFinalBounds(nodes, tracks, { colWidths, colX, ranks, rankRows });
 }
 
 function groupNodesByRank(
@@ -64,6 +67,36 @@ interface ColInfo {
   colWidths: Map<number, number>;
   colX: Map<number, number>;
   ranks: Map<string, number>;
+  rankRows: Map<number, number>;
+}
+
+function computeRowTrackOffsets(
+  nodes: Array<{ id: string }>,
+  tracks: Map<string, number>,
+  colInfo: ColInfo
+): Map<number, number> {
+  const rowOffsets = new Map<number, number>();
+  const rowMinTrack = new Map<number, number>();
+  const rowMaxTrack = new Map<number, number>();
+
+  for (const node of nodes) {
+    const rank = colInfo.ranks.get(node.id) || 0;
+    const row = colInfo.rankRows.get(rank) || 0;
+    const track = tracks.get(node.id) || 0;
+    rowMinTrack.set(row, Math.min(rowMinTrack.get(row) ?? track, track));
+    rowMaxTrack.set(row, Math.max(rowMaxTrack.get(row) ?? track, track));
+  }
+
+  const maxRow = Math.max(0, ...Array.from(colInfo.rankRows.values()));
+  rowOffsets.set(0, 0);
+  for (let r = 1; r <= maxRow; r++) {
+    const prevMax = rowMaxTrack.get(r - 1)!;
+    const currMin = rowMinTrack.get(r)!;
+    const prevOffset = rowOffsets.get(r - 1)!;
+    const offset = prevOffset + (prevMax - currMin) + 2.0;
+    rowOffsets.set(r, offset);
+  }
+  return rowOffsets;
 }
 
 function computeFinalBounds(
@@ -74,16 +107,22 @@ function computeFinalBounds(
   const boundsMap = new Map<string, Bounds>();
   const centerY = 140;
   const trackSpacing = 120;
+  const rowOffsets = computeRowTrackOffsets(nodes, tracks, colInfo);
 
   for (const node of nodes) {
     const rank = colInfo.ranks.get(node.id) || 0;
-    const dim = getElementDimensions(node.data.$type);
+    const row = colInfo.rankRows.get(rank) || 0;
+    const dim = node.data?.isDummy
+      ? { width: 0, height: 0 }
+      : getElementDimensions(node.data?.$type);
     const w = node.data?.customWidth ?? dim.width;
     const h = node.data?.customHeight ?? dim.height;
     const colWidth = colInfo.colWidths.get(rank)!;
     const x = colInfo.colX.get(rank)! + (colWidth - w) / 2;
 
-    const track = tracks.get(node.id)!;
+    const baseTrack = tracks.get(node.id)!;
+    const rowOffset = rowOffsets.get(row)!;
+    const track = baseTrack + rowOffset;
     const trackY = centerY + track * trackSpacing;
     const y = Math.round(trackY - h / 2);
 
@@ -97,29 +136,43 @@ function computeColumnPositions(
   graph: DirectedGraph,
   rankGroups: Map<number, string[]>,
   config: ColConfig
-): { colWidths: Map<number, number>; colX: Map<number, number> } {
+): {
+  colWidths: Map<number, number>;
+  colX: Map<number, number>;
+  rankRows: Map<number, number>;
+} {
   const colWidths = new Map<number, number>();
   for (let r = 0; r <= config.maxRank; r++) {
     const nodeIds = rankGroups.get(r)!;
-    let maxWidth = 36;
+    let maxWidth = 0;
     for (const id of nodeIds) {
       const node = graph.getNode(id)!;
-      const dim = getElementDimensions(node.data.$type);
+      const dim = node.data?.isDummy
+        ? { width: 0, height: 0 }
+        : getElementDimensions(node.data?.$type);
       const w = node.data?.customWidth ?? dim.width;
       maxWidth = Math.max(maxWidth, w);
     }
-    colWidths.set(r, maxWidth);
+    colWidths.set(r, Math.max(36, maxWidth));
   }
 
   const colX = new Map<number, number>();
+  const rankRows = new Map<number, number>();
   let currentX = config.startX;
+  let currentRow = 0;
+
   for (let r = 0; r <= config.maxRank; r++) {
-    colX.set(r, currentX);
     const w = colWidths.get(r)!;
+    if (config.widthBudget && r > 0 && currentX + w - config.startX > config.widthBudget) {
+      currentRow += 1;
+      currentX = config.startX;
+    }
+    rankRows.set(r, currentRow);
+    colX.set(r, currentX);
     currentX += w + config.gridSpacing;
   }
 
-  return { colWidths, colX };
+  return { colWidths, colX, rankRows };
 }
 
 function computeFlatTracks(
@@ -243,11 +296,7 @@ function calculateSingleNodeTrack(
   if (inEdges.length === 1) {
     return calculateSingleParentTrack(node.id, inEdges[0].source, ctx);
   }
-  let sum = 0;
-  for (const e of inEdges) {
-    sum += ctx.tracks.get(e.source) || 0;
-  }
-  return Math.round(sum / inEdges.length);
+  return alignMergeNodeTrack(node.id, inEdges, ctx.tracks);
 }
 
 function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: TrackContext): number {
