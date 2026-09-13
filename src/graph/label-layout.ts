@@ -1,5 +1,6 @@
 import {
   ARTIFACT_LABEL_MARGIN,
+  BOUNDARY_EVENT_LABEL_MARGIN,
   EVENT_LABEL_MARGIN,
   FLOW_LABEL_MARGIN,
   GATEWAY_LABEL_MARGIN,
@@ -486,6 +487,8 @@ export function layoutElementLabel(
     margin = GATEWAY_LABEL_MARGIN;
   } else if (isArtifact(shape.element)) {
     margin = ARTIFACT_LABEL_MARGIN;
+  } else if (isBoundaryEvent(shape.element)) {
+    margin = BOUNDARY_EVENT_LABEL_MARGIN;
   }
 
   const cctx: CollisionContext = {

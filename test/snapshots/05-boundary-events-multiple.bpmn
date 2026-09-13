@@ -45,13 +45,13 @@
       <bpmndi:BPMNShape id="Boundary_Error_di" bpmnElement="Boundary_Error">
         <dc:Bounds x="250" y="162" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="296" y="208" width="50" height="14" />
+          <dc:Bounds x="291" y="203" width="50" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Boundary_Timer_di" bpmnElement="Boundary_Timer">
         <dc:Bounds x="206" y="162" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="150" y="208" width="46" height="14" />
+          <dc:Bounds x="155" y="203" width="46" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">

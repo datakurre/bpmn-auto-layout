@@ -142,7 +142,7 @@
       <bpmndi:BPMNShape id="Timer_Review_SLA_di" bpmnElement="Timer_Review_SLA">
         <dc:Bounds x="1038" y="322" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1084" y="368" width="48" height="14" />
+          <dc:Bounds x="1079" y="363" width="48" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="LF_Check_1_di" bpmnElement="LF_Check_1">

@@ -24,6 +24,7 @@ import {
 } from '../src/graph/label-layout';
 import {
   EVENT_LABEL_MARGIN,
+  BOUNDARY_EVENT_LABEL_MARGIN,
   GATEWAY_LABEL_MARGIN,
   ARTIFACT_LABEL_MARGIN,
   FLOW_LABEL_MARGIN,
@@ -692,11 +693,13 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       });
 
       expect(boundaryShape.labelBounds).toBeDefined();
-      // Should be placed to the right with y = bounds.y + bounds.height + margin = 208 (strictly below task border at 180 and 10px below boundary circle)
+      // Should be placed to the right, tightly below the task border using BOUNDARY_EVENT_LABEL_MARGIN
       expect(boundaryShape.labelBounds!.y).toBe(
-        boundaryShape.bounds.y + boundaryShape.bounds.height + EVENT_LABEL_MARGIN
+        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_LABEL_MARGIN
       );
-      expect(boundaryShape.labelBounds!.x).toBeGreaterThanOrEqual(132 + 36);
+      expect(boundaryShape.labelBounds!.x).toBe(
+        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_LABEL_MARGIN
+      );
     });
 
     it('handles all diagonal quadrant placements for gateways and boundary events', () => {
