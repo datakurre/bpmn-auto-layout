@@ -255,6 +255,14 @@ const SNAPSHOT_METADATA = {
       'Three tasks each with their own compensation boundary event and handler, stress-testing row-packing and association routing.',
     tags: ['Compensation', 'Row Packing', 'Multiple Handlers'],
   },
+  '13-trip-booking-with-compensation.png': {
+    title: 'Trip Booking with Compensation',
+    iteration: '13',
+    category: 'Compensation Handlers',
+    description:
+      'A real-world booking workflow combining parallel reservations, a compensation handler sub-process, and an exclusive gateway leading to an explicit compensation-triggering throw event.',
+    tags: ['Compensation', 'Parallel Gateway', 'Sub-Process', 'Complex Workflow'],
+  },
 };
 
 export function generateGallery() {

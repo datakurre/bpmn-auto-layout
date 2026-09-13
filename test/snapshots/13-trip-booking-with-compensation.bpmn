@@ -1,0 +1,252 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_TripBooking" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Booking Started" />
+    <bpmn:task id="Task_ReserveFlight" name="Reserve Flight" />
+    <bpmn:parallelGateway id="Gate_Fork" name="Fork" />
+    <bpmn:task id="Task_ReserveHotel" name="Reserve Hotel" />
+    <bpmn:task id="Task_ReserveCar" name="Reserve Car" />
+    <bpmn:parallelGateway id="Gate_Join" name="Join" />
+    <bpmn:task id="Task_ChargePayment" name="Charge Payment" />
+    <bpmn:exclusiveGateway id="Gate_Confirm" name="Confirmed?" />
+    <bpmn:intermediateThrowEvent id="Throw_CompensateAll" name="Trigger Compensation">
+      <bpmn:compensateEventDefinition />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:task id="Task_NotifyCancellation" name="Notify Customer" />
+    <bpmn:endEvent id="End_Cancelled" name="Booking Cancelled" />
+    <bpmn:endEvent id="End_Confirmed" name="Booking Confirmed" />
+    <bpmn:boundaryEvent id="Boundary_CompFlight" attachedToRef="Task_ReserveFlight">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CompHotel" attachedToRef="Task_ReserveHotel">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CompCar" attachedToRef="Task_ReserveCar">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:boundaryEvent id="Boundary_CompPayment" attachedToRef="Task_ChargePayment">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Handler_CancelFlight" name="Cancel Flight" isForCompensation="true" />
+    <bpmn:task id="Handler_CancelHotel" name="Cancel Hotel" isForCompensation="true" />
+    <bpmn:task id="Handler_CancelCar" name="Cancel Car" isForCompensation="true" />
+    <bpmn:subProcess id="Handler_RefundPayment" name="Refund Process" isForCompensation="true">
+      <bpmn:startEvent id="Sub_Start" name="Start" />
+      <bpmn:task id="Sub_ValidateRefund" name="Validate Refund" />
+      <bpmn:task id="Sub_IssueRefund" name="Issue Refund" />
+      <bpmn:endEvent id="Sub_End" name="Done" />
+      <bpmn:sequenceFlow id="SubFlow_1" sourceRef="Sub_Start" targetRef="Sub_ValidateRefund" />
+      <bpmn:sequenceFlow id="SubFlow_2" sourceRef="Sub_ValidateRefund" targetRef="Sub_IssueRefund" />
+      <bpmn:sequenceFlow id="SubFlow_3" sourceRef="Sub_IssueRefund" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_ReserveFlight" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_ReserveFlight" targetRef="Gate_Fork" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Gate_Fork" targetRef="Task_ReserveHotel" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Gate_Fork" targetRef="Task_ReserveCar" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_ReserveHotel" targetRef="Gate_Join" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_ReserveCar" targetRef="Gate_Join" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Gate_Join" targetRef="Task_ChargePayment" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_ChargePayment" targetRef="Gate_Confirm" />
+    <bpmn:sequenceFlow id="Flow_Cancel" name="Cancelled" sourceRef="Gate_Confirm" targetRef="Throw_CompensateAll" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Throw_CompensateAll" targetRef="Task_NotifyCancellation" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_NotifyCancellation" targetRef="End_Cancelled" />
+    <bpmn:sequenceFlow id="Flow_Confirm" name="Confirmed" sourceRef="Gate_Confirm" targetRef="End_Confirmed" />
+    <bpmn:association id="Assoc_Flight" sourceRef="Boundary_CompFlight" targetRef="Handler_CancelFlight" />
+    <bpmn:association id="Assoc_Hotel" sourceRef="Boundary_CompHotel" targetRef="Handler_CancelHotel" />
+    <bpmn:association id="Assoc_Car" sourceRef="Boundary_CompCar" targetRef="Handler_CancelCar" />
+    <bpmn:association id="Assoc_Payment" sourceRef="Boundary_CompPayment" targetRef="Handler_RefundPayment" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_TripBooking">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="75" y="168" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveFlight_di" bpmnElement="Task_ReserveFlight">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Fork_di" bpmnElement="Gate_Fork">
+        <dc:Bounds x="356" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="365" y="95" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveHotel_di" bpmnElement="Task_ReserveHotel">
+        <dc:Bounds x="466" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReserveCar_di" bpmnElement="Task_ReserveCar">
+        <dc:Bounds x="466" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Join_di" bpmnElement="Gate_Join">
+        <dc:Bounds x="626" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="635" y="95" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ChargePayment_di" bpmnElement="Task_ChargePayment">
+        <dc:Bounds x="736" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Confirm_di" bpmnElement="Gate_Confirm">
+        <dc:Bounds x="896" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="888" y="95" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Throw_CompensateAll_di" bpmnElement="Throw_CompensateAll">
+        <dc:Bounds x="1006" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="966" y="168" width="116" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyCancellation_di" bpmnElement="Task_NotifyCancellation">
+        <dc:Bounds x="1102" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
+        <dc:Bounds x="1262" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1230" y="168" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Confirmed_di" bpmnElement="End_Confirmed">
+        <dc:Bounds x="1006" y="242" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="974" y="288" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompFlight_di" bpmnElement="Boundary_CompFlight">
+        <dc:Bounds x="228" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompHotel_di" bpmnElement="Boundary_CompHotel">
+        <dc:Bounds x="498" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompCar_di" bpmnElement="Boundary_CompCar">
+        <dc:Bounds x="498" y="282" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompPayment_di" bpmnElement="Boundary_CompPayment">
+        <dc:Bounds x="768" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handler_CancelFlight_di" bpmnElement="Handler_CancelFlight">
+        <dc:Bounds x="100" y="378" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handler_CancelHotel_di" bpmnElement="Handler_CancelHotel">
+        <dc:Bounds x="240" y="378" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handler_CancelCar_di" bpmnElement="Handler_CancelCar">
+        <dc:Bounds x="380" y="378" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handler_RefundPayment_di" bpmnElement="Handler_RefundPayment" isExpanded="true">
+        <dc:Bounds x="520" y="378" width="512" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="550" y="435" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="552" y="481" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_ValidateRefund_di" bpmnElement="Sub_ValidateRefund">
+        <dc:Bounds x="646" y="413" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_IssueRefund_di" bpmnElement="Sub_IssueRefund">
+        <dc:Bounds x="806" y="413" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="966" y="435" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="967" y="481" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="466" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="381" y="165" />
+        <di:waypoint x="381" y="260" />
+        <di:waypoint x="466" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="676" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Cancel_di" bpmnElement="Flow_Cancel">
+        <di:waypoint x="946" y="140" />
+        <di:waypoint x="1006" y="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="946" y="116" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Confirm_di" bpmnElement="Flow_Confirm">
+        <di:waypoint x="921" y="165" />
+        <di:waypoint x="921" y="260" />
+        <di:waypoint x="1006" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="931" y="206" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="566" y="140" />
+        <di:waypoint x="626" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="566" y="260" />
+        <di:waypoint x="651" y="260" />
+        <di:waypoint x="651" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
+        <di:waypoint x="836" y="140" />
+        <di:waypoint x="896" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_di" bpmnElement="Flow_9">
+        <di:waypoint x="1042" y="140" />
+        <di:waypoint x="1102" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <di:waypoint x="1202" y="140" />
+        <di:waypoint x="1262" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
+        <di:waypoint x="586" y="453" />
+        <di:waypoint x="646" y="453" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_2_di" bpmnElement="SubFlow_2">
+        <di:waypoint x="746" y="453" />
+        <di:waypoint x="806" y="453" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_3_di" bpmnElement="SubFlow_3">
+        <di:waypoint x="906" y="453" />
+        <di:waypoint x="966" y="453" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Flight_di" bpmnElement="Assoc_Flight">
+        <di:waypoint x="246" y="198" />
+        <di:waypoint x="246" y="288" />
+        <di:waypoint x="150" y="288" />
+        <di:waypoint x="150" y="378" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Hotel_di" bpmnElement="Assoc_Hotel">
+        <di:waypoint x="516" y="198" />
+        <di:waypoint x="290" y="198" />
+        <di:waypoint x="290" y="378" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Car_di" bpmnElement="Assoc_Car">
+        <di:waypoint x="516" y="318" />
+        <di:waypoint x="516" y="348" />
+        <di:waypoint x="430" y="348" />
+        <di:waypoint x="430" y="378" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_Payment_di" bpmnElement="Assoc_Payment">
+        <di:waypoint x="786" y="198" />
+        <di:waypoint x="786" y="378" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

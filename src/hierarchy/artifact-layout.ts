@@ -287,7 +287,21 @@ function routeLeftwardDiagonal(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): 
     : Math.round((src.y + tgt.y + tgt.height) / 2);
   const targetY = isAbove ? tgt.y : tgt.y + tgt.height;
 
-  return [p1, { x: p1.x, y: midY }, { x: tgtCenter.x, y: midY }, { x: tgtCenter.x, y: targetY }];
+  const steppedRoute: Point[] = [
+    p1,
+    { x: p1.x, y: midY },
+    { x: tgtCenter.x, y: midY },
+    { x: tgtCenter.x, y: targetY },
+  ];
+  if (!isPathObstructed(steppedRoute, filtered)) {
+    return steppedRoute;
+  }
+
+  // The mid-drop still clips something between src and tgt (e.g. a sibling
+  // branch sharing src's column). Jog to tgt's own column immediately after
+  // leaving src instead, so the long vertical run happens where tgt already
+  // has clearance.
+  return [p1, { x: tgtCenter.x, y: p1.y }, { x: tgtCenter.x, y: targetY }];
 }
 
 function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
