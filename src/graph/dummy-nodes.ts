@@ -96,6 +96,17 @@ export function alignMergeNodeTrack(
  * of jumping straight from source to target. `anchors` is the ordered list of
  * points to pass through: the flow's own exit point, the center of each dummy
  * node bounds along the way, then the flow's own entry point.
+ *
+ * NOT currently wired into the layout pipeline -- deliberately (see #81).
+ * Routing through a corridor only pays off when the corridor is roughly
+ * straight, and nothing straightens it yet: `computeFlatTracks` is a single
+ * forward pass with no barycenter/median sweep, so a dummy chain wanders.
+ * Because each consecutive anchor pair is routed independently below, a
+ * wandering chain costs ~2 bends per hop against 2 for the direct route, which
+ * measured as a net regression across the whole corpus.
+ *
+ * Re-wire this from `routeScopeEdges` once the straightening sweep exists, and
+ * only if the corpus bend count goes down when you do.
  */
 export function routeEdgeThroughDummyChain(anchors: Point[], allBounds?: Bounds[]): Point[] {
   let waypoints: Point[] = [];

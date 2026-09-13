@@ -5,6 +5,7 @@ import {
   insertDummyNodes,
   alignMergeNodeTrack,
   routeEdgeThroughDummyChain,
+  boundsCenter,
 } from '../src/graph/dummy-nodes';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
@@ -166,6 +167,22 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+  });
+
+  describe('boundsCenter (issue #81)', () => {
+    it('returns the midpoint of a bounds rectangle', () => {
+      expect(boundsCenter({ x: 100, y: 200, width: 50, height: 80 })).toEqual({
+        x: 125,
+        y: 240,
+      });
+    });
+
+    it('returns the point itself for the zero-sized bounds a dummy node carries', () => {
+      expect(boundsCenter({ x: 306, y: 140, width: 0, height: 0 })).toEqual({
+        x: 306,
+        y: 140,
+      });
+    });
   });
 
   describe('routeEdgeThroughDummyChain (issue #81)', () => {
