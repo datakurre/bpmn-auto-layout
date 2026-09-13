@@ -21,7 +21,7 @@
         <dc:Bounds x="100" y="80" width="452" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Pool_Merchant_di" bpmnElement="Pool_Merchant">
-        <dc:Bounds x="100" y="340" width="400" height="200" />
+        <dc:Bounds x="100" y="340" width="452" height="200" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
         <dc:Bounds x="150" y="122" width="36" height="36" />
@@ -39,7 +39,7 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Merch_Process_di" bpmnElement="Merch_Process">
-        <dc:Bounds x="150" y="360" width="100" height="80" />
+        <dc:Bounds x="246" y="360" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Cust_F1_di" bpmnElement="Cust_F1">
         <di:waypoint x="186" y="140" />
@@ -51,9 +51,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Order_di" bpmnElement="Msg_Order">
         <di:waypoint x="296" y="180" />
-        <di:waypoint x="296" y="310" />
-        <di:waypoint x="200" y="310" />
-        <di:waypoint x="200" y="360" />
+        <di:waypoint x="296" y="360" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

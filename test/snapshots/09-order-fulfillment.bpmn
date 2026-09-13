@@ -68,18 +68,18 @@
         <dc:Bounds x="466" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Payment_di" bpmnElement="Gateway_Payment">
-        <dc:Bounds x="651" y="115" width="50" height="50" />
+        <dc:Bounds x="811" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="639" y="171" width="74" height="14" />
+          <dc:Bounds x="799" y="95" width="74" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Payment_Failed_di" bpmnElement="Task_Payment_Failed">
-        <dc:Bounds x="786" y="100" width="100" height="80" />
+        <dc:Bounds x="946" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Order_Cancelled_di" bpmnElement="End_Order_Cancelled">
-        <dc:Bounds x="978" y="122" width="36" height="36" />
+        <dc:Bounds x="1138" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="953" y="168" width="86" height="14" />
+          <dc:Bounds x="1113" y="168" width="86" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Stock_Merge_di" bpmnElement="Gateway_Stock_Merge">
@@ -94,7 +94,7 @@
       <bpmndi:BPMNShape id="Gateway_Stock_di" bpmnElement="Gateway_Stock">
         <dc:Bounds x="811" y="475" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="753" y="493" width="52" height="14" />
+          <dc:Bounds x="810" y="455" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Backorder_di" bpmnElement="Task_Backorder">
@@ -171,14 +171,13 @@
         <di:waypoint x="491" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_Fail_di" bpmnElement="F_Pay_Fail">
-        <di:waypoint x="701" y="140" />
-        <di:waypoint x="786" y="140" />
+        <di:waypoint x="861" y="140" />
+        <di:waypoint x="946" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_OK_di" bpmnElement="F_Pay_OK">
-        <di:waypoint x="701" y="140" />
-        <di:waypoint x="744" y="140" />
-        <di:waypoint x="744" y="325" />
-        <di:waypoint x="1131" y="325" />
+        <di:waypoint x="836" y="165" />
+        <di:waypoint x="836" y="260" />
+        <di:waypoint x="1131" y="260" />
         <di:waypoint x="1131" y="355" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_To_Check_di" bpmnElement="F_Stock_To_Check">
@@ -204,12 +203,13 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_2_di" bpmnElement="F_Pay_2">
         <di:waypoint x="566" y="140" />
-        <di:waypoint x="651" y="140" />
+        <di:waypoint x="811" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_2_di" bpmnElement="F_Stock_2">
         <di:waypoint x="726" y="260" />
-        <di:waypoint x="836" y="260" />
-        <di:waypoint x="836" y="475" />
+        <di:waypoint x="769" y="260" />
+        <di:waypoint x="769" y="500" />
+        <di:waypoint x="811" y="500" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_Retry_di" bpmnElement="F_Stock_Retry">
         <di:waypoint x="1046" y="500" />
@@ -228,8 +228,8 @@
         <di:waypoint x="196" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_Cancel_di" bpmnElement="F_Pay_Cancel">
-        <di:waypoint x="886" y="140" />
-        <di:waypoint x="978" y="140" />
+        <di:waypoint x="1046" y="140" />
+        <di:waypoint x="1138" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Post_Sub_di" bpmnElement="F_Post_Sub">
         <di:waypoint x="1888" y="380" />

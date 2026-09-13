@@ -371,6 +371,27 @@ function routeAllGatewayOutgoingFlows(
   return edges;
 }
 
+function markConflictingTopPortUsed(
+  gwBounds: Bounds,
+  ctx: GatewayRouteScopeContext,
+  usedPorts: Set<'top' | 'bottom' | 'left' | 'right'>
+): void {
+  const gwCenterX = Math.round(gwBounds.x + gwBounds.width / 2);
+  for (const [otherId, ports] of ctx.usedPortsMap.entries()) {
+    if (!ports.has('bottom')) {
+      continue;
+    }
+    const otherBounds = ctx.routeCtx.boundsMap.get(otherId);
+    if (otherBounds && otherBounds.y < gwBounds.y) {
+      const otherCenterX = Math.round(otherBounds.x + otherBounds.width / 2);
+      if (Math.abs(otherCenterX - gwCenterX) < 20) {
+        usedPorts.add('top');
+        break;
+      }
+    }
+  }
+}
+
 function routeAllGatewayIncomingFlows(
   gatewayFlows: Map<string, GatewayIncomingFlowInfo[]>,
   ctx: GatewayRouteScopeContext
@@ -387,6 +408,7 @@ function routeAllGatewayIncomingFlows(
     });
 
     const usedPorts = getUsedPorts(ctx.usedPortsMap, gwId);
+    markConflictingTopPortUsed(gwBounds, ctx, usedPorts);
     const { routes, usedPorts: updatedPorts } = routeGatewayIncomingEdges(flows, {
       gatewayBounds: gwBounds,
       allBounds,
@@ -420,7 +442,7 @@ function routeOtherFlows(
   return edges;
 }
 
-function routeScopeEdges(
+export function routeScopeEdges(
   sequenceFlows: any[],
   ctx: ScopeRouteContext
 ): Array<{ element: any; waypoints: Point[] }> {
@@ -449,7 +471,7 @@ function routeScopeEdges(
   return [...outEdges, ...inEdges, ...otherEdges];
 }
 
-function buildScopeGraph(
+export function buildScopeGraph(
   regularNodes: any[],
   boundaryEvents: any[],
   sequenceFlows: any[]
@@ -684,7 +706,7 @@ interface ScopeElementsPartition {
   allAssociations: any[];
 }
 
-function partitionScopeElements(scopeElement: any): ScopeElementsPartition {
+export function partitionScopeElements(scopeElement: any): ScopeElementsPartition {
   const flowElements = scopeElement.flowElements || [];
   const boundaryEvents = flowElements.filter((el: any) => el.$type === 'bpmn:BoundaryEvent');
   const sequenceFlows = flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
@@ -713,4 +735,22 @@ function partitionScopeElements(scopeElement: any): ScopeElementsPartition {
     allArtifacts,
     allAssociations,
   };
+}
+
+export function rerouteProcessEdges(
+  process: any,
+  boundsMap: Map<string, Bounds>,
+  feedbackEdges?: Set<string>
+): Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> {
+  const { regularNodes, boundaryEvents, sequenceFlows } = partitionScopeElements(process);
+  const routed = routeScopeEdges(sequenceFlows, {
+    regularNodes,
+    boundaryEvents,
+    boundsMap,
+    feedbackEdges,
+  });
+  return routed.map((e) => ({
+    ...e,
+    isFeedback: feedbackEdges?.has(e.element.id),
+  }));
 }

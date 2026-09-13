@@ -10,27 +10,34 @@ import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/labe
 import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
+import { alignVerticallyStackedPaths, alignIntraProcessBranches } from './hierarchy/path-alignment';
 import type { AutoLayoutOptions, Bounds } from './types';
+
+interface PoolEntry {
+  element: any;
+  bounds: Bounds;
+  lanes?: Array<{ element: any; bounds: Bounds }>;
+}
 
 interface ParticipantLayoutParams {
   participant: any;
   process: any;
-  plane: any;
   currentY: number;
   allShapesMap: Map<string, Bounds>;
   allShapes: PlacedShape[];
   allEdges: PlacedEdge[];
   allLanes: Array<{ element: any; bounds: Bounds }>;
+  allPools: PoolEntry[];
 }
 
 interface PoolAndLanesParams {
   participant: any;
   process: any;
   result: any;
-  plane: any;
   currentY: number;
   hasLanes: boolean;
   allLanes?: Array<{ element: any; bounds: Bounds }>;
+  allPools: PoolEntry[];
 }
 
 export class LayoutEngine {
@@ -97,6 +104,7 @@ export class LayoutEngine {
 
     for (const process of processes) {
       const result = layoutScope(process, this.options);
+      alignIntraProcessBranches({ process, result, options: this.options });
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: 100,
         startY,
@@ -138,6 +146,7 @@ export class LayoutEngine {
     const allShapes: PlacedShape[] = [];
     const allEdges: PlacedEdge[] = [];
     const allLanes: Array<{ element: any; bounds: Bounds }> = [];
+    const allPools: PoolEntry[] = [];
     let currentY = 80;
 
     for (const participant of participants) {
@@ -146,14 +155,24 @@ export class LayoutEngine {
       currentY = this.layoutParticipant({
         participant,
         process,
-        plane,
         currentY,
         allShapesMap,
         allShapes,
         allEdges,
         allLanes,
+        allPools,
       });
     }
+
+    alignVerticallyStackedPaths({
+      definitions,
+      collaboration,
+      allShapesMap,
+      allShapes,
+      allEdges,
+      allLanes,
+      allPools,
+    });
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,
@@ -166,6 +185,15 @@ export class LayoutEngine {
       edges: allEdges,
       lanes: allLanes,
     });
+
+    for (const pool of allPools) {
+      this.diGenerator.addShape(plane, pool.element, pool.bounds);
+      if (pool.lanes) {
+        for (const lane of pool.lanes) {
+          this.diGenerator.addShape(plane, lane.element, lane.bounds);
+        }
+      }
+    }
 
     for (const s of allShapes) {
       this.diGenerator.addShape(plane, s.element, {
@@ -184,10 +212,18 @@ export class LayoutEngine {
   }
 
   private layoutParticipant(params: ParticipantLayoutParams): number {
-    const { participant, process, plane, currentY, allShapesMap, allShapes, allEdges, allLanes } =
-      params;
+    const {
+      participant,
+      process,
+      currentY,
+      allShapesMap,
+      allShapes,
+      allEdges,
+      allLanes,
+      allPools,
+    } = params;
     if (!process) {
-      const poolBounds = this.layoutBlackBoxPool(participant, currentY, plane);
+      const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
       allShapesMap.set(participant.id, poolBounds);
       return currentY + 160;
     }
@@ -213,10 +249,10 @@ export class LayoutEngine {
       participant,
       process,
       result,
-      plane,
       currentY,
       hasLanes,
       allLanes,
+      allPools,
     });
 
     allShapesMap.set(participant.id, poolBounds);
@@ -229,14 +265,14 @@ export class LayoutEngine {
     return currentY + poolBounds.height + 60;
   }
 
-  private layoutBlackBoxPool(participant: any, currentY: number, plane: any): Bounds {
+  private layoutBlackBoxPool(participant: any, currentY: number, allPools?: PoolEntry[]): Bounds {
     const poolBounds: Bounds = { x: 100, y: currentY, width: 400, height: 100 };
-    this.diGenerator.addShape(plane, participant, poolBounds);
+    allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
   }
 
   private createPoolAndLanes(params: PoolAndLanesParams): Bounds {
-    const { participant, process, result, plane, currentY, hasLanes, allLanes } = params;
+    const { participant, process, result, currentY, hasLanes, allLanes, allPools } = params;
     if (hasLanes) {
       const laneStartX = 130;
       const laneWidth = Math.max(400, result.width + 30);
@@ -254,10 +290,7 @@ export class LayoutEngine {
         height: laneResult.totalHeight,
       };
 
-      this.diGenerator.addShape(plane, participant, poolBounds);
-      for (const lane of laneResult.lanes) {
-        this.diGenerator.addShape(plane, lane.element, lane.bounds);
-      }
+      allPools?.push({ element: participant, bounds: poolBounds, lanes: laneResult.lanes });
       allLanes?.push(...laneResult.lanes);
       return poolBounds;
     }
@@ -268,7 +301,7 @@ export class LayoutEngine {
       width: Math.max(400, result.width + 100),
       height: Math.max(120, result.height + 40),
     };
-    this.diGenerator.addShape(plane, participant, poolBounds);
+    allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
   }
 
