@@ -3,6 +3,13 @@ import type { Bounds, Point } from './types';
 
 export interface ShapeConfig extends Bounds {
   isExpanded?: boolean;
+  labelBounds?: Bounds;
+}
+
+export interface EdgeConfig {
+  bpmnElement: any;
+  waypoints: Point[];
+  labelBounds?: Bounds;
 }
 
 export class DiGenerator {
@@ -65,12 +72,25 @@ export class DiGenerator {
       shapeProps.isExpanded = config.isExpanded;
     }
 
+    if (config.labelBounds) {
+      const dcLabelBounds = this.moddle.create('dc:Bounds', {
+        x: config.labelBounds.x,
+        y: config.labelBounds.y,
+        width: config.labelBounds.width,
+        height: config.labelBounds.height,
+      });
+      shapeProps.label = this.moddle.create('bpmndi:BPMNLabel', {
+        bounds: dcLabelBounds,
+      });
+    }
+
     const shape = this.moddle.create('bpmndi:BPMNShape', shapeProps);
     plane.planeElement.push(shape);
     return shape;
   }
 
-  public addEdge(plane: any, bpmnElement: any, waypoints: Point[]): any {
+  public addEdge(plane: any, config: EdgeConfig): any {
+    const { bpmnElement, waypoints, labelBounds } = config;
     const diWaypoints = waypoints.map((pt) =>
       this.moddle.create('dc:Point', {
         x: pt.x,
@@ -78,11 +98,25 @@ export class DiGenerator {
       })
     );
 
-    const edge = this.moddle.create('bpmndi:BPMNEdge', {
+    const edgeProps: Record<string, any> = {
       id: `${bpmnElement.id}_di`,
       bpmnElement,
       waypoint: diWaypoints,
-    });
+    };
+
+    if (labelBounds) {
+      const dcLabelBounds = this.moddle.create('dc:Bounds', {
+        x: labelBounds.x,
+        y: labelBounds.y,
+        width: labelBounds.width,
+        height: labelBounds.height,
+      });
+      edgeProps.label = this.moddle.create('bpmndi:BPMNLabel', {
+        bounds: dcLabelBounds,
+      });
+    }
+
+    const edge = this.moddle.create('bpmndi:BPMNEdge', edgeProps);
     plane.planeElement.push(edge);
     return edge;
   }

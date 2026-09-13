@@ -6,6 +6,7 @@ import {
   routeMessageFlow,
   isMessageCorridorBlocked,
 } from './hierarchy/swimlane-layout';
+import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/label-layout';
 import type { AutoLayoutOptions, Bounds } from './types';
 
 interface ParticipantLayoutParams {
@@ -14,6 +15,9 @@ interface ParticipantLayoutParams {
   plane: any;
   currentY: number;
   allShapesMap: Map<string, Bounds>;
+  allShapes: PlacedShape[];
+  allEdges: PlacedEdge[];
+  allLanes: Array<{ element: any; bounds: Bounds }>;
 }
 
 interface PoolAndLanesParams {
@@ -23,6 +27,7 @@ interface PoolAndLanesParams {
   plane: any;
   currentY: number;
   hasLanes: boolean;
+  allLanes?: Array<{ element: any; bounds: Bounds }>;
 }
 
 export class LayoutEngine {
@@ -84,14 +89,28 @@ export class LayoutEngine {
         edges: result.edges,
       });
 
+      layoutAllLabels({
+        shapes: result.shapes,
+        edges: result.edges,
+        lanes: laneResult.lanes,
+      });
+
       for (const lane of laneResult.lanes) {
         this.diGenerator.addShape(plane, lane.element, lane.bounds);
       }
       for (const s of result.shapes) {
-        this.diGenerator.addShape(plane, s.element, { ...s.bounds, isExpanded: s.isExpanded });
+        this.diGenerator.addShape(plane, s.element, {
+          ...s.bounds,
+          isExpanded: s.isExpanded,
+          labelBounds: s.labelBounds,
+        });
       }
       for (const e of result.edges) {
-        this.diGenerator.addEdge(plane, e.element, e.waypoints);
+        this.diGenerator.addEdge(plane, {
+          bpmnElement: e.element,
+          waypoints: e.waypoints,
+          labelBounds: e.labelBounds,
+        });
       }
 
       startY += Math.max(result.height, laneResult.totalHeight) + 60;
@@ -101,6 +120,9 @@ export class LayoutEngine {
   private layoutCollaboration(definitions: any, collaboration: any, plane: any): void {
     const participants = collaboration.participants || [];
     const allShapesMap = new Map<string, Bounds>();
+    const allShapes: PlacedShape[] = [];
+    const allEdges: PlacedEdge[] = [];
+    const allLanes: Array<{ element: any; bounds: Bounds }> = [];
     let currentY = 80;
 
     for (const participant of participants) {
@@ -112,17 +134,43 @@ export class LayoutEngine {
         plane,
         currentY,
         allShapesMap,
+        allShapes,
+        allEdges,
+        allLanes,
       });
     }
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,
       participants,
+      edges: allEdges,
     });
+
+    layoutAllLabels({
+      shapes: allShapes,
+      edges: allEdges,
+      lanes: allLanes,
+    });
+
+    for (const s of allShapes) {
+      this.diGenerator.addShape(plane, s.element, {
+        ...s.bounds,
+        isExpanded: s.isExpanded,
+        labelBounds: s.labelBounds,
+      });
+    }
+    for (const e of allEdges) {
+      this.diGenerator.addEdge(plane, {
+        bpmnElement: e.element,
+        waypoints: e.waypoints,
+        labelBounds: e.labelBounds,
+      });
+    }
   }
 
   private layoutParticipant(params: ParticipantLayoutParams): number {
-    const { participant, process, plane, currentY, allShapesMap } = params;
+    const { participant, process, plane, currentY, allShapesMap, allShapes, allEdges, allLanes } =
+      params;
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, plane);
       allShapesMap.set(participant.id, poolBounds);
@@ -153,16 +201,15 @@ export class LayoutEngine {
       plane,
       currentY,
       hasLanes,
+      allLanes,
     });
 
     allShapesMap.set(participant.id, poolBounds);
     for (const s of result.shapes) {
-      this.diGenerator.addShape(plane, s.element, { ...s.bounds, isExpanded: s.isExpanded });
       allShapesMap.set(s.element.id, s.bounds);
     }
-    for (const e of result.edges) {
-      this.diGenerator.addEdge(plane, e.element, e.waypoints);
-    }
+    allShapes.push(...result.shapes);
+    allEdges.push(...result.edges);
 
     return currentY + poolBounds.height + 60;
   }
@@ -174,7 +221,7 @@ export class LayoutEngine {
   }
 
   private createPoolAndLanes(params: PoolAndLanesParams): Bounds {
-    const { participant, process, result, plane, currentY, hasLanes } = params;
+    const { participant, process, result, plane, currentY, hasLanes, allLanes } = params;
     if (hasLanes) {
       const laneStartX = 130;
       const laneWidth = Math.max(400, result.width + 30);
@@ -196,6 +243,7 @@ export class LayoutEngine {
       for (const lane of laneResult.lanes) {
         this.diGenerator.addShape(plane, lane.element, lane.bounds);
       }
+      allLanes?.push(...laneResult.lanes);
       return poolBounds;
     }
 
@@ -212,7 +260,7 @@ export class LayoutEngine {
   private routeAllMessageFlows(
     messageFlows: any[],
     allShapesMap: Map<string, Bounds>,
-    options: { plane: any; participants: any[] }
+    options: { plane: any; participants: any[]; edges: PlacedEdge[] }
   ): void {
     const participantIds = new Set(options.participants.map((p: any) => p.id));
     const poolBoundsList = options.participants
@@ -255,7 +303,7 @@ export class LayoutEngine {
           interPoolChannelY,
           targetPortX,
         });
-        this.diGenerator.addEdge(options.plane, flow, waypoints);
+        options.edges.push({ element: flow, waypoints });
       }
     }
   }

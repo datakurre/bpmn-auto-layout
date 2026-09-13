@@ -17,8 +17,18 @@ export interface ScopeLayoutResult {
   height: number;
   minX: number;
   minY: number;
-  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+  shapes: Array<{
+    element: any;
+    bounds: Bounds;
+    isExpanded?: boolean;
+    labelBounds?: Bounds;
+  }>;
+  edges: Array<{
+    element: any;
+    waypoints: Point[];
+    isFeedback?: boolean;
+    labelBounds?: Bounds;
+  }>;
 }
 
 interface LayoutContext {

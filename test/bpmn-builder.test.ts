@@ -86,7 +86,12 @@ describe('BpmnBuilder', () => {
     builder.addTask('Task_1');
     builder.addParticipant('Participant_1', 'Process_1', 'Pool 1');
     builder.addParticipant('Participant_2', 'External_Process', 'Pool 2');
-    builder.addMessageFlow('Msg_1', 'Task_1', 'Participant_2');
+    builder.addMessageFlow({
+      id: 'Msg_1',
+      sourceRef: 'Task_1',
+      targetRef: 'Participant_2',
+      name: 'Invoice Message',
+    });
     builder.addMessageFlow('Msg_2', 'Unknown_Src', 'Unknown_Tgt');
 
     const xml = await builder.toXml();
@@ -94,6 +99,7 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('Participant_1');
     expect(xml).toContain('Participant_2');
     expect(xml).toContain('Msg_1');
+    expect(xml).toContain('name="Invoice Message"');
     expect(xml).toContain('Msg_2');
   });
 

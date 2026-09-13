@@ -93,8 +93,20 @@
       <bpmndi:BPMNShape id="Lane_Finance_di" bpmnElement="Lane_Finance">
         <dc:Bounds x="130" y="200" width="1292" height="120" />
       </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Supplier_di" bpmnElement="Pool_Supplier">
+        <dc:Bounds x="100" y="380" width="1176" height="360" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales">
+        <dc:Bounds x="130" y="380" width="1146" height="240" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Logistics_di" bpmnElement="Lane_Logistics">
+        <dc:Bounds x="130" y="620" width="1146" height="120" />
+      </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Start_di" bpmnElement="Buyer_Start">
         <dc:Bounds x="180" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="154" y="168" width="88" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Draft_PO_di" bpmnElement="Buyer_Draft_PO">
         <dc:Bounds x="276" y="100" width="100" height="80" />
@@ -104,9 +116,15 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Gateway_Terms_di" bpmnElement="Buyer_Gateway_Terms">
         <dc:Bounds x="596" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="590" y="95" width="62" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Cancel_End_di" bpmnElement="Buyer_Cancel_End">
         <dc:Bounds x="738" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="695" y="168" width="122" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Receive_Notice_di" bpmnElement="Buyer_Receive_Notice">
         <dc:Bounds x="866" y="100" width="100" height="80" />
@@ -116,12 +134,51 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_End_Success_di" bpmnElement="Buyer_End_Success">
         <dc:Bounds x="1346" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1301" y="98" width="126" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Issue_Guarantee_di" bpmnElement="Buyer_Issue_Guarantee">
         <dc:Bounds x="706" y="220" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Buyer_Process_Invoice_di" bpmnElement="Buyer_Process_Invoice">
         <dc:Bounds x="1186" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Check_Capacity_di" bpmnElement="Supplier_Check_Capacity">
+        <dc:Bounds x="180" y="460" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Gateway_Price_di" bpmnElement="Supplier_Gateway_Price">
+        <dc:Bounds x="340" y="475" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="396" y="493" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Draft_Quote_di" bpmnElement="Supplier_Draft_Quote">
+        <dc:Bounds x="450" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Confirm_Order_di" bpmnElement="Supplier_Confirm_Order">
+        <dc:Bounds x="450" y="520" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Gateway_Produce_Merge_di" bpmnElement="Supplier_Gateway_Produce_Merge">
+        <dc:Bounds x="610" y="655" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="594" y="711" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Produce_di" bpmnElement="Supplier_Produce">
+        <dc:Bounds x="720" y="640" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Dispatch_di" bpmnElement="Supplier_Dispatch">
+        <dc:Bounds x="880" y="640" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_Send_Invoice_di" bpmnElement="Supplier_Send_Invoice">
+        <dc:Bounds x="1040" y="640" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Supplier_End_di" bpmnElement="Supplier_End">
+        <dc:Bounds x="1200" y="662" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1177" y="708" width="82" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="BF_Reject_di" bpmnElement="BF_Reject">
         <di:waypoint x="646" y="140" />
@@ -166,42 +223,6 @@
         <di:waypoint x="1316" y="140" />
         <di:waypoint x="1346" y="140" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNShape id="Pool_Supplier_di" bpmnElement="Pool_Supplier">
-        <dc:Bounds x="100" y="380" width="1176" height="360" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales">
-        <dc:Bounds x="130" y="380" width="1146" height="240" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Lane_Logistics_di" bpmnElement="Lane_Logistics">
-        <dc:Bounds x="130" y="620" width="1146" height="120" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Check_Capacity_di" bpmnElement="Supplier_Check_Capacity">
-        <dc:Bounds x="180" y="460" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Gateway_Price_di" bpmnElement="Supplier_Gateway_Price">
-        <dc:Bounds x="340" y="475" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Draft_Quote_di" bpmnElement="Supplier_Draft_Quote">
-        <dc:Bounds x="450" y="400" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Confirm_Order_di" bpmnElement="Supplier_Confirm_Order">
-        <dc:Bounds x="450" y="520" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Gateway_Produce_Merge_di" bpmnElement="Supplier_Gateway_Produce_Merge">
-        <dc:Bounds x="610" y="655" width="50" height="50" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Produce_di" bpmnElement="Supplier_Produce">
-        <dc:Bounds x="720" y="640" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Dispatch_di" bpmnElement="Supplier_Dispatch">
-        <dc:Bounds x="880" y="640" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_Send_Invoice_di" bpmnElement="Supplier_Send_Invoice">
-        <dc:Bounds x="1040" y="640" width="100" height="80" />
-      </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Supplier_End_di" bpmnElement="Supplier_End">
-        <dc:Bounds x="1200" y="662" width="36" height="36" />
-      </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="SF_Quote_di" bpmnElement="SF_Quote">
         <di:waypoint x="365" y="475" />
         <di:waypoint x="365" y="440" />

@@ -34,6 +34,11 @@ export const SUBPROCESS_MIN_HEIGHT = 160;
 export const LANE_MIN_HEIGHT = 120;
 export const LANE_HEADER_WIDTH = 30;
 export const POOL_PADDING = 20;
+export const EVENT_LABEL_MARGIN = 10;
+export const GATEWAY_LABEL_MARGIN = 6;
+export const ARTIFACT_LABEL_MARGIN = 10;
+export const FLOW_LABEL_MARGIN = 10;
+export const LABEL_LINE_HEIGHT = 14;
 
 export function getElementDimensions(elementType: string): ElementDimension {
   const dimension = DEFAULT_DIMENSIONS[elementType];

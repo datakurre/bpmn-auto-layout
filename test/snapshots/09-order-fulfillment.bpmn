@@ -15,11 +15,11 @@
     <bpmn:task id="Task_Reserve_Stock" name="Reserve Items" />
     <bpmn:parallelGateway id="Join_Parallel" name="Sync Checks" />
     <bpmn:subProcess id="Sub_Fulfillment" name="Fulfillment &#38; Packing">
-      <bpmn:startEvent id="Sub_Start" name="Fulfillment Start" />
+      <bpmn:startEvent id="Sub_Start" name="Fulfillment&#10;Start" />
       <bpmn:task id="Sub_Pick" name="Pick Items from Warehouse" />
       <bpmn:task id="Sub_Pack" name="Package Goods" />
       <bpmn:task id="Sub_Label" name="Print Shipping Label" />
-      <bpmn:endEvent id="Sub_End" name="Ready to Ship" />
+      <bpmn:endEvent id="Sub_End" name="Ready&#10;to&#10;Ship" />
       <bpmn:sequenceFlow id="SF1" sourceRef="Sub_Start" targetRef="Sub_Pick" />
       <bpmn:sequenceFlow id="SF2" sourceRef="Sub_Pick" targetRef="Sub_Pack" />
       <bpmn:sequenceFlow id="SF3" sourceRef="Sub_Pack" targetRef="Sub_Label" />
@@ -51,33 +51,51 @@
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Proc_Order">
       <bpmndi:BPMNShape id="Start_Order_di" bpmnElement="Start_Order">
         <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="77" y="168" width="82" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Validate_di" bpmnElement="Task_Validate">
         <dc:Bounds x="196" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Split_Parallel_di" bpmnElement="Split_Parallel">
         <dc:Bounds x="356" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="346" y="171" width="70" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Auth_Payment_di" bpmnElement="Task_Auth_Payment">
         <dc:Bounds x="466" y="40" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Payment_di" bpmnElement="Gateway_Payment">
         <dc:Bounds x="651" y="55" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="639" y="111" width="74" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Payment_Failed_di" bpmnElement="Task_Payment_Failed">
         <dc:Bounds x="786" y="-20" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Order_Cancelled_di" bpmnElement="End_Order_Cancelled">
         <dc:Bounds x="978" y="2" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="953" y="48" width="86" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Stock_Merge_di" bpmnElement="Gateway_Stock_Merge">
         <dc:Bounds x="491" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="393" y="193" width="92" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Check_Stock_di" bpmnElement="Task_Check_Stock">
         <dc:Bounds x="626" y="160" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Stock_di" bpmnElement="Gateway_Stock">
         <dc:Bounds x="811" y="175" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="867" y="193" width="52" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Backorder_di" bpmnElement="Task_Backorder">
         <dc:Bounds x="946" y="220" width="100" height="80" />
@@ -87,12 +105,18 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Join_Parallel_di" bpmnElement="Join_Parallel">
         <dc:Bounds x="1106" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1095" y="171" width="72" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Fulfillment_di" bpmnElement="Sub_Fulfillment" isExpanded="true">
         <dc:Bounds x="1216" y="60" width="672" height="160" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
         <dc:Bounds x="1246" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1232" y="163" width="60" height="28" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Pick_di" bpmnElement="Sub_Pick">
         <dc:Bounds x="1342" y="95" width="100" height="80" />
@@ -105,6 +129,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
         <dc:Bounds x="1822" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1820" y="163" width="36" height="40" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Update_ERP_di" bpmnElement="Task_Update_ERP">
         <dc:Bounds x="1948" y="100" width="100" height="80" />
@@ -114,6 +141,9 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Order_Fulfilled_di" bpmnElement="End_Order_Fulfilled">
         <dc:Bounds x="2268" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2245" y="168" width="82" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="SF1_di" bpmnElement="SF1">
         <di:waypoint x="1282" y="135" />

@@ -1,5 +1,12 @@
 import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 
+export interface FlowConfig {
+  id: string;
+  sourceRef: string;
+  targetRef: string;
+  name?: string;
+}
+
 export class BpmnBuilder {
   private moddle: BPMNModdle;
   private definitions: any;
@@ -207,14 +214,28 @@ export class BpmnBuilder {
     return this;
   }
 
-  public addSequenceFlow(id: string, sourceRef: string, targetRef: string): this {
-    const source = this.elementMap.get(sourceRef);
-    const target = this.elementMap.get(targetRef);
-    const flow = this.moddle.create('bpmn:SequenceFlow', {
+  public addSequenceFlow(
+    idOrConfig: string | FlowConfig,
+    sourceRef?: string,
+    targetRef?: string
+  ): this {
+    const isObj = typeof idOrConfig === 'object';
+    const id = isObj ? idOrConfig.id : idOrConfig;
+    const srcId = isObj ? idOrConfig.sourceRef : sourceRef!;
+    const tgtId = isObj ? idOrConfig.targetRef : targetRef!;
+    const name = isObj ? idOrConfig.name : undefined;
+
+    const source = this.elementMap.get(srcId);
+    const target = this.elementMap.get(tgtId);
+    const props: Record<string, any> = {
       id,
       sourceRef: source,
       targetRef: target,
-    });
+    };
+    if (name) {
+      props.name = name;
+    }
+    const flow = this.moddle.create('bpmn:SequenceFlow', props);
     this.process.flowElements.push(flow);
     this.elementMap.set(id, flow);
     return this;
@@ -263,15 +284,29 @@ export class BpmnBuilder {
     return this;
   }
 
-  public addMessageFlow(id: string, sourceRef: string, targetRef: string): this {
+  public addMessageFlow(
+    idOrConfig: string | FlowConfig,
+    sourceRef?: string,
+    targetRef?: string
+  ): this {
     this.addCollaboration();
-    const source = this.elementMap.get(sourceRef);
-    const target = this.elementMap.get(targetRef);
-    const messageFlow = this.moddle.create('bpmn:MessageFlow', {
+    const isObj = typeof idOrConfig === 'object';
+    const id = isObj ? idOrConfig.id : idOrConfig;
+    const srcId = isObj ? idOrConfig.sourceRef : sourceRef!;
+    const tgtId = isObj ? idOrConfig.targetRef : targetRef!;
+    const name = isObj ? idOrConfig.name : undefined;
+
+    const source = this.elementMap.get(srcId);
+    const target = this.elementMap.get(tgtId);
+    const props: Record<string, any> = {
       id,
-      sourceRef: source || sourceRef,
-      targetRef: target || targetRef,
-    });
+      sourceRef: source || srcId,
+      targetRef: target || tgtId,
+    };
+    if (name) {
+      props.name = name;
+    }
+    const messageFlow = this.moddle.create('bpmn:MessageFlow', props);
     this.collaboration.messageFlows.push(messageFlow);
     this.elementMap.set(id, messageFlow);
     return this;

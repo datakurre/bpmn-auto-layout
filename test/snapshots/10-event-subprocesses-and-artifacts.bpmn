@@ -20,11 +20,11 @@
     <bpmn:dataObjectReference id="Doc_Packet" name="Loan Dossier" />
     <bpmn:dataStoreReference id="Store_CoreDB" name="Core Banking DB" />
     <bpmn:subProcess id="EventSub_Cancel" name="Cancellation Handler" triggeredByEvent="true">
-      <bpmn:startEvent id="Start_Cancel" name="Client Cancellation">
+      <bpmn:startEvent id="Start_Cancel" name="Client&#10;Cancellation">
         <bpmn:messageEventDefinition />
       </bpmn:startEvent>
       <bpmn:task id="Task_Cleanup" name="Clean Temporary Files" />
-      <bpmn:endEvent id="End_Cancelled" name="Process Terminated">
+      <bpmn:endEvent id="End_Cancelled" name="Process&#10;Terminated">
         <bpmn:terminateEventDefinition />
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="SubF1" sourceRef="Start_Cancel" targetRef="Task_Cleanup" />
@@ -42,12 +42,18 @@
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_Integration">
       <bpmndi:BPMNShape id="Start_Req_di" bpmnElement="Start_Req">
         <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="75" y="168" width="86" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Ingest_di" bpmnElement="Task_Ingest">
         <dc:Bounds x="196" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Check_di" bpmnElement="Gate_Check">
         <dc:Bounds x="356" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="412" y="133" width="58" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Standard_di" bpmnElement="Task_Standard">
         <dc:Bounds x="466" y="40" width="100" height="80" />
@@ -57,18 +63,30 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Merge_di" bpmnElement="Gate_Merge">
         <dc:Bounds x="626" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="550" y="133" width="70" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Archive_di" bpmnElement="Task_Archive">
         <dc:Bounds x="736" y="100" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Complete_di" bpmnElement="End_Complete">
         <dc:Bounds x="896" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="877" y="168" width="74" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Doc_Packet_di" bpmnElement="Doc_Packet">
         <dc:Bounds x="228" y="20" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="210" y="-4" width="72" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Store_CoreDB_di" bpmnElement="Store_CoreDB">
         <dc:Bounds x="761" y="210" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="741" y="270" width="90" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Note_Criteria_di" bpmnElement="Note_Criteria">
         <dc:Bounds x="466" y="-20" width="100" height="30" />
@@ -78,15 +96,24 @@
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Start_Cancel_di" bpmnElement="Start_Cancel">
         <dc:Bounds x="130" y="377" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="112" y="423" width="68" height="28" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Cleanup_di" bpmnElement="Task_Cleanup">
         <dc:Bounds x="226" y="355" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
         <dc:Bounds x="386" y="377" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="371" y="423" width="62" height="28" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Doc_Policy_di" bpmnElement="Doc_Policy">
         <dc:Bounds x="492" y="320" width="36" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="458" y="380" width="104" height="14" />
+        </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="F3_di" bpmnElement="F3">
         <di:waypoint x="381" y="115" />
