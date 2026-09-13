@@ -9,7 +9,7 @@ import {
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
-import { insertDummyNodes, routeEdgeThroughDummyChain, boundsCenter } from '../graph/dummy-nodes';
+import { insertDummyNodes } from '../graph/dummy-nodes';
 import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
 import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
 import {
@@ -159,7 +159,6 @@ export interface ScopeRouteContext {
   boundaryEvents: any[];
   boundsMap: Map<string, Bounds>;
   feedbackEdges?: Set<string>;
-  edgeDummyChains?: Map<string, string[]>;
 }
 
 interface PartitionedFlows {
@@ -440,33 +439,7 @@ function routeScopeEdges(
   const inEdges = routeAllGatewayIncomingFlows(gatewayIncomingFlows, gwCtx);
   const otherEdges = routeOtherFlows(otherFlows, ctx.boundaryEvents, allBounds);
 
-  const routedEdges = [...outEdges, ...inEdges, ...otherEdges];
-  return applyDummyChainRouting(routedEdges, ctx, allBounds);
-}
-
-function applyDummyChainRouting(
-  edges: Array<{ element: any; waypoints: Point[] }>,
-  ctx: ScopeRouteContext,
-  allBounds: Bounds[]
-): Array<{ element: any; waypoints: Point[] }> {
-  const edgeDummyChains = ctx.edgeDummyChains;
-  if (!edgeDummyChains || edgeDummyChains.size === 0) {
-    return edges;
-  }
-
-  return edges.map((e) => {
-    const chain = edgeDummyChains.get(e.element.id);
-    if (!chain || chain.length === 0 || e.waypoints.length < 2) {
-      return e;
-    }
-    // Every id in the chain was added to the same augmented graph that
-    // produced boundsMap, so each one is guaranteed a bounds entry.
-    const dummyPoints = chain.map((id) => boundsCenter(ctx.boundsMap.get(id)!));
-    const first = e.waypoints[0];
-    const last = e.waypoints[e.waypoints.length - 1];
-    const waypoints = routeEdgeThroughDummyChain([first, ...dummyPoints, last], allBounds);
-    return { element: e.element, waypoints };
-  });
+  return [...outEdges, ...inEdges, ...otherEdges];
 }
 
 function buildScopeGraph(
@@ -620,7 +593,7 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const ranks = assignLayers(graph, feedbackEdges);
   const nodeToLane = extractNodeToLaneMap(scopeElement);
 
-  const { augmentedGraph, augmentedRanks, edgeDummyChains } = insertDummyNodes(graph, ranks, {
+  const { augmentedGraph, augmentedRanks } = insertDummyNodes(graph, ranks, {
     feedbackEdges,
   });
 
@@ -656,7 +629,6 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
     boundaryEvents,
     boundsMap,
     feedbackEdges,
-    edgeDummyChains,
   });
   for (const e of routedEdges) {
     edges.push({

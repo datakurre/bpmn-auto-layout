@@ -178,10 +178,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_OK_di" bpmnElement="F_Pay_OK">
         <di:waypoint x="701" y="120" />
-        <di:waypoint x="806" y="120" />
-        <di:waypoint x="806" y="180" />
-        <di:waypoint x="1101" y="180" />
-        <di:waypoint x="1101" y="275" />
+        <di:waypoint x="1131" y="120" />
         <di:waypoint x="1131" y="275" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_To_Check_di" bpmnElement="F_Stock_To_Check">
