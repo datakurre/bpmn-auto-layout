@@ -3,6 +3,7 @@ import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import {
   estimateLabelDimensions,
+  estimateTextAnnotationDimensions,
   estimateWordWidth,
   computeLabelVisualShift,
   generateTextWrapCandidates,
@@ -61,6 +62,37 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       const specialChars = estimateLabelDimensions('M W i j l r t f I 1 2 3 ! ?');
       expect(specialChars.height).toBe(14);
       expect(specialChars.width).toBeGreaterThanOrEqual(20);
+    });
+
+    it('estimates text annotation dimensions accounting for word wrapping and padding', () => {
+      expect(estimateTextAnnotationDimensions(undefined)).toEqual({ width: 100, height: 30 });
+      expect(estimateTextAnnotationDimensions('')).toEqual({ width: 100, height: 30 });
+      expect(estimateTextAnnotationDimensions('   ')).toEqual({ width: 100, height: 30 });
+
+      const single = estimateTextAnnotationDimensions('Simple note');
+      expect(single.width).toBe(100);
+      expect(single.height).toBe(30);
+
+      const criteria = estimateTextAnnotationDimensions('Check credit score and collateral');
+      expect(criteria.width).toBe(100);
+      expect(criteria.height).toBe(58);
+
+      const multiline = estimateTextAnnotationDimensions('Line 1\n\nLine 2\nLine 3');
+      expect(multiline.height).toBeGreaterThanOrEqual(58);
+
+      const customWidth200 = estimateTextAnnotationDimensions(
+        'A somewhat longer text annotation note',
+        200
+      );
+      expect(customWidth200.width).toBe(200);
+      expect(customWidth200.height).toBe(44);
+
+      const customWidth300 = estimateTextAnnotationDimensions(
+        'A somewhat longer text annotation note',
+        300
+      );
+      expect(customWidth300.width).toBe(300);
+      expect(customWidth300.height).toBe(30);
     });
 
     it('generates balanced text wrap candidates for single and multi-word labels', () => {
@@ -660,8 +692,10 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       });
 
       expect(boundaryShape.labelBounds).toBeDefined();
-      // Should be placed to the right with y = cy + 2 = 182 (strictly below task border at 180)
-      expect(boundaryShape.labelBounds!.y).toBe(182);
+      // Should be placed to the right with y = bounds.y + bounds.height + margin = 208 (strictly below task border at 180 and 10px below boundary circle)
+      expect(boundaryShape.labelBounds!.y).toBe(
+        boundaryShape.bounds.y + boundaryShape.bounds.height + EVENT_LABEL_MARGIN
+      );
       expect(boundaryShape.labelBounds!.x).toBeGreaterThanOrEqual(132 + 36);
     });
 

@@ -1,6 +1,14 @@
 import { getElementDimensions } from '../di-constants';
-import type { Bounds, Point } from '../types';
+import { estimateTextAnnotationDimensions } from '../graph/label-layout';
+import type { Bounds, ElementDimension, Point } from '../types';
 import { getRefId } from './subprocess-layout';
+
+export function getArtifactDimensions(artifact: any): ElementDimension {
+  if (artifact.$type === 'bpmn:TextAnnotation') {
+    return estimateTextAnnotationDimensions(artifact.text || artifact.name);
+  }
+  return getElementDimensions(artifact.$type);
+}
 
 export function isArtifact(el: any): boolean {
   return (
@@ -106,7 +114,7 @@ export function placeArtifactRow(artifacts: any[], config: RowPlacementConfig): 
   if (artifacts.length === 0) {
     return;
   }
-  const dims = artifacts.map((a) => getElementDimensions(a.$type));
+  const dims = artifacts.map((a) => getArtifactDimensions(a));
   const totalWidth = dims.reduce((sum, d) => sum + d.width, 0) + (artifacts.length - 1) * 20;
   let curX = Math.round(config.hostCenterX - totalWidth / 2);
 
@@ -132,7 +140,7 @@ export function placeArtifactSide(
 ): void {
   let curX = hostBounds.x + hostBounds.width + 30;
   for (const art of artifacts) {
-    const dim = getElementDimensions(art.$type);
+    const dim = getArtifactDimensions(art);
     const bounds: Bounds = {
       x: curX,
       y: Math.round(hostBounds.y + (hostBounds.height - dim.height) / 2),

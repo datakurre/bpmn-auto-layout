@@ -5,7 +5,7 @@ import {
   GATEWAY_LABEL_MARGIN,
   LABEL_LINE_HEIGHT,
 } from '../di-constants';
-import type { Bounds, Point } from '../types';
+import type { Bounds, Point, ElementDimension } from '../types';
 
 export interface PlacedShape {
   element: any;
@@ -134,6 +134,43 @@ export function estimateLabelDimensions(text: string): { width: number; height: 
     width += 1;
   }
   let height = lines.length === 1 ? LABEL_LINE_HEIGHT : lines.length * (LABEL_LINE_HEIGHT - 1) + 1;
+  if (height % 2 !== 0) {
+    height += 1;
+  }
+  return { width, height };
+}
+
+export function estimateTextAnnotationDimensions(text?: string, width = 100): ElementDimension {
+  if (!text || text.trim() === '') {
+    return { width, height: 30 };
+  }
+  const maxLineW = width - 14;
+  const rawLines = text.split('\n');
+  let totalLines = 0;
+  for (const rawLine of rawLines) {
+    const trimmed = rawLine.trim();
+    if (!trimmed) {
+      totalLines++;
+      continue;
+    }
+    const words = trimmed.split(/\s+/);
+    let curLineW = 0;
+    let lineWords = 0;
+    for (const w of words) {
+      const wLen = estimateWordWidth(w);
+      const space = lineWords > 0 ? 4 : 0;
+      if (lineWords > 0 && curLineW + space + wLen > maxLineW) {
+        totalLines++;
+        curLineW = wLen;
+        lineWords = 1;
+      } else {
+        curLineW += space + wLen;
+        lineWords++;
+      }
+    }
+    totalLines++;
+  }
+  let height = Math.max(30, Math.round(totalLines * 14.4 + 14));
   if (height % 2 !== 0) {
     height += 1;
   }
@@ -282,14 +319,14 @@ function computeOrthogonalElementBounds(
   if (side === 'right') {
     return {
       x: elementBounds.x + elementBounds.width + margin,
-      y: isBoundary ? cy + 2 : cy - dim.height / 2,
+      y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
       width: dim.width,
       height: dim.height,
     };
   }
   return {
     x: elementBounds.x - margin - dim.width,
-    y: isBoundary ? cy + 2 : cy - dim.height / 2,
+    y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
     width: dim.width,
     height: dim.height,
   };

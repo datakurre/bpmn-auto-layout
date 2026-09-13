@@ -3,6 +3,7 @@ import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
 import { routeAssociationEdge, layoutScope } from '../src/hierarchy/subprocess-layout';
+import { getArtifactDimensions } from '../src/hierarchy/artifact-layout';
 import { expectSnapshotMatch } from './helpers/snapshot-helper';
 
 describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
@@ -79,11 +80,35 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
 
     expect(resultXml).toContain('textAnnotation');
     expect(resultXml).toContain('Requires dual authorization');
+    expect(resultXml).toMatch(
+      /<bpmndi:BPMNShape id="Note_Approval_di"[^>]*>\s*<dc:Bounds [^>]*height="58"/
+    );
 
     const score = await scoreDiagram(resultXml);
     expect(score.isValid).toBe(true);
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+  });
+
+  it('computes artifact dimensions dynamically for text annotations and standard artifacts', () => {
+    expect(getArtifactDimensions({ $type: 'bpmn:DataObjectReference' })).toEqual({
+      width: 36,
+      height: 50,
+    });
+    expect(getArtifactDimensions({ $type: 'bpmn:DataStoreReference' })).toEqual({
+      width: 50,
+      height: 50,
+    });
+    expect(getArtifactDimensions({ $type: 'bpmn:TextAnnotation', text: 'Short note' })).toEqual({
+      width: 100,
+      height: 30,
+    });
+    expect(
+      getArtifactDimensions({
+        $type: 'bpmn:TextAnnotation',
+        name: 'Check credit score and collateral',
+      })
+    ).toEqual({ width: 100, height: 58 });
   });
 
   it('layouts disconnected artifacts stacked below main diagram', async () => {
@@ -151,6 +176,9 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+    expect(resultXml).toMatch(
+      /<bpmndi:BPMNShape id="Note_Criteria_di"[^>]*>\s*<dc:Bounds [^>]*height="58"/
+    );
 
     expectSnapshotMatch(resultXml, '10-event-subprocesses-and-artifacts');
   });

@@ -1,5 +1,6 @@
-import { SUBPROCESS_MIN_HEIGHT, SUBPROCESS_MIN_WIDTH, getElementDimensions } from '../di-constants';
+import { SUBPROCESS_MIN_HEIGHT, SUBPROCESS_MIN_WIDTH } from '../di-constants';
 import type { Bounds, Point } from '../types';
+import { getArtifactDimensions } from './artifact-layout';
 import { offsetAndCollectChildren, type ScopeLayoutResult } from './subprocess-layout';
 
 export function isEventSubProcess(el: any): boolean {
@@ -52,12 +53,11 @@ export function layoutDisconnectedElements(
 
   for (const item of items) {
     const childResult = isEventSubProcess(item) ? ctx.childScopeResults.get(item.id) : undefined;
-    const width = childResult
-      ? Math.max(SUBPROCESS_MIN_WIDTH, childResult.width)
-      : getElementDimensions(item.$type).width;
+    const itemDim = childResult ? undefined : getArtifactDimensions(item);
+    const width = childResult ? Math.max(SUBPROCESS_MIN_WIDTH, childResult.width) : itemDim!.width;
     const height = childResult
       ? Math.max(SUBPROCESS_MIN_HEIGHT, childResult.height)
-      : getElementDimensions(item.$type).height;
+      : itemDim!.height;
 
     if (currentX > rowStartX && currentX + width > rowBoundaryX) {
       currentX = rowStartX;
