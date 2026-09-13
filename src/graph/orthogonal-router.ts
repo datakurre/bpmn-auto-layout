@@ -9,8 +9,13 @@ function hasObstacleBelow(pt: Point, endY: number, ctx: ObstacleCheckContext): b
   if (!ctx.obstacles) {
     return false;
   }
+  // A proper y-interval overlap test, not `b.y >= pt.y`: a one-sided
+  // comparison misses an obstacle whose top edge sits above `pt` but whose
+  // body still overlaps the [pt.y, endY) drop/climb span -- which happens
+  // whenever `pt`'s own node already overlaps that obstacle (a regression this fixes).
   return ctx.obstacles.some(
-    (b) => b !== ctx.ignore && pt.x > b.x && pt.x < b.x + b.width && b.y >= pt.y && b.y < endY
+    (b) =>
+      b !== ctx.ignore && pt.x > b.x && pt.x < b.x + b.width && b.y < endY && b.y + b.height > pt.y
   );
 }
 
@@ -99,6 +104,57 @@ function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteCo
     waypoints.push({ x: tgtBottom.x, y: ctx.channelY }, tgtBottom);
   }
 
+  return waypoints;
+}
+
+interface CollinearDetourContext {
+  sourceBounds: Bounds;
+  targetBounds: Bounds;
+  channelY: number;
+  allBounds?: Bounds[];
+}
+
+/**
+ * Detours a currently-blocked but genuinely forward, currently-collinear
+ * edge into a channel below everything and back up, the same shape of
+ * route `computeFeedbackWaypoints` builds for a true loop-back -- but
+ * anchored at the source's right edge and the target's left edge instead
+ * of their bottom-centers, so a forward edge still visually leaves from
+ * the right and arrives from the left even while detouring (a regression this fixes).
+ * Falling back to bottom-center anchors here would make an ordinary
+ * forward edge read as a loop-back whenever it needs to dodge an obstacle.
+ */
+function computeCollinearDetourWaypoints(
+  srcExit: Point,
+  tgtEntry: Point,
+  ctx: CollinearDetourContext
+): Point[] {
+  const { sourceBounds, targetBounds, channelY, allBounds } = ctx;
+  const waypoints: Point[] = [srcExit];
+
+  const srcBlocked = hasObstacleBelow(srcExit, channelY, {
+    ignore: sourceBounds,
+    obstacles: allBounds,
+  });
+  if (srcBlocked) {
+    const srcStepX = srcExit.x + 20;
+    waypoints.push({ x: srcStepX, y: srcExit.y }, { x: srcStepX, y: channelY });
+  } else {
+    waypoints.push({ x: srcExit.x, y: channelY });
+  }
+
+  const tgtBlocked = hasObstacleBelow(tgtEntry, channelY, {
+    ignore: targetBounds,
+    obstacles: allBounds,
+  });
+  if (tgtBlocked) {
+    const tgtStepX = getClearTargetStepX(targetBounds, channelY, allBounds!);
+    waypoints.push({ x: tgtStepX, y: channelY }, { x: tgtStepX, y: tgtEntry.y });
+  } else {
+    waypoints.push({ x: tgtEntry.x, y: channelY });
+  }
+
+  waypoints.push(tgtEntry);
   return waypoints;
 }
 
@@ -215,8 +271,18 @@ export function routeOrthogonalEdge(
       ) {
         return [srcExit, tgtEntry];
       }
+      // Drop into a channel below everything -- and, critically, check
+      // both the drop and the return leg for obstacles first, the same
+      // way a true feedback/loop-back edge does. An earlier version built
+      // this route by hand with no such check, so it could plow straight
+      // through some unrelated shape on the way back up.
       const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
-      return [srcExit, { x: srcExit.x, y: channelY }, { x: tgtEntry.x, y: channelY }, tgtEntry];
+      return computeCollinearDetourWaypoints(srcExit, tgtEntry, {
+        sourceBounds,
+        targetBounds,
+        channelY,
+        allBounds,
+      });
     }
 
     // Forward S-bend (Manhattan step with 2 bends)

@@ -31,6 +31,47 @@ describe('orthogonal-router', () => {
     ]);
   });
 
+  it('jogs sideways around an obstacle beneath the source before dropping into the channel', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 100, width: 100, height: 80 };
+    const midObstacle: Bounds = { x: 300, y: 120, width: 100, height: 40 };
+    // Straddles srcExit's own drop column (x=200) below the source, e.g. an
+    // overlapping sibling node -- the drop must not run straight through it.
+    const belowSrc: Bounds = { x: 150, y: 180, width: 100, height: 60 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, midObstacle, belowSrc]);
+
+    // channelY = max(180, 180, 160, belowSrc bottom 240) + 40 = 280
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 220, y: 140 },
+      { x: 220, y: 280 },
+      { x: 500, y: 280 },
+      { x: 500, y: 140 },
+    ]);
+  });
+
+  it('jogs sideways around an obstacle beneath the target before climbing back up', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 100, width: 100, height: 80 };
+    const midObstacle: Bounds = { x: 300, y: 120, width: 100, height: 40 };
+    // Straddles tgtEntry's own climb column (x=500) below the target -- the
+    // return leg must not plow through it (a regression this fixes: an earlier
+    // version built this leg with no obstacle check at all).
+    const belowTgt: Bounds = { x: 450, y: 180, width: 100, height: 60 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, midObstacle, belowTgt]);
+
+    // channelY = max(180, 180, 160, belowTgt bottom 240) + 40 = 280
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 200, y: 280 },
+      { x: 420, y: 280 },
+      { x: 420, y: 140 },
+      { x: 500, y: 140 },
+    ]);
+  });
+
   it('routes forward non-collinear connection with gap > 100', () => {
     const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
     const tgt: Bounds = { x: 350, y: 200, width: 100, height: 80 };
