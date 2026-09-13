@@ -98,6 +98,75 @@ describe('Issue #78: Gateway Branch Ordering by Document Order', () => {
     expect(layouted).toBeDefined();
   });
 
+  it('preserves document order for independent disjoint chains regardless of element ID (issue #78 residual)', async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:startEvent id="StartZ" />
+    <bpmn:task id="ZebraTask" />
+    <bpmn:startEvent id="StartA" />
+    <bpmn:task id="AlphaTask" />
+    <bpmn:sequenceFlow id="Flow_Z" sourceRef="StartZ" targetRef="ZebraTask" />
+    <bpmn:sequenceFlow id="Flow_A" sourceRef="StartA" targetRef="AlphaTask" />
+  </bpmn:process>
+</bpmn:definitions>`;
+
+    const layoutedXml = await layoutProcess(xml);
+    const score = await scoreDiagram(layoutedXml);
+    expect(score.isValid).toBe(true);
+
+    const moddle = new BpmnModdle();
+    const { rootElement } = await moddle.fromXML(layoutedXml);
+    const plane = (rootElement as any).diagrams[0].plane;
+
+    const findShape = (id: string) =>
+      plane.planeElement.find((el: any) => el.bpmnElement?.id === id);
+
+    const startZShape = findShape('StartZ');
+    const startAShape = findShape('StartA');
+
+    expect(startZShape).toBeDefined();
+    expect(startAShape).toBeDefined();
+
+    // StartZ is declared first in the document, so it must render above
+    // StartA even though 'StartA' sorts before 'StartZ' alphabetically.
+    expect(startZShape.bounds.y).toBeLessThan(startAShape.bounds.y);
+  });
+
+  it('falls back to id comparison when both track and order are tied', async () => {
+    const { DirectedGraph } = await import('../src/graph/graph');
+    const { assignCoordinates } = await import('../src/graph/coordinate-assignment');
+    const graph = new DirectedGraph();
+    // Two disconnected roots with identical order collide on the same track (0);
+    // resolveRankCollisions must still deterministically separate them by id.
+    graph.addNode('NodeB', { $type: 'bpmn:Task' }, 0);
+    graph.addNode('NodeA', { $type: 'bpmn:Task' }, 0);
+
+    const ranks = new Map<string, number>([
+      ['NodeB', 0],
+      ['NodeA', 0],
+    ]);
+
+    const bounds = assignCoordinates(graph, ranks);
+    expect(bounds.get('NodeA')!.y).toBeLessThan(bounds.get('NodeB')!.y);
+  });
+
+  it('falls back to id comparison when order is undefined on both colliding nodes', async () => {
+    const { DirectedGraph } = await import('../src/graph/graph');
+    const { assignCoordinates } = await import('../src/graph/coordinate-assignment');
+    const graph = new DirectedGraph();
+    graph.addNode('NodeB', { $type: 'bpmn:Task' });
+    graph.addNode('NodeA', { $type: 'bpmn:Task' });
+
+    const ranks = new Map<string, number>([
+      ['NodeB', 0],
+      ['NodeA', 0],
+    ]);
+
+    const bounds = assignCoordinates(graph, ranks);
+    expect(bounds.get('NodeA')!.y).toBeLessThan(bounds.get('NodeB')!.y);
+  });
+
   it('handles all order comparison permutations', async () => {
     const { DirectedGraph } = await import('../src/graph/graph');
     const graph = new DirectedGraph();

@@ -13,7 +13,7 @@
     <bpmn:exclusiveGateway id="Gateway_Stock" name="In Stock?" />
     <bpmn:task id="Task_Backorder" name="Request Backorder" />
     <bpmn:task id="Task_Reserve_Stock" name="Reserve Items" />
-    <bpmn:parallelGateway id="Join_Parallel" name="Sync&#10;Checks" />
+    <bpmn:parallelGateway id="Join_Parallel" name="Sync Checks" />
     <bpmn:subProcess id="Sub_Fulfillment" name="Fulfillment &#38; Packing">
       <bpmn:startEvent id="Sub_Start" name="Fulfillment&#10;Start" />
       <bpmn:task id="Sub_Pick" name="Pick Items from Warehouse" />
@@ -92,21 +92,21 @@
         <dc:Bounds x="626" y="200" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Stock_di" bpmnElement="Gateway_Stock">
-        <dc:Bounds x="811" y="275" width="50" height="50" />
+        <dc:Bounds x="811" y="395" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="753" y="293" width="52" height="14" />
+          <dc:Bounds x="753" y="413" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Backorder_di" bpmnElement="Task_Backorder">
-        <dc:Bounds x="946" y="260" width="100" height="80" />
+        <dc:Bounds x="946" y="380" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Reserve_Stock_di" bpmnElement="Task_Reserve_Stock">
-        <dc:Bounds x="946" y="380" width="100" height="80" />
+        <dc:Bounds x="946" y="500" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Join_Parallel_di" bpmnElement="Join_Parallel">
         <dc:Bounds x="1106" y="275" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1145" y="258" width="42" height="28" />
+          <dc:Bounds x="1028" y="293" width="72" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Fulfillment_di" bpmnElement="Sub_Fulfillment" isExpanded="true">
@@ -178,7 +178,10 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Pay_OK_di" bpmnElement="F_Pay_OK">
         <di:waypoint x="701" y="120" />
-        <di:waypoint x="1131" y="120" />
+        <di:waypoint x="806" y="120" />
+        <di:waypoint x="806" y="180" />
+        <di:waypoint x="1101" y="180" />
+        <di:waypoint x="1101" y="275" />
         <di:waypoint x="1131" y="275" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_To_Check_di" bpmnElement="F_Stock_To_Check">
@@ -186,13 +189,13 @@
         <di:waypoint x="626" y="240" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_Wait_di" bpmnElement="F_Stock_Wait">
-        <di:waypoint x="861" y="300" />
-        <di:waypoint x="946" y="300" />
+        <di:waypoint x="861" y="420" />
+        <di:waypoint x="946" y="420" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_OK_di" bpmnElement="F_Stock_OK">
-        <di:waypoint x="836" y="325" />
-        <di:waypoint x="836" y="420" />
-        <di:waypoint x="946" y="420" />
+        <di:waypoint x="836" y="445" />
+        <di:waypoint x="836" y="540" />
+        <di:waypoint x="946" y="540" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Sync_di" bpmnElement="F_Sync">
         <di:waypoint x="1156" y="300" />
@@ -209,18 +212,18 @@
       <bpmndi:BPMNEdge id="F_Stock_2_di" bpmnElement="F_Stock_2">
         <di:waypoint x="726" y="240" />
         <di:waypoint x="836" y="240" />
-        <di:waypoint x="836" y="275" />
+        <di:waypoint x="836" y="395" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_Retry_di" bpmnElement="F_Stock_Retry">
-        <di:waypoint x="1046" y="300" />
-        <di:waypoint x="1066" y="300" />
-        <di:waypoint x="1066" y="500" />
-        <di:waypoint x="516" y="500" />
+        <di:waypoint x="1046" y="420" />
+        <di:waypoint x="1066" y="420" />
+        <di:waypoint x="1066" y="620" />
+        <di:waypoint x="516" y="620" />
         <di:waypoint x="516" y="265" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Stock_Join_di" bpmnElement="F_Stock_Join">
-        <di:waypoint x="1046" y="420" />
-        <di:waypoint x="1131" y="420" />
+        <di:waypoint x="1046" y="540" />
+        <di:waypoint x="1131" y="540" />
         <di:waypoint x="1131" y="325" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">
