@@ -27,6 +27,12 @@ export interface AutoLayoutOptions {
   gridSpacing?: number;
 
   /**
+   * Whether to allow invalid sequence flows (e.g. cross-container or unresolvable endpoints)
+   * without throwing an error. Defaults to false.
+   */
+  lenientFlowValidation?: boolean;
+
+  /**
    * Additional Moddle extensions to register.
    */
   moddleExtensions?: Record<string, any>;

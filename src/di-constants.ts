@@ -39,6 +39,7 @@ export const GATEWAY_LABEL_MARGIN = 6;
 export const ARTIFACT_LABEL_MARGIN = 10;
 export const FLOW_LABEL_MARGIN = 10;
 export const LABEL_LINE_HEIGHT = 14;
+export const CANVAS_MARGIN = 20;
 
 export function getElementDimensions(elementType: string): ElementDimension {
   const dimension = DEFAULT_DIMENSIONS[elementType];

@@ -7,6 +7,8 @@ import {
   isMessageCorridorBlocked,
 } from './hierarchy/swimlane-layout';
 import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/label-layout';
+import { normalizePlaneOrigin } from './plane-normalization';
+import { validateFlowContainers } from './validation/bpmn-validation';
 import type { AutoLayoutOptions, Bounds } from './types';
 
 interface ParticipantLayoutParams {
@@ -44,6 +46,7 @@ export class LayoutEngine {
   public async layout(xml: string): Promise<string> {
     const { rootElement } = await this.moddle.fromXML(xml);
     const definitions: any = rootElement;
+    validateFlowContainers(definitions, this.options);
     const targetElement = this.selectTargetElement(definitions);
 
     if (!targetElement) {
@@ -62,6 +65,8 @@ export class LayoutEngine {
     } else {
       this.layoutSingleProcesses(definitions, diagram.plane);
     }
+
+    normalizePlaneOrigin(diagram.plane);
 
     const { xml: resultXml } = await this.moddle.toXML(definitions, { format: true });
     return resultXml;

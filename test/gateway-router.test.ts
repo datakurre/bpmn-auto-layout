@@ -758,5 +758,37 @@ describe('gateway-router', () => {
       });
       expect(routes.get('Flow_BackNoBounds')).toBeDefined();
     });
+
+    it('routes right flow to top target port with collinear target', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 }; // centerY = 125
+      const collinearTgt: Bounds = { x: 300, y: 85, width: 100, height: 80 }; // centerY = 125
+      const topTgt: Bounds = { x: 400, y: 200, width: 100, height: 80 };
+      const obstacle: Bounds = { x: 430, y: 100, width: 40, height: 60 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'F_Collinear' }, targetBounds: collinearTgt },
+        { flow: { id: 'F_RightTop' }, targetBounds: topTgt, targetPort: 'top' },
+      ];
+      const routes = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, collinearTgt, topTgt, obstacle],
+        usedPorts: new Set(['top', 'bottom']),
+      });
+      expect(routes.get('F_RightTop')).toBeDefined();
+    });
+
+    it('routes right flow to top target port via stepped path without collinear flow', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 }; // centerY = 125
+      const topTgt: Bounds = { x: 400, y: 200, width: 100, height: 80 };
+      const obstacle: Bounds = { x: 430, y: 100, width: 40, height: 60 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'F_RightTop' }, targetBounds: topTgt, targetPort: 'top' },
+      ];
+      const routes = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, topTgt, obstacle],
+        usedPorts: new Set(['top', 'bottom']),
+      });
+      expect(routes.get('F_RightTop')).toBeDefined();
+    });
   });
 });

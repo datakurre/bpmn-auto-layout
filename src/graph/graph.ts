@@ -1,6 +1,7 @@
 export interface GraphNode {
   id: string;
   data: any;
+  order?: number;
 }
 
 export interface GraphEdge {
@@ -8,6 +9,7 @@ export interface GraphEdge {
   source: string;
   target: string;
   data: any;
+  order?: number;
 }
 
 export class DirectedGraph {
@@ -16,24 +18,31 @@ export class DirectedGraph {
   private outgoing: Map<string, GraphEdge[]> = new Map();
   private incoming: Map<string, GraphEdge[]> = new Map();
 
-  public addNode(id: string, data: any): void {
+  public addNode(id: string, data: any, order?: number): void {
     if (!this.nodes.has(id)) {
-      this.nodes.set(id, { id, data });
+      this.nodes.set(id, { id, data, order });
       this.outgoing.set(id, []);
       this.incoming.set(id, []);
     }
   }
 
   public addEdge(edge: GraphEdge): void {
-    this.edges.set(edge.id, edge);
+    const fullEdge: GraphEdge = {
+      id: edge.id,
+      source: edge.source,
+      target: edge.target,
+      data: edge.data,
+      order: edge.order ?? 0,
+    };
+    this.edges.set(fullEdge.id, fullEdge);
 
-    const outList = this.outgoing.get(edge.source) || [];
-    outList.push(edge);
-    this.outgoing.set(edge.source, outList);
+    const outList = this.outgoing.get(fullEdge.source) || [];
+    outList.push(fullEdge);
+    this.outgoing.set(fullEdge.source, outList);
 
-    const inList = this.incoming.get(edge.target) || [];
-    inList.push(edge);
-    this.incoming.set(edge.target, inList);
+    const inList = this.incoming.get(fullEdge.target) || [];
+    inList.push(fullEdge);
+    this.incoming.set(fullEdge.target, inList);
   }
 
   public getNode(id: string): GraphNode | undefined {
@@ -50,11 +59,21 @@ export class DirectedGraph {
 
   public outEdges(nodeId: string): GraphEdge[] {
     const list = this.outgoing.get(nodeId) || [];
-    return [...list].sort((a, b) => a.id.localeCompare(b.id));
+    return [...list].sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order! - b.order!;
+      }
+      return a.id.localeCompare(b.id);
+    });
   }
 
   public inEdges(nodeId: string): GraphEdge[] {
     const list = this.incoming.get(nodeId) || [];
-    return [...list].sort((a, b) => a.id.localeCompare(b.id));
+    return [...list].sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order! - b.order!;
+      }
+      return a.id.localeCompare(b.id);
+    });
   }
 }

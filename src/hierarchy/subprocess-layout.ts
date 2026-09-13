@@ -431,17 +431,19 @@ function buildScopeGraph(
   sequenceFlows: any[]
 ): DirectedGraph {
   const graph = new DirectedGraph();
-  for (const node of regularNodes) {
-    graph.addNode(node.id, node);
+  for (let i = 0; i < regularNodes.length; i++) {
+    const node = regularNodes[i];
+    graph.addNode(node.id, node, i);
   }
-  addBoundaryEventEdges(graph, boundaryEvents);
+  addBoundaryEventEdges(graph, boundaryEvents, regularNodes.length);
   addSequenceFlowEdges(graph, sequenceFlows);
   return graph;
 }
 
-function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[]): void {
-  for (const bEvent of boundaryEvents) {
-    graph.addNode(bEvent.id, bEvent);
+function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[], startOrder = 0): void {
+  for (let i = 0; i < boundaryEvents.length; i++) {
+    const bEvent = boundaryEvents[i];
+    graph.addNode(bEvent.id, bEvent, startOrder + i);
     const hostId = getRefId(bEvent.attachedToRef);
     if (hostId && graph.getNode(hostId)) {
       graph.addEdge({
@@ -449,21 +451,32 @@ function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[]): voi
         source: hostId,
         target: bEvent.id,
         data: null,
+        order: startOrder + i,
       });
     }
   }
 }
 
 function addSequenceFlowEdges(graph: DirectedGraph, sequenceFlows: any[]): void {
-  for (const flow of sequenceFlows) {
+  for (let i = 0; i < sequenceFlows.length; i++) {
+    const flow = sequenceFlows[i];
     const srcId = getRefId(flow.sourceRef);
     const tgtId = getRefId(flow.targetRef);
     if (srcId && tgtId && graph.getNode(srcId) && graph.getNode(tgtId)) {
+      const srcNode = graph.getNode(srcId)?.data;
+      let order = i;
+      if (Array.isArray(srcNode?.outgoing)) {
+        const outIdx = srcNode.outgoing.findIndex((f: any) => getRefId(f) === flow.id);
+        if (outIdx >= 0) {
+          order = outIdx;
+        }
+      }
       graph.addEdge({
         id: flow.id,
         source: srcId,
         target: tgtId,
         data: flow,
+        order,
       });
     }
   }
