@@ -15,11 +15,11 @@
     <bpmn:task id="Task_Reserve_Stock" name="Reserve Items" />
     <bpmn:parallelGateway id="Join_Parallel" name="Sync Checks" />
     <bpmn:subProcess id="Sub_Fulfillment" name="Fulfillment &#38; Packing">
-      <bpmn:startEvent id="Sub_Start" name="Fulfillment&#10;Start" />
+      <bpmn:startEvent id="Sub_Start" name="Fulfillment Start" />
       <bpmn:task id="Sub_Pick" name="Pick Items from Warehouse" />
       <bpmn:task id="Sub_Pack" name="Package Goods" />
       <bpmn:task id="Sub_Label" name="Print Shipping Label" />
-      <bpmn:endEvent id="Sub_End" name="Ready&#10;to&#10;Ship" />
+      <bpmn:endEvent id="Sub_End" name="Ready to Ship" />
       <bpmn:sequenceFlow id="SF1" sourceRef="Sub_Start" targetRef="Sub_Pick" />
       <bpmn:sequenceFlow id="SF2" sourceRef="Sub_Pick" targetRef="Sub_Pack" />
       <bpmn:sequenceFlow id="SF3" sourceRef="Sub_Pack" targetRef="Sub_Label" />
@@ -115,7 +115,7 @@
       <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
         <dc:Bounds x="1246" y="357" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1232" y="403" width="60" height="28" />
+          <dc:Bounds x="1220" y="403" width="88" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Pick_di" bpmnElement="Sub_Pick">
@@ -130,7 +130,7 @@
       <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
         <dc:Bounds x="1822" y="357" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1820" y="403" width="36" height="40" />
+          <dc:Bounds x="1802" y="403" width="76" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Update_ERP_di" bpmnElement="Task_Update_ERP">

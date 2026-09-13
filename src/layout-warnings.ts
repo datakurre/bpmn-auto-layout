@@ -1,4 +1,5 @@
 import { boxesOverlap, segmentCrossesBox } from './layout-metrics';
+import { isSubProcessType } from './di-constants';
 
 export type LayoutWarningCode =
   | 'UNRESOLVED_SEQUENCE_FLOW'
@@ -25,7 +26,7 @@ function isContainerShape(el: any): boolean {
   return (
     type === 'bpmn:Participant' ||
     type === 'bpmn:Lane' ||
-    (type === 'bpmn:SubProcess' && el.isExpanded === true)
+    (isSubProcessType(type) && el.isExpanded === true)
   );
 }
 

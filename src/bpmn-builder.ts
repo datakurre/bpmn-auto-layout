@@ -7,6 +7,14 @@ export interface FlowConfig {
   name?: string;
 }
 
+export interface BoundaryEventConfig {
+  id: string;
+  attachedToRef: string;
+  name?: string;
+  eventDefinitionType?: string;
+  cancelActivity?: boolean;
+}
+
 export class BpmnBuilder {
   private moddle: BPMNModdle;
   private definitions: any;
@@ -111,13 +119,32 @@ export class BpmnBuilder {
     return this.addFlowNode('bpmn:IntermediateCatchEvent', id, name);
   }
 
-  public addBoundaryEvent(id: string, attachedToRef: string, name?: string): this {
-    const host = this.elementMap.get(attachedToRef);
-    const event = this.moddle.create('bpmn:BoundaryEvent', {
+  public addBoundaryEvent(
+    idOrConfig: string | BoundaryEventConfig,
+    attachedToRef?: string,
+    name?: string
+  ): this {
+    const isObj = typeof idOrConfig === 'object';
+    const id = isObj ? idOrConfig.id : idOrConfig;
+    const hostId = isObj ? idOrConfig.attachedToRef : attachedToRef!;
+    const eventName = isObj ? idOrConfig.name : name;
+    const eventDefinitionType = isObj ? idOrConfig.eventDefinitionType : undefined;
+    const cancelActivity = isObj ? idOrConfig.cancelActivity : undefined;
+
+    const host = this.elementMap.get(hostId);
+    const props: Record<string, any> = {
       id,
-      name,
-      attachedToRef: host || attachedToRef,
-    });
+      name: eventName,
+      attachedToRef: host || hostId,
+    };
+    if (eventDefinitionType) {
+      props.eventDefinitions = [this.moddle.create(eventDefinitionType)];
+    }
+    if (typeof cancelActivity === 'boolean') {
+      props.cancelActivity = cancelActivity;
+    }
+
+    const event = this.moddle.create('bpmn:BoundaryEvent', props);
     this.process.flowElements.push(event);
     this.elementMap.set(id, event);
     return this;
@@ -155,6 +182,29 @@ export class BpmnBuilder {
       id,
       name,
       triggeredByEvent: true,
+    });
+    subProcess.flowElements = [];
+    this.process.flowElements.push(subProcess);
+    this.elementMap.set(id, subProcess);
+
+    if (configure) {
+      const originalProcess = this.process;
+      this.process = subProcess;
+      configure(this);
+      this.process = originalProcess;
+    }
+
+    return this;
+  }
+
+  public addAdHocSubProcess(
+    id: string,
+    name?: string,
+    configure?: (builder: BpmnBuilder) => void
+  ): this {
+    const subProcess = this.moddle.create('bpmn:AdHocSubProcess', {
+      id,
+      name,
     });
     subProcess.flowElements = [];
     this.process.flowElements.push(subProcess);

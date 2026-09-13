@@ -20,11 +20,11 @@
     <bpmn:dataObjectReference id="Doc_Packet" name="Loan Dossier" />
     <bpmn:dataStoreReference id="Store_CoreDB" name="Core Banking DB" />
     <bpmn:subProcess id="EventSub_Cancel" name="Cancellation Handler" triggeredByEvent="true">
-      <bpmn:startEvent id="Start_Cancel" name="Client&#10;Cancellation">
+      <bpmn:startEvent id="Start_Cancel" name="Client Cancellation">
         <bpmn:messageEventDefinition />
       </bpmn:startEvent>
       <bpmn:task id="Task_Cleanup" name="Clean Temporary Files" />
-      <bpmn:endEvent id="End_Cancelled" name="Process&#10;Terminated">
+      <bpmn:endEvent id="End_Cancelled" name="Process Terminated">
         <bpmn:terminateEventDefinition />
       </bpmn:endEvent>
       <bpmn:sequenceFlow id="SubF1" sourceRef="Start_Cancel" targetRef="Task_Cleanup" />
@@ -97,7 +97,7 @@
       <bpmndi:BPMNShape id="Start_Cancel_di" bpmnElement="Start_Cancel">
         <dc:Bounds x="130" y="441" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="112" y="487" width="68" height="28" />
+          <dc:Bounds x="97" y="487" width="102" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Cleanup_di" bpmnElement="Task_Cleanup">
@@ -106,7 +106,7 @@
       <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
         <dc:Bounds x="386" y="441" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="371" y="487" width="62" height="28" />
+          <dc:Bounds x="351" y="487" width="106" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Doc_Policy_di" bpmnElement="Doc_Policy">

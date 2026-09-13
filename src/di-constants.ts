@@ -16,6 +16,7 @@ export const DEFAULT_DIMENSIONS: Readonly<Record<string, ElementDimension>> = {
   'bpmn:ScriptTask': { width: 100, height: 80 },
   'bpmn:CallActivity': { width: 100, height: 80 },
   'bpmn:SubProcess': { width: 100, height: 80 },
+  'bpmn:AdHocSubProcess': { width: 100, height: 80 },
   'bpmn:ExclusiveGateway': { width: 50, height: 50 },
   'bpmn:ParallelGateway': { width: 50, height: 50 },
   'bpmn:InclusiveGateway': { width: 50, height: 50 },
@@ -48,4 +49,8 @@ export function getElementDimensions(elementType: string): ElementDimension {
     return dimension;
   }
   return { width: 100, height: 80 };
+}
+
+export function isSubProcessType(type: string | undefined): boolean {
+  return type === 'bpmn:SubProcess' || type === 'bpmn:AdHocSubProcess';
 }

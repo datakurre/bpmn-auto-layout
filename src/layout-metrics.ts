@@ -1,4 +1,5 @@
 import { BpmnModdle } from 'bpmn-moddle';
+import { isSubProcessType } from './di-constants';
 import type {
   Bounds,
   CompactnessMetrics,
@@ -203,7 +204,7 @@ function parseDiShape(elem: any): ExtractedShape | undefined {
   const isContainer =
     elem.bpmnElement?.$type === 'bpmn:Participant' ||
     elem.bpmnElement?.$type === 'bpmn:Lane' ||
-    (elem.bpmnElement?.$type === 'bpmn:SubProcess' && elem.isExpanded === true);
+    (isSubProcessType(elem.bpmnElement?.$type) && elem.isExpanded === true);
 
   return {
     id: elem.id,

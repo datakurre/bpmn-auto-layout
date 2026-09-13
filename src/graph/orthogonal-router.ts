@@ -19,6 +19,82 @@ function hasObstacleBelow(pt: Point, endY: number, ctx: ObstacleCheckContext): b
   );
 }
 
+interface FeedbackSpanContext {
+  minX: number;
+  maxX: number;
+}
+
+function hasBoundaryEventBelowInSpan(span: FeedbackSpanContext, allBounds: Bounds[]): boolean {
+  return allBounds.some(
+    (b) =>
+      b.width === 36 &&
+      b.height === 36 &&
+      b.x + b.width > span.minX &&
+      b.x < span.maxX &&
+      allBounds.some(
+        (other) =>
+          other !== b &&
+          b.x >= other.x &&
+          b.x + b.width <= other.x + other.width &&
+          b.y > other.y + other.height / 2
+      )
+  );
+}
+
+function hasObstaclesAboveInSpan(
+  span: { minX: number; maxX: number; maxY: number },
+  allBounds: Bounds[]
+): boolean {
+  return allBounds.some(
+    (b) => b.x + b.width > span.minX && b.x < span.maxX && b.y + b.height <= span.maxY
+  );
+}
+
+function shouldUseUpwardFeedbackRoute(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  allBounds: Bounds[]
+): boolean {
+  if (Math.abs(sourceBounds.y - targetBounds.y) > 20) {
+    return false;
+  }
+  const minX = Math.min(sourceBounds.x, targetBounds.x);
+  const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
+  if (!hasBoundaryEventBelowInSpan({ minX, maxX }, allBounds)) {
+    return false;
+  }
+  const maxY = Math.min(sourceBounds.y, targetBounds.y);
+  return !hasObstaclesAboveInSpan({ minX, maxX, maxY }, allBounds);
+}
+
+function computeChannelYTop(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  allBounds: Bounds[]
+): number {
+  let minTopY = Math.min(sourceBounds.y, targetBounds.y);
+  const minX = Math.min(sourceBounds.x, targetBounds.x);
+  const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
+  for (const b of allBounds) {
+    if (b.x + b.width >= minX && b.x <= maxX) {
+      minTopY = Math.min(minTopY, b.y);
+    }
+  }
+  return minTopY - 40;
+}
+
+function computeUpwardFeedbackWaypoints(src: Bounds, tgt: Bounds, channelY: number): Point[] {
+  const srcTop: Point = {
+    x: Math.round(src.x + src.width / 2),
+    y: src.y,
+  };
+  const tgtTop: Point = {
+    x: Math.round(tgt.x + tgt.width / 2),
+    y: tgt.y,
+  };
+  return [srcTop, { x: srcTop.x, y: channelY }, { x: tgtTop.x, y: channelY }, tgtTop];
+}
+
 function computeChannelY(sourceBounds: Bounds, targetBounds: Bounds, allBounds?: Bounds[]): number {
   let maxBottomY = Math.max(
     sourceBounds.y + sourceBounds.height,
@@ -303,6 +379,10 @@ export function routeOrthogonalEdge(
   }
 
   // Feedback loop (target is at or behind source)
+  if (allBounds && shouldUseUpwardFeedbackRoute(sourceBounds, targetBounds, allBounds)) {
+    const channelY = computeChannelYTop(sourceBounds, targetBounds, allBounds);
+    return computeUpwardFeedbackWaypoints(sourceBounds, targetBounds, channelY);
+  }
   const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
   return computeFeedbackWaypoints(sourceBounds, targetBounds, { channelY, allBounds });
 }

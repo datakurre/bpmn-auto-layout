@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_DeepBypass" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:exclusiveGateway id="Split" name="Route" />
+    <bpmn:task id="Task_A1" name="Step 1" />
+    <bpmn:task id="Task_A2" name="Step 2" />
+    <bpmn:task id="Task_A3" name="Step 3" />
+    <bpmn:task id="Task_A4" name="Step 4" />
+    <bpmn:exclusiveGateway id="Join" name="Merge" />
+    <bpmn:endEvent id="End_1" name="Done" />
+    <bpmn:sequenceFlow id="F0" sourceRef="Start_1" targetRef="Split" />
+    <bpmn:sequenceFlow id="F_Work_1" sourceRef="Split" targetRef="Task_A1" />
+    <bpmn:sequenceFlow id="F_Work_2" sourceRef="Task_A1" targetRef="Task_A2" />
+    <bpmn:sequenceFlow id="F_Work_3" sourceRef="Task_A2" targetRef="Task_A3" />
+    <bpmn:sequenceFlow id="F_Work_4" sourceRef="Task_A3" targetRef="Task_A4" />
+    <bpmn:sequenceFlow id="F_Work_5" sourceRef="Task_A4" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Bypass" sourceRef="Split" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_End" sourceRef="Join" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_DeepBypass">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="102" y="168" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Split_di" bpmnElement="Split">
+        <dc:Bounds x="196" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="202" y="95" width="34" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A1_di" bpmnElement="Task_A1">
+        <dc:Bounds x="306" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A2_di" bpmnElement="Task_A2">
+        <dc:Bounds x="466" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A3_di" bpmnElement="Task_A3">
+        <dc:Bounds x="626" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_A4_di" bpmnElement="Task_A4">
+        <dc:Bounds x="786" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_di" bpmnElement="Join">
+        <dc:Bounds x="946" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="951" y="95" width="36" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="1056" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1057" y="168" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F_Work_1_di" bpmnElement="F_Work_1">
+        <di:waypoint x="246" y="140" />
+        <di:waypoint x="306" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Bypass_di" bpmnElement="F_Bypass">
+        <di:waypoint x="221" y="165" />
+        <di:waypoint x="221" y="220" />
+        <di:waypoint x="971" y="220" />
+        <di:waypoint x="971" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_End_di" bpmnElement="F_End">
+        <di:waypoint x="996" y="140" />
+        <di:waypoint x="1056" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F0_di" bpmnElement="F0">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Work_5_di" bpmnElement="F_Work_5">
+        <di:waypoint x="886" y="140" />
+        <di:waypoint x="946" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Work_2_di" bpmnElement="F_Work_2">
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="466" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Work_3_di" bpmnElement="F_Work_3">
+        <di:waypoint x="566" y="140" />
+        <di:waypoint x="626" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F_Work_4_di" bpmnElement="F_Work_4">
+        <di:waypoint x="726" y="140" />
+        <di:waypoint x="786" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

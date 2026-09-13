@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_MixedGateways" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:inclusiveGateway id="Gate_Incl_Split" name="Route" />
+    <bpmn:parallelGateway id="Gate_Par_Split" name="Fork" />
+    <bpmn:task id="Task_P1" name="Parallel Task 1" />
+    <bpmn:task id="Task_P2" name="Parallel Task 2" />
+    <bpmn:parallelGateway id="Gate_Par_Join" name="Join" />
+    <bpmn:exclusiveGateway id="Gate_Excl_Inner" name="Inner Choice" />
+    <bpmn:task id="Task_X1" name="Handle Yes" />
+    <bpmn:task id="Task_X2" name="Handle No" />
+    <bpmn:exclusiveGateway id="Gate_Excl_Join" name="Merge Choice" />
+    <bpmn:task id="Task_Direct" name="Direct Path" />
+    <bpmn:inclusiveGateway id="Gate_Incl_Join" name="Converge" />
+    <bpmn:endEvent id="End_1" name="Done" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Gate_Incl_Split" />
+    <bpmn:sequenceFlow id="Flow_PathA" name="Path A" sourceRef="Gate_Incl_Split" targetRef="Gate_Par_Split" />
+    <bpmn:sequenceFlow id="Flow_PathB" name="Path B" sourceRef="Gate_Incl_Split" targetRef="Task_Direct" />
+    <bpmn:sequenceFlow id="Flow_P1" sourceRef="Gate_Par_Split" targetRef="Task_P1" />
+    <bpmn:sequenceFlow id="Flow_P2" sourceRef="Gate_Par_Split" targetRef="Task_P2" />
+    <bpmn:sequenceFlow id="Flow_P1_Join" sourceRef="Task_P1" targetRef="Gate_Par_Join" />
+    <bpmn:sequenceFlow id="Flow_P2_Join" sourceRef="Task_P2" targetRef="Gate_Par_Join" />
+    <bpmn:sequenceFlow id="Flow_ToInner" sourceRef="Gate_Par_Join" targetRef="Gate_Excl_Inner" />
+    <bpmn:sequenceFlow id="Flow_Yes" name="Yes" sourceRef="Gate_Excl_Inner" targetRef="Task_X1" />
+    <bpmn:sequenceFlow id="Flow_No" name="No" sourceRef="Gate_Excl_Inner" targetRef="Task_X2" />
+    <bpmn:sequenceFlow id="Flow_X1_Join" sourceRef="Task_X1" targetRef="Gate_Excl_Join" />
+    <bpmn:sequenceFlow id="Flow_X2_Join" sourceRef="Task_X2" targetRef="Gate_Excl_Join" />
+    <bpmn:sequenceFlow id="Flow_ToConverge" sourceRef="Gate_Excl_Join" targetRef="Gate_Incl_Join" />
+    <bpmn:sequenceFlow id="Flow_Direct_Join" sourceRef="Task_Direct" targetRef="Gate_Incl_Join" />
+    <bpmn:sequenceFlow id="Flow_End" sourceRef="Gate_Incl_Join" targetRef="End_1" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_MixedGateways">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="102" y="168" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Incl_Split_di" bpmnElement="Gate_Incl_Split">
+        <dc:Bounds x="196" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="202" y="95" width="34" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Par_Split_di" bpmnElement="Gate_Par_Split">
+        <dc:Bounds x="331" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="340" y="95" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_P1_di" bpmnElement="Task_P1">
+        <dc:Bounds x="466" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_P2_di" bpmnElement="Task_P2">
+        <dc:Bounds x="466" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Par_Join_di" bpmnElement="Gate_Par_Join">
+        <dc:Bounds x="626" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="635" y="95" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Excl_Inner_di" bpmnElement="Gate_Excl_Inner">
+        <dc:Bounds x="736" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="727" y="95" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_X1_di" bpmnElement="Task_X1">
+        <dc:Bounds x="846" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_X2_di" bpmnElement="Task_X2">
+        <dc:Bounds x="846" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Excl_Join_di" bpmnElement="Gate_Excl_Join">
+        <dc:Bounds x="1006" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="994" y="95" width="74" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Direct_di" bpmnElement="Task_Direct">
+        <dc:Bounds x="306" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Incl_Join_di" bpmnElement="Gate_Incl_Join">
+        <dc:Bounds x="1116" y="235" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1058" y="253" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="1226" y="242" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1227" y="288" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_PathA_di" bpmnElement="Flow_PathA">
+        <di:waypoint x="246" y="140" />
+        <di:waypoint x="331" y="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="270" y="116" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_PathB_di" bpmnElement="Flow_PathB">
+        <di:waypoint x="221" y="165" />
+        <di:waypoint x="221" y="260" />
+        <di:waypoint x="306" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="231" y="206" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P1_di" bpmnElement="Flow_P1">
+        <di:waypoint x="381" y="140" />
+        <di:waypoint x="466" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P2_di" bpmnElement="Flow_P2">
+        <di:waypoint x="356" y="165" />
+        <di:waypoint x="356" y="193" />
+        <di:waypoint x="436" y="193" />
+        <di:waypoint x="436" y="260" />
+        <di:waypoint x="466" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToInner_di" bpmnElement="Flow_ToInner">
+        <di:waypoint x="676" y="140" />
+        <di:waypoint x="736" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Yes_di" bpmnElement="Flow_Yes">
+        <di:waypoint x="786" y="140" />
+        <di:waypoint x="846" y="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="802" y="116" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_No_di" bpmnElement="Flow_No">
+        <di:waypoint x="761" y="165" />
+        <di:waypoint x="761" y="260" />
+        <di:waypoint x="846" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="771" y="206" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ToConverge_di" bpmnElement="Flow_ToConverge">
+        <di:waypoint x="1056" y="140" />
+        <di:waypoint x="1141" y="140" />
+        <di:waypoint x="1141" y="235" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_End_di" bpmnElement="Flow_End">
+        <di:waypoint x="1166" y="260" />
+        <di:waypoint x="1226" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P1_Join_di" bpmnElement="Flow_P1_Join">
+        <di:waypoint x="566" y="140" />
+        <di:waypoint x="626" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P2_Join_di" bpmnElement="Flow_P2_Join">
+        <di:waypoint x="566" y="260" />
+        <di:waypoint x="651" y="260" />
+        <di:waypoint x="651" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X1_Join_di" bpmnElement="Flow_X1_Join">
+        <di:waypoint x="946" y="140" />
+        <di:waypoint x="1006" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_X2_Join_di" bpmnElement="Flow_X2_Join">
+        <di:waypoint x="946" y="260" />
+        <di:waypoint x="1031" y="260" />
+        <di:waypoint x="1031" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Direct_Join_di" bpmnElement="Flow_Direct_Join">
+        <di:waypoint x="356" y="300" />
+        <di:waypoint x="356" y="340" />
+        <di:waypoint x="1141" y="340" />
+        <di:waypoint x="1141" y="285" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

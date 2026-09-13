@@ -10,7 +10,7 @@ import {
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
 import { insertDummyNodes } from '../graph/dummy-nodes';
-import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
+import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT, isSubProcessType } from '../di-constants';
 import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
 import {
   isArtifact,
@@ -61,7 +61,7 @@ export function layoutScope(
   customDimensions?: Map<string, { width: number; height: number }>
 ): ScopeLayoutResult {
   const flowElements = scopeElement.flowElements || [];
-  const subProcesses = flowElements.filter((el: any) => el.$type === 'bpmn:SubProcess');
+  const subProcesses = flowElements.filter((el: any) => isSubProcessType(el.$type));
   const { childScopeResults, subDimensions } = layoutChildSubProcesses(
     subProcesses,
     options,
@@ -165,6 +165,7 @@ interface PartitionedFlows {
   gatewayOutgoingFlows: Map<string, GatewayFlowInfo[]>;
   gatewayIncomingFlows: Map<string, GatewayIncomingFlowInfo[]>;
   otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>;
+  targetPortMap: Map<string, 'top' | 'bottom' | 'left'>;
 }
 
 export function getRefId(ref: any): string | undefined {
@@ -177,9 +178,46 @@ export interface IncomingFlowCandidate {
   isFeedback?: boolean;
 }
 
+function isCorridorBlocked(
+  y: number,
+  xSpan: { start: number; end: number },
+  obstacles: Bounds[]
+): boolean {
+  const minX = Math.min(xSpan.start, xSpan.end);
+  const maxX = Math.max(xSpan.start, xSpan.end);
+  return obstacles.some(
+    (b) => y > b.y && y < b.y + b.height && Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)
+  );
+}
+
+function assignMergeBottomPort(
+  below: IncomingFlowCandidate[],
+  center: IncomingFlowCandidate[],
+  ctx: { gwBounds: Bounds; gwCenterY: number; allBounds?: Bounds[] }
+): IncomingFlowCandidate | undefined {
+  if (below.length > 0) {
+    return below.shift();
+  }
+  if (center.length > 1) {
+    center.sort((a, b) => a.sourceBounds.x - b.sourceBounds.x);
+    return center.shift();
+  }
+  if (center.length === 1 && ctx.allBounds) {
+    const obstacles = ctx.allBounds.filter(
+      (b) => b !== ctx.gwBounds && b !== center[0].sourceBounds
+    );
+    const xStart = center[0].sourceBounds.x + center[0].sourceBounds.width;
+    if (isCorridorBlocked(ctx.gwCenterY, { start: xStart, end: ctx.gwBounds.x }, obstacles)) {
+      return center.shift();
+    }
+  }
+  return undefined;
+}
+
 export function assignMergeIncomingPorts(
   flows: IncomingFlowCandidate[],
-  gwBounds: Bounds
+  gwBounds: Bounds,
+  allBounds?: Bounds[]
 ): Map<string, 'top' | 'bottom' | 'left'> {
   const ports = new Map<string, 'top' | 'bottom' | 'left'>();
   const gwCenterY = gwBounds.y + gwBounds.height / 2;
@@ -224,10 +262,16 @@ export function assignMergeIncomingPorts(
     const topFlow = above.shift()!;
     ports.set(topFlow.flow.id, 'top');
   }
-  if (below.length > 0) {
-    const bottomFlow = below.shift()!;
-    ports.set(bottomFlow.flow.id, 'bottom');
+
+  const bottomCandidate = assignMergeBottomPort(below, center, {
+    gwBounds,
+    gwCenterY,
+    allBounds,
+  });
+  if (bottomCandidate) {
+    ports.set(bottomCandidate.flow.id, 'bottom');
   }
+
   for (const f of [...center, ...above, ...below]) {
     ports.set(f.flow.id, 'left');
   }
@@ -265,7 +309,8 @@ export function computeMergeTargetPorts(
       continue;
     }
     const gwBounds = ctx.boundsMap.get(gwId)!;
-    const ports = assignMergeIncomingPorts(incomingFlows, gwBounds);
+    const allBounds = Array.from(ctx.boundsMap.values());
+    const ports = assignMergeIncomingPorts(incomingFlows, gwBounds, allBounds);
     for (const [flowId, port] of ports.entries()) {
       targetPortMap.set(flowId, port);
     }
@@ -314,12 +359,13 @@ function partitionScopeFlows(
     }
   }
 
-  return { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows };
+  return { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows, targetPortMap };
 }
 
 interface GatewayRouteScopeContext {
   routeCtx: ScopeRouteContext;
   sequenceFlows: any[];
+  targetPortMap: Map<string, 'top' | 'bottom' | 'left'>;
   usedPortsMap: Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>;
 }
 
@@ -333,6 +379,37 @@ function getUsedPorts(
     map.set(id, set);
   }
   return set;
+}
+
+function recordOutgoingFlowUsedPort(
+  gwBounds: Bounds,
+  waypoints: Point[],
+  usedPorts: Set<'top' | 'bottom' | 'left' | 'right'>
+): void {
+  const start = waypoints[0];
+  if (start.y <= gwBounds.y) {
+    usedPorts.add('top');
+  } else if (start.y >= gwBounds.y + gwBounds.height) {
+    usedPorts.add('bottom');
+  } else {
+    usedPorts.add('right');
+  }
+}
+
+function getReservedOutgoingPorts(
+  gwId: string,
+  ctx: GatewayRouteScopeContext
+): Set<'top' | 'bottom' | 'left' | 'right'> {
+  const outgoingUsedPorts = new Set(getUsedPorts(ctx.usedPortsMap, gwId));
+  for (const inFlow of ctx.sequenceFlows) {
+    if (getRefId(inFlow.targetRef) === gwId) {
+      const port = ctx.targetPortMap.get(inFlow.id);
+      if (port === 'top' || port === 'bottom') {
+        outgoingUsedPorts.add(port);
+      }
+    }
+  }
+  return outgoingUsedPorts;
 }
 
 function routeAllGatewayOutgoingFlows(
@@ -349,18 +426,19 @@ function routeAllGatewayOutgoingFlows(
       return tgtId === gwId && Boolean(ctx.routeCtx.feedbackEdges?.has(f.id));
     });
 
-    const usedPorts = getUsedPorts(ctx.usedPortsMap, gwId);
+    const actualUsedPorts = getUsedPorts(ctx.usedPortsMap, gwId);
+    const outgoingUsedPorts = getReservedOutgoingPorts(gwId, ctx);
     const routeMap = routeGatewayOutgoingEdges(flows, {
       gatewayBounds: gwBounds,
       allBounds,
       hasIncomingFeedback,
-      usedPorts,
+      usedPorts: outgoingUsedPorts,
     });
-    ctx.usedPortsMap.set(gwId, usedPorts);
 
     for (const f of flows) {
       const waypoints = routeMap.get(f.flow.id)!;
       edges.push({ element: f.flow, waypoints });
+      recordOutgoingFlowUsedPort(gwBounds, waypoints, actualUsedPorts);
       const tgtId = getRefId(f.flow.targetRef);
       if (tgtId && f.targetPort) {
         getUsedPorts(ctx.usedPortsMap, tgtId).add(f.targetPort);
@@ -451,16 +529,14 @@ export function routeScopeEdges(
     ctx.regularNodes.filter((n) => n.$type?.endsWith('Gateway')).map((n) => n.id)
   );
 
-  const { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows } = partitionScopeFlows(
-    sequenceFlows,
-    gatewaySet,
-    ctx
-  );
+  const { gatewayOutgoingFlows, gatewayIncomingFlows, otherFlows, targetPortMap } =
+    partitionScopeFlows(sequenceFlows, gatewaySet, ctx);
 
   const usedPortsMap = new Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>();
   const gwCtx: GatewayRouteScopeContext = {
     routeCtx: ctx,
     sequenceFlows,
+    targetPortMap,
     usedPortsMap,
   };
 
@@ -640,7 +716,7 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
 
   for (const node of regularNodes) {
     const bounds = boundsMap.get(node.id)!;
-    const isSub = node.$type === 'bpmn:SubProcess';
+    const isSub = isSubProcessType(node.$type);
     shapes.push({ element: node, bounds, isExpanded: isSub ? true : undefined });
 
     if (isSub && childScopeResults.has(node.id)) {

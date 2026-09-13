@@ -128,6 +128,47 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('EventSub_Empty');
   });
 
+  it('supports ad-hoc sub-processes with and without callback', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addAdHocSubProcess('AdHoc_1', 'Review Checks', (sub) => {
+        sub.addTask('Sub_Task_A', 'Check A');
+      })
+      .addAdHocSubProcess('AdHoc_Empty', 'Empty Ad-Hoc');
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('AdHoc_1');
+    expect(xml).toContain('adHocSubProcess');
+    expect(xml).toContain('Sub_Task_A');
+    expect(xml).toContain('AdHoc_Empty');
+  });
+
+  it('supports boundary event config with event definition and cancelActivity', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addTask('Task_1')
+      .addBoundaryEvent({
+        id: 'Bound_NonInterrupting',
+        attachedToRef: 'Task_1',
+        name: 'Escalation Timer',
+        eventDefinitionType: 'bpmn:TimerEventDefinition',
+        cancelActivity: false,
+      })
+      .addBoundaryEvent({
+        id: 'Bound_Interrupting',
+        attachedToRef: 'Task_1',
+        cancelActivity: true,
+      })
+      .addBoundaryEvent({ id: 'Bound_Plain', attachedToRef: 'Task_1' });
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('Bound_NonInterrupting');
+    expect(xml).toContain('timerEventDefinition');
+    expect(xml).toContain('cancelActivity="false"');
+    expect(xml).toContain('Bound_Interrupting');
+    expect(xml).toContain('Bound_Plain');
+  });
+
   it('supports data objects, references, data stores, annotations, and associations', async () => {
     const builder = new BpmnBuilder();
     builder

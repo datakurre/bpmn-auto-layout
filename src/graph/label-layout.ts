@@ -260,7 +260,7 @@ export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
       continue;
     }
     const t = s.element?.$type;
-    if (t === 'bpmn:Participant' || t === 'bpmn:Lane') {
+    if (t === 'bpmn:Participant' || t === 'bpmn:Lane' || s.isExpanded) {
       continue;
     }
     if (boxesOverlap(box, s.bounds)) {

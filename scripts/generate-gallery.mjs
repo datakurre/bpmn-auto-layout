@@ -184,6 +184,46 @@ const SNAPSHOT_METADATA = {
       'Dense 6-gateway decision matrix with 3-tier risk classification, parallel KYC checks, manual underwriting review with SLA timer, and collateral negotiation loops.',
     tags: ['6 Gateways', 'Decision Tree', 'Dense Graph', 'Multi-Tier'],
   },
+  '12-adhoc-subprocess.png': {
+    title: 'Ad-hoc Sub-Process',
+    iteration: '12',
+    category: 'Structural & Routing Edge Cases',
+    description:
+      'Unordered tasks inside an ad-hoc sub-process, recursively laid out as isolated tracks.',
+    tags: ['AdHocSubProcess', 'Unordered Tasks', 'Sub-Process'],
+  },
+  '12-mixed-gateway-matrix.png': {
+    title: 'Mixed Gateway Type Matrix',
+    iteration: '12',
+    category: 'Structural & Routing Edge Cases',
+    description:
+      'Inclusive, parallel, and exclusive gateways nested three levels deep and reconverging cleanly.',
+    tags: ['Inclusive Gateway', 'Parallel Gateway', 'Exclusive Gateway', 'Nested Branching'],
+  },
+  '12-deep-collinear-bypass.png': {
+    title: 'Deep Collinear Bypass Chain',
+    iteration: '12',
+    category: 'Structural & Routing Edge Cases',
+    description:
+      'A 4-task same-track chain bypassed by a direct edge, exercising the issue #81 detour fallback.',
+    tags: ['Issue #81', 'Dummy Nodes', 'Bypass Edge'],
+  },
+  '12-noninterrupting-boundary-feedback-loop.png': {
+    title: 'Non-Interrupting Boundary Event in Feedback Loop',
+    iteration: '12',
+    category: 'Structural & Routing Edge Cases',
+    description:
+      'A non-interrupting timer boundary event whose escalation path rejoins a task that is also part of a retry loop.',
+    tags: ['Boundary Event', 'Non-Interrupting', 'Feedback Loop'],
+  },
+  '12-event-subprocess-internal-branching.png': {
+    title: 'Event Sub-Process with Internal Branching',
+    iteration: '12',
+    category: 'Structural & Routing Edge Cases',
+    description:
+      'An error-triggered event sub-process with its own severity-based gateway split, packed alongside disconnected artifacts.',
+    tags: ['Event Sub-Process', 'Gateway', 'Artifacts'],
+  },
 };
 
 export function generateGallery() {

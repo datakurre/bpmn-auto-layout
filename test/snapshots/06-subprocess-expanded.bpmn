@@ -3,9 +3,9 @@
   <bpmn:process id="Process_1" isExecutable="false">
     <bpmn:startEvent id="Start_Parent" name="Start" />
     <bpmn:subProcess id="Sub_Order" name="Order Fulfillment">
-      <bpmn:startEvent id="Sub_Start" name="Order&#10;Placed" />
+      <bpmn:startEvent id="Sub_Start" name="Order Placed" />
       <bpmn:task id="Sub_Task" name="Pack Items" />
-      <bpmn:endEvent id="Sub_End" name="Items&#10;Packed" />
+      <bpmn:endEvent id="Sub_End" name="Items Packed" />
       <bpmn:sequenceFlow id="Sub_Flow_1" sourceRef="Sub_Start" targetRef="Sub_Task" />
       <bpmn:sequenceFlow id="Sub_Flow_2" sourceRef="Sub_Task" targetRef="Sub_End" />
     </bpmn:subProcess>
@@ -27,7 +27,7 @@
       <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
         <dc:Bounds x="226" y="117" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="222" y="163" width="40" height="28" />
+          <dc:Bounds x="209" y="163" width="70" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Task_di" bpmnElement="Sub_Task">
@@ -36,7 +36,7 @@
       <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
         <dc:Bounds x="482" y="117" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="477" y="163" width="42" height="28" />
+          <dc:Bounds x="463" y="163" width="74" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Parent_di" bpmnElement="End_Parent">

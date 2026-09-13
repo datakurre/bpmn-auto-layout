@@ -112,14 +112,82 @@ function routeDirectTop(gw: Bounds, tgt: Bounds): Point[] {
   ];
 }
 
-function routeDirectBottom(gw: Bounds, tgt: Bounds): Point[] {
+interface SteppedExitContext {
+  gapY: number;
+  stepX: number;
+}
+
+function computeSteppedBottomExit(
+  gw: Bounds,
+  tgt: Bounds,
+  obstacles?: Bounds[]
+): SteppedExitContext | undefined {
+  if (!obstacles || obstacles.length === 0) {
+    return undefined;
+  }
+  const exitX = Math.round(gw.x + gw.width / 2);
+  const exitY = gw.y + gw.height;
+  const entryY = Math.round(tgt.y + tgt.height / 2);
+
+  const blocker = obstacles.find(
+    (b) => exitX > b.x && exitX < b.x + b.width && b.y < entryY && b.y + b.height > exitY
+  );
+  if (!blocker || blocker.y <= exitY + 20) {
+    return undefined;
+  }
+  const gapY = Math.round((exitY + blocker.y) / 2);
+  const stepX = Math.round((blocker.x + blocker.width + tgt.x) / 2);
+  if (stepX <= blocker.x + blocker.width || stepX >= tgt.x) {
+    return undefined;
+  }
+  const seg1Clear = isVerticalCorridorClear(exitX, { start: exitY, end: gapY }, obstacles);
+  const seg2Clear = isHorizontalCorridorClear(gapY, { start: exitX, end: stepX }, obstacles);
+  const seg3Clear = isVerticalCorridorClear(stepX, { start: gapY, end: entryY }, obstacles);
+  const seg4Clear = isHorizontalCorridorClear(entryY, { start: stepX, end: tgt.x }, obstacles);
+  if (seg1Clear && seg2Clear && seg3Clear && seg4Clear) {
+    return { gapY, stepX };
+  }
+  return undefined;
+}
+
+function routeDirectBottom(gw: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
   const exitX = Math.round(gw.x + gw.width / 2);
   const exitY = gw.y + gw.height;
   const entryX = tgt.x;
   const entryY = Math.round(tgt.y + tgt.height / 2);
+  const stepped = computeSteppedBottomExit(gw, tgt, obstacles);
+  if (stepped) {
+    return [
+      { x: exitX, y: exitY },
+      { x: exitX, y: stepped.gapY },
+      { x: stepped.stepX, y: stepped.gapY },
+      { x: stepped.stepX, y: entryY },
+      { x: entryX, y: entryY },
+    ];
+  }
   return [
     { x: exitX, y: exitY },
     { x: exitX, y: entryY },
+    { x: entryX, y: entryY },
+  ];
+}
+
+function routeGatewayToGatewayBottom(gw: Bounds, tgt: Bounds, obstacles: Bounds[]): Point[] {
+  const exitX = Math.round(gw.x + gw.width / 2);
+  const exitY = gw.y + gw.height;
+  const entryX = Math.round(tgt.x + tgt.width / 2);
+  const entryY = tgt.y + tgt.height;
+  let channelY = Math.max(exitY, entryY);
+  for (const b of obstacles) {
+    if (Math.max(exitX, b.x) < Math.min(entryX, b.x + b.width)) {
+      channelY = Math.max(channelY, b.y + b.height);
+    }
+  }
+  channelY += 40;
+  return [
+    { x: exitX, y: exitY },
+    { x: exitX, y: channelY },
+    { x: entryX, y: channelY },
     { x: entryX, y: entryY },
   ];
 }
@@ -130,6 +198,31 @@ interface DirectRightOptions {
   allBounds?: Bounds[];
 }
 
+// Shared by any rightward, same-row (collinear) direct connection: if the
+// straight line is blocked by an intervening shape (e.g. a chain of
+// same-track nodes a bypass edge jumps over, per issue #88, or an unrelated
+// branch that happens to share the row, per #92), detour below it. Corridor
+// routing is currently unwired (#81), so this is the only avoidance a
+// collinear edge gets.
+function routeCollinearWithDetour(exit: Point, entry: Point, obstacles: Bounds[]): Point[] {
+  if (isHorizontalCorridorClear(exit.y, { start: exit.x, end: entry.x }, obstacles)) {
+    return [exit, entry];
+  }
+  let channelY = exit.y;
+  for (const b of obstacles) {
+    if (Math.max(exit.x, b.x) < Math.min(entry.x, b.x + b.width)) {
+      channelY = Math.max(channelY, b.y + b.height);
+    }
+  }
+  channelY += 40;
+  return [
+    { x: exit.x, y: exit.y },
+    { x: exit.x, y: channelY },
+    { x: entry.x, y: channelY },
+    { x: entry.x, y: entry.y },
+  ];
+}
+
 function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Point[] {
   const exitX = gw.x + gw.width;
   const exitY = Math.round(gw.y + gw.height / 2);
@@ -138,30 +231,7 @@ function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Po
 
   if (exitY === entryY) {
     const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
-    if (isHorizontalCorridorClear(exitY, { start: exitX, end: entryX }, obstacles)) {
-      return [
-        { x: exitX, y: exitY },
-        { x: entryX, y: entryY },
-      ];
-    }
-    // Something now sits between the gateway and its collinear target on
-    // this same row (e.g. a chain of same-track nodes a bypass edge jumps
-    // over, per issue #88). Detour below it: corridor routing is currently
-    // unwired (#81), so this is the only avoidance a multi-rank collinear
-    // edge gets.
-    let channelY = exitY;
-    for (const b of obstacles) {
-      if (Math.max(exitX, b.x) < Math.min(entryX, b.x + b.width)) {
-        channelY = Math.max(channelY, b.y + b.height);
-      }
-    }
-    channelY += 40;
-    return [
-      { x: exitX, y: exitY },
-      { x: exitX, y: channelY },
-      { x: entryX, y: channelY },
-      { x: entryX, y: entryY },
-    ];
+    return routeCollinearWithDetour({ x: exitX, y: exitY }, { x: entryX, y: entryY }, obstacles);
   }
 
   const defaultStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
@@ -189,11 +259,53 @@ function routeDirectIncomingTop(src: Bounds, gw: Bounds): Point[] {
   ];
 }
 
-function routeDirectIncomingBottom(src: Bounds, gw: Bounds): Point[] {
+function computeIncomingBottomDetour(src: Bounds, gw: Bounds, obstacles: Bounds[]): Point[] {
   const exitX = src.x + src.width;
   const exitY = Math.round(src.y + src.height / 2);
   const entryX = Math.round(gw.x + gw.width / 2);
   const entryY = gw.y + gw.height;
+
+  let channelY = Math.max(exitY, entryY);
+  for (const b of obstacles) {
+    if (Math.max(exitX, b.x) < Math.min(entryX, b.x + b.width)) {
+      channelY = Math.max(channelY, b.y + b.height);
+    }
+  }
+  channelY += 40;
+
+  const isActivity = src.width >= 70;
+  const bottomExitX = Math.round(src.x + src.width / 2);
+  const bottomExitY = src.y + src.height;
+  if (
+    isActivity &&
+    isVerticalCorridorClear(bottomExitX, { start: bottomExitY, end: channelY }, obstacles)
+  ) {
+    return [
+      { x: bottomExitX, y: bottomExitY },
+      { x: bottomExitX, y: channelY },
+      { x: entryX, y: channelY },
+      { x: entryX, y: entryY },
+    ];
+  }
+
+  return [
+    { x: exitX, y: exitY },
+    { x: exitX, y: channelY },
+    { x: entryX, y: channelY },
+    { x: entryX, y: entryY },
+  ];
+}
+
+function routeDirectIncomingBottom(src: Bounds, gw: Bounds, obstacles?: Bounds[]): Point[] {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+  const entryY = gw.y + gw.height;
+
+  if (obstacles && !isHorizontalCorridorClear(exitY, { start: exitX, end: entryX }, obstacles)) {
+    return computeIncomingBottomDetour(src, gw, obstacles);
+  }
+
   return [
     { x: exitX, y: exitY },
     { x: entryX, y: exitY },
@@ -201,21 +313,28 @@ function routeDirectIncomingBottom(src: Bounds, gw: Bounds): Point[] {
   ];
 }
 
-function routeDirectIncomingLeft(src: Bounds, gw: Bounds, stepXOffset = 0): Point[] {
+interface DirectIncomingLeftOptions {
+  stepXOffset: number;
+  allBounds?: Bounds[];
+}
+
+function routeDirectIncomingLeft(
+  src: Bounds,
+  gw: Bounds,
+  opts: DirectIncomingLeftOptions
+): Point[] {
   const exitX = src.x + src.width;
   const exitY = Math.round(src.y + src.height / 2);
   const entryX = gw.x;
   const entryY = Math.round(gw.y + gw.height / 2);
 
   if (exitY === entryY) {
-    return [
-      { x: exitX, y: exitY },
-      { x: entryX, y: entryY },
-    ];
+    const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, src);
+    return routeCollinearWithDetour({ x: exitX, y: exitY }, { x: entryX, y: entryY }, obstacles);
   }
 
   const baseStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
-  const stepX = baseStepX + stepXOffset;
+  const stepX = baseStepX + opts.stepXOffset;
   return [
     { x: exitX, y: exitY },
     { x: stepX, y: exitY },
@@ -449,7 +568,10 @@ function canUseBottomPort(gw: Bounds, tgt: Bounds, ctx?: PortCheckContext): bool
     hStart: exitX,
     hEnd: tgt.x,
   };
-  return checkDirectPortClear(endpoints, ctx?.obstacles);
+  if (checkDirectPortClear(endpoints, ctx?.obstacles)) {
+    return true;
+  }
+  return computeSteppedBottomExit(gw, tgt, ctx?.obstacles) !== undefined;
 }
 
 function canUseIncomingTopPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): boolean {
@@ -467,7 +589,38 @@ function canUseIncomingTopPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): b
   return checkDirectPortClear(endpoints, obstacles);
 }
 
-function canUseIncomingBottomPort(src: Bounds, gw: Bounds, obstacles?: Bounds[]): boolean {
+function checkIncomingBottomDetour(src: Bounds, gw: Bounds, obstacles: Bounds[]): boolean {
+  const exitX = src.x + src.width;
+  const exitY = Math.round(src.y + src.height / 2);
+  const entryX = Math.round(gw.x + gw.width / 2);
+
+  let channelY = Math.max(exitY, gw.y + gw.height);
+  for (const b of obstacles) {
+    if (Math.max(exitX, b.x) < Math.min(entryX, b.x + b.width)) {
+      channelY = Math.max(channelY, b.y + b.height);
+    }
+  }
+  channelY += 40;
+
+  const isActivity = src.width >= 70;
+  const bottomExitX = Math.round(src.x + src.width / 2);
+  const bottomExitY = src.y + src.height;
+  const useBottom =
+    isActivity &&
+    isVerticalCorridorClear(bottomExitX, { start: bottomExitY, end: channelY }, obstacles);
+  const startVertClear = useBottom
+    ? true
+    : isVerticalCorridorClear(exitX, { start: exitY, end: channelY }, obstacles);
+  const startX = useBottom ? bottomExitX : exitX;
+
+  return (
+    startVertClear &&
+    isHorizontalCorridorClear(channelY, { start: startX, end: entryX }, obstacles) &&
+    isVerticalCorridorClear(entryX, { start: gw.y + gw.height, end: channelY }, obstacles)
+  );
+}
+
+function canUseIncomingBottomPort(src: Bounds, gw: Bounds, obstacles: Bounds[] = []): boolean {
   const exitX = src.x + src.width;
   const exitY = Math.round(src.y + src.height / 2);
   const entryX = Math.round(gw.x + gw.width / 2);
@@ -479,7 +632,10 @@ function canUseIncomingBottomPort(src: Bounds, gw: Bounds, obstacles?: Bounds[])
     hStart: exitX,
     hEnd: entryX,
   };
-  return checkDirectPortClear(endpoints, obstacles);
+  if (checkDirectPortClear(endpoints, obstacles)) {
+    return true;
+  }
+  return checkIncomingBottomDetour(src, gw, obstacles);
 }
 
 interface CategorizedFlows {
@@ -560,18 +716,59 @@ interface AssignmentContext {
   allBounds?: Bounds[];
 }
 
+function assignOutgoingBottomFlow(
+  cat: CategorizedFlows,
+  freePorts: { bottom: boolean },
+  ctx: AssignmentContext
+): GatewayFlowInfo | undefined {
+  if (!freePorts.bottom) {
+    return undefined;
+  }
+  if (cat.below.length > 0) {
+    const candidate = cat.below[0];
+    const obstacles = getOtherObstacles(ctx, candidate.targetBounds);
+    if (
+      canUseBottomPort(ctx.gw, candidate.targetBounds, {
+        obstacles,
+        targetPort: candidate.targetPort,
+      })
+    ) {
+      cat.below.shift();
+      return candidate;
+    }
+  }
+  if (cat.center.length > 0) {
+    const bottomIdx = cat.center.findIndex((f) => f.targetPort === 'bottom');
+    if (bottomIdx >= 0) {
+      return cat.center.splice(bottomIdx, 1)[0];
+    }
+  }
+  return undefined;
+}
+
 function computePortAssignments(
   cat: CategorizedFlows,
   freePorts: { top: boolean; bottom: boolean; right: boolean },
   ctx: AssignmentContext
 ): PortAssignments {
   const assignments: PortAssignments = { rightFlows: [] };
-  const obstaclesParams: ObstaclesContext = { allBounds: ctx.allBounds, gw: ctx.gw };
+
+  // If there is only 1 forward flow leaving this gateway and right port is free, always exit right
+  // (unless an explicit vertical targetPort is specified)
+  const singleFlow = cat.above[0] || cat.below[0] || cat.center[0];
+  if (
+    cat.above.length + cat.below.length + cat.center.length === 1 &&
+    freePorts.right &&
+    !singleFlow?.targetPort
+  ) {
+    assignments.rightFlows.push(...cat.center, ...cat.above, ...cat.below);
+    return assignments;
+  }
 
   // Assign Top port
   if (freePorts.top && cat.above.length > 0) {
     const candidate = cat.above[0];
-    const obstacles = getOtherObstacles(obstaclesParams, candidate.targetBounds);
+    const obstacles = getOtherObstacles(ctx, candidate.targetBounds);
     if (
       canUseTopPort(ctx.gw, candidate.targetBounds, {
         obstacles,
@@ -584,23 +781,44 @@ function computePortAssignments(
   }
 
   // Assign Bottom port
-  if (freePorts.bottom && cat.below.length > 0) {
-    const candidate = cat.below[0];
-    const obstacles = getOtherObstacles(obstaclesParams, candidate.targetBounds);
-    if (
-      canUseBottomPort(ctx.gw, candidate.targetBounds, {
-        obstacles,
-        targetPort: candidate.targetPort,
-      })
-    ) {
-      assignments.bottomFlow = candidate;
-      cat.below.shift();
-    }
-  }
+  assignments.bottomFlow = assignOutgoingBottomFlow(cat, freePorts, ctx);
 
   // All remaining flows exit Right
   assignments.rightFlows.push(...cat.center, ...cat.above, ...cat.below);
   return assignments;
+}
+
+function assignIncomingBottomFlow(
+  cat: CategorizedIncomingFlows,
+  freePorts: { bottom: boolean },
+  ctx: AssignmentContext
+): GatewayIncomingFlowInfo | undefined {
+  if (!freePorts.bottom) {
+    return undefined;
+  }
+  if (cat.below.length > 0) {
+    const candidate = cat.below[0];
+    const obstacles = getOtherObstacles(ctx, candidate.sourceBounds);
+    if (canUseIncomingBottomPort(candidate.sourceBounds, ctx.gw, obstacles)) {
+      cat.below.shift();
+      return candidate;
+    }
+  }
+  if (cat.center.length > 0) {
+    const idx = cat.center.findIndex((f) => {
+      const obstacles = getOtherObstacles(ctx, f.sourceBounds);
+      const exitX = f.sourceBounds.x + f.sourceBounds.width;
+      const exitY = Math.round(f.sourceBounds.y + f.sourceBounds.height / 2);
+      return (
+        !isHorizontalCorridorClear(exitY, { start: exitX, end: ctx.gw.x }, obstacles) &&
+        canUseIncomingBottomPort(f.sourceBounds, ctx.gw, obstacles)
+      );
+    });
+    if (idx >= 0) {
+      return cat.center.splice(idx, 1)[0];
+    }
+  }
+  return undefined;
 }
 
 function computeIncomingPortAssignments(
@@ -609,25 +827,17 @@ function computeIncomingPortAssignments(
   ctx: AssignmentContext
 ): IncomingPortAssignments {
   const assignments: IncomingPortAssignments = { leftFlows: [] };
-  const obstaclesParams: ObstaclesContext = { allBounds: ctx.allBounds, gw: ctx.gw };
 
   if (freePorts.top && cat.above.length > 0) {
     const candidate = cat.above[0];
-    const obstacles = getOtherObstacles(obstaclesParams, candidate.sourceBounds);
+    const obstacles = getOtherObstacles(ctx, candidate.sourceBounds);
     if (canUseIncomingTopPort(candidate.sourceBounds, ctx.gw, obstacles)) {
       assignments.topFlow = candidate;
       cat.above.shift();
     }
   }
 
-  if (freePorts.bottom && cat.below.length > 0) {
-    const candidate = cat.below[0];
-    const obstacles = getOtherObstacles(obstaclesParams, candidate.sourceBounds);
-    if (canUseIncomingBottomPort(candidate.sourceBounds, ctx.gw, obstacles)) {
-      assignments.bottomFlow = candidate;
-      cat.below.shift();
-    }
-  }
+  assignments.bottomFlow = assignIncomingBottomFlow(cat, freePorts, ctx);
 
   assignments.leftFlows.push(...cat.center, ...cat.above, ...cat.below);
   return assignments;
@@ -668,9 +878,71 @@ function routeTopFlow(gw: Bounds, tf: GatewayFlowInfo, allBounds?: Bounds[]): Po
 }
 
 function routeBottomFlow(gw: Bounds, bf: GatewayFlowInfo, allBounds?: Bounds[]): Point[] {
+  const obstacles = getOtherObstacles({ allBounds, gw }, bf.targetBounds);
+  if (bf.targetPort === 'bottom') {
+    return routeGatewayToGatewayBottom(gw, bf.targetBounds, obstacles);
+  }
   return bf.targetPort === 'top'
     ? routeToTargetTop(gw, bf.targetBounds, { exitPort: 'bottom', allBounds })
-    : routeDirectBottom(gw, bf.targetBounds);
+    : routeDirectBottom(gw, bf.targetBounds, obstacles);
+}
+
+interface OutgoingSeparationResult {
+  forwardFlows: GatewayFlowInfo[];
+  hasOutgoingFeedback: boolean;
+}
+
+function separateOutgoingFeedbackFlows(
+  flows: GatewayFlowInfo[],
+  options: GatewayRouteOptions,
+  result: Map<string, Point[]>
+): OutgoingSeparationResult {
+  const forwardFlows: GatewayFlowInfo[] = [];
+  let hasOutgoingFeedback = false;
+  const gw = options.gatewayBounds;
+
+  for (const f of flows) {
+    const isBackwards = f.targetBounds.x < gw.x + gw.width;
+    if (f.isFeedback || isBackwards) {
+      const waypoints = routeOrthogonalEdge(gw, f.targetBounds, options.allBounds);
+      result.set(f.flow.id, waypoints);
+      if (waypoints[0].y <= gw.y) {
+        options.usedPorts?.add('top');
+      } else {
+        hasOutgoingFeedback = true;
+      }
+    } else {
+      forwardFlows.push(f);
+    }
+  }
+  return { forwardFlows, hasOutgoingFeedback };
+}
+
+function routeAssignedRightFlows(
+  assignments: PortAssignments,
+  options: GatewayRouteOptions,
+  result: Map<string, Point[]>
+): void {
+  const gw = options.gatewayBounds;
+  const collinearFlow = assignments.rightFlows.find((rf) => {
+    const tgtCenterY = Math.round(rf.targetBounds.y + rf.targetBounds.height / 2);
+    return tgtCenterY === Math.round(gw.y + gw.height / 2);
+  });
+  const collinearTgtX = collinearFlow?.targetBounds.x;
+
+  let stepOffset = 0;
+  for (const rf of assignments.rightFlows) {
+    result.set(
+      rf.flow.id,
+      routeRightFlow(gw, rf, {
+        allBounds: options.allBounds,
+        stepOffset,
+        collinearTgtX,
+      })
+    );
+    options.usedPorts?.add('right');
+    stepOffset += 10;
+  }
 }
 
 export function routeGatewayOutgoingEdges(
@@ -681,26 +953,17 @@ export function routeGatewayOutgoingEdges(
   const gw = options.gatewayBounds;
   const gwCenterY = gw.y + gw.height / 2;
 
-  // Separate feedback loops from forward flows
-  const forwardFlows: GatewayFlowInfo[] = [];
-  let hasOutgoingFeedback = false;
-
-  for (const f of flows) {
-    const isBackwards = f.targetBounds.x < gw.x + gw.width;
-    if (f.isFeedback || isBackwards) {
-      hasOutgoingFeedback = true;
-      const waypoints = routeOrthogonalEdge(gw, f.targetBounds, options.allBounds);
-      result.set(f.flow.id, waypoints);
-    } else {
-      forwardFlows.push(f);
-    }
-  }
+  const { forwardFlows, hasOutgoingFeedback } = separateOutgoingFeedbackFlows(
+    flows,
+    options,
+    result
+  );
 
   const freePorts = {
     top: !options.usedPorts?.has('top'),
     bottom:
       !options.usedPorts?.has('bottom') && !hasOutgoingFeedback && !options.hasIncomingFeedback,
-    right: true,
+    right: !options.usedPorts?.has('right'),
   };
 
   const cat = categorizeFlows(forwardFlows, gwCenterY);
@@ -725,25 +988,7 @@ export function routeGatewayOutgoingEdges(
     options.usedPorts?.add('bottom');
   }
 
-  const collinearFlow = assignments.rightFlows.find((rf) => {
-    const tgtCenterY = Math.round(rf.targetBounds.y + rf.targetBounds.height / 2);
-    return tgtCenterY === Math.round(gw.y + gw.height / 2);
-  });
-  const collinearTgtX = collinearFlow?.targetBounds.x;
-
-  let stepOffset = 0;
-  for (const rf of assignments.rightFlows) {
-    result.set(
-      rf.flow.id,
-      routeRightFlow(gw, rf, {
-        allBounds: options.allBounds,
-        stepOffset,
-        collinearTgtX,
-      })
-    );
-    options.usedPorts?.add('right');
-    stepOffset += 10;
-  }
+  routeAssignedRightFlows(assignments, options, result);
 
   return result;
 }
@@ -763,9 +1008,17 @@ export function routeGatewayIncomingEdges(
   for (const f of flows) {
     const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gw.x;
     if (f.isFeedback || isBackwards) {
-      hasIncomingFeedback = true;
       const waypoints = routeOrthogonalEdge(f.sourceBounds, gw, options.allBounds);
       routes.set(f.flow.id, waypoints);
+      const lastPt = waypoints[waypoints.length - 1];
+      if (lastPt.y <= gw.y) {
+        usedPorts.add('top');
+      } else if (lastPt.y >= gw.y + gw.height) {
+        usedPorts.add('bottom');
+        hasIncomingFeedback = true;
+      } else {
+        usedPorts.add('left');
+      }
     } else {
       forwardFlows.push(f);
     }
@@ -792,16 +1045,26 @@ export function routeGatewayIncomingEdges(
   }
 
   if (assignments.bottomFlow) {
+    const obstacles = getOtherObstacles(
+      { allBounds: options.allBounds, gw },
+      assignments.bottomFlow.sourceBounds
+    );
     routes.set(
       assignments.bottomFlow.flow.id,
-      routeDirectIncomingBottom(assignments.bottomFlow.sourceBounds, gw)
+      routeDirectIncomingBottom(assignments.bottomFlow.sourceBounds, gw, obstacles)
     );
     usedPorts.add('bottom');
   }
 
   let stepOffset = 0;
   for (const lf of assignments.leftFlows) {
-    routes.set(lf.flow.id, routeDirectIncomingLeft(lf.sourceBounds, gw, stepOffset));
+    routes.set(
+      lf.flow.id,
+      routeDirectIncomingLeft(lf.sourceBounds, gw, {
+        stepXOffset: stepOffset,
+        allBounds: options.allBounds,
+      })
+    );
     usedPorts.add('left');
     stepOffset -= 10;
   }

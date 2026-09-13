@@ -3,15 +3,15 @@
   <bpmn:process id="Process_1" isExecutable="false">
     <bpmn:startEvent id="Start_1" name="Start" />
     <bpmn:subProcess id="Outer_Sub" name="Outer Scope">
-      <bpmn:startEvent id="Outer_Start" name="Begin&#10;Outer" />
+      <bpmn:startEvent id="Outer_Start" name="Begin Outer" />
       <bpmn:subProcess id="Inner_Sub" name="Inner Scope">
-        <bpmn:startEvent id="Inner_Start" name="Begin&#10;Inner" />
+        <bpmn:startEvent id="Inner_Start" name="Begin Inner" />
         <bpmn:task id="Inner_Task" name="Deep Compute" />
-        <bpmn:endEvent id="Inner_End" name="Finish&#10;Inner" />
+        <bpmn:endEvent id="Inner_End" name="Finish Inner" />
         <bpmn:sequenceFlow id="Inner_F1" sourceRef="Inner_Start" targetRef="Inner_Task" />
         <bpmn:sequenceFlow id="Inner_F2" sourceRef="Inner_Task" targetRef="Inner_End" />
       </bpmn:subProcess>
-      <bpmn:endEvent id="Outer_End" name="Finish&#10;Outer" />
+      <bpmn:endEvent id="Outer_End" name="Finish Outer" />
       <bpmn:sequenceFlow id="Outer_F1" sourceRef="Outer_Start" targetRef="Inner_Sub" />
       <bpmn:sequenceFlow id="Outer_F2" sourceRef="Inner_Sub" targetRef="Outer_End" />
     </bpmn:subProcess>
@@ -33,7 +33,7 @@
       <bpmndi:BPMNShape id="Outer_Start_di" bpmnElement="Outer_Start">
         <dc:Bounds x="226" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="225" y="168" width="34" height="28" />
+          <dc:Bounds x="212" y="168" width="64" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Inner_Sub_di" bpmnElement="Inner_Sub" isExpanded="true">
@@ -42,7 +42,7 @@
       <bpmndi:BPMNShape id="Inner_Start_di" bpmnElement="Inner_Start">
         <dc:Bounds x="352" y="117" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="351" y="163" width="34" height="28" />
+          <dc:Bounds x="339" y="163" width="62" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Inner_Task_di" bpmnElement="Inner_Task">
@@ -51,13 +51,13 @@
       <bpmndi:BPMNShape id="Inner_End_di" bpmnElement="Inner_End">
         <dc:Bounds x="608" y="117" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="605" y="163" width="38" height="28" />
+          <dc:Bounds x="593" y="163" width="66" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Outer_End_di" bpmnElement="Outer_End">
         <dc:Bounds x="734" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="731" y="168" width="38" height="28" />
+          <dc:Bounds x="718" y="168" width="68" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">

@@ -72,6 +72,24 @@ describe('gateway-router', () => {
       expect(pts[1]).toEqual({ x: 400, y: 225 });
     });
 
+    it('routes collinear forward target with detour when horizontal corridor is blocked', () => {
+      const tgtBounds: Bounds = { x: 500, y: 185, width: 100, height: 80 }; // center Y = 225
+      const obstacle: Bounds = { x: 300, y: 185, width: 100, height: 80 };
+      const nonOverlappingObstacle: Bounds = { x: 700, y: 185, width: 50, height: 50 };
+      const flows: GatewayFlowInfo[] = [{ flow: { id: 'Flow_1' }, targetBounds: tgtBounds }];
+
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, obstacle, nonOverlappingObstacle, tgtBounds],
+      });
+      const pts = routeMap.get('Flow_1')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[0]).toEqual({ x: 250, y: 225 });
+      expect(pts[1]).toEqual({ x: 250, y: 305 });
+      expect(pts[2]).toEqual({ x: 500, y: 305 });
+      expect(pts[3]).toEqual({ x: 500, y: 225 });
+    });
+
     it('routes target above via direct top and target below via direct bottom', () => {
       const tgtAbove: Bounds = { x: 400, y: 50, width: 100, height: 80 }; // center Y = 90
       const tgtBelow: Bounds = { x: 400, y: 350, width: 100, height: 80 }; // center Y = 390
@@ -823,6 +841,152 @@ describe('gateway-router', () => {
         usedPorts: new Set(['top', 'bottom']),
       });
       expect(routes.get('F_RightTop')).toBeDefined();
+    });
+
+    it('routes bottomFlow to targetPort bottom via gateway-to-gateway bypass', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const tgt: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const obs: Bounds = { x: 200, y: 80, width: 100, height: 80 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'F1' }, targetBounds: { x: 200, y: 85, width: 100, height: 80 } },
+        { flow: { id: 'F_Bypass' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, tgt, obs],
+      });
+      const pts = routeMap.get('F_Bypass')!;
+      expect(pts).toHaveLength(4);
+      expect(pts[0]).toEqual({ x: 125, y: 150 });
+      expect(pts[3]).toEqual({ x: 425, y: 150 });
+    });
+
+    it('handles upward feedback edge in outgoing and marks top port as used', () => {
+      const gw: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const tgt: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const host: Bounds = { x: 200, y: 100, width: 100, height: 80 };
+      const bEvent: Bounds = { x: 232, y: 162, width: 36, height: 36 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'F_UpFeed' }, targetBounds: tgt, isFeedback: true },
+      ];
+      const usedPorts = new Set<'top' | 'bottom' | 'left' | 'right'>();
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, tgt, host, bEvent],
+        usedPorts,
+      });
+      expect(usedPorts.has('top')).toBe(true);
+      expect(routeMap.get('F_UpFeed')![0]).toEqual({ x: 425, y: 100 });
+    });
+
+    it('handles upward feedback edge in incoming and marks top port as used', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const src: Bounds = { x: 400, y: 100, width: 50, height: 50 };
+      const host: Bounds = { x: 200, y: 100, width: 100, height: 80 };
+      const bEvent: Bounds = { x: 232, y: 162, width: 36, height: 36 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'F_InFeed' }, sourceBounds: src, isFeedback: true },
+      ];
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, host, bEvent],
+      });
+      expect(usedPorts.has('top')).toBe(true);
+      const pts = routes.get('F_InFeed')!;
+      expect(pts[pts.length - 1]).toEqual({ x: 125, y: 100 });
+    });
+
+    it('handles incoming feedback edge that enters left and marks left port as used', () => {
+      const gw: Bounds = { x: 200, y: 200, width: 50, height: 50 };
+      const src: Bounds = { x: 400, y: 200, width: 50, height: 50 };
+      const obsBelowGw: Bounds = { x: 215, y: 260, width: 20, height: 40 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'F_InLeft' }, sourceBounds: src, isFeedback: true },
+      ];
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, obsBelowGw],
+      });
+      expect(usedPorts.has('left')).toBe(true);
+      const pts = routes.get('F_InLeft')!;
+      expect(pts[pts.length - 1]).toEqual({ x: 200, y: 225 });
+    });
+
+    it('routes incoming flow from center to bottom port when horizontal corridor is blocked and below is clear', () => {
+      const gw: Bounds = { x: 500, y: 185, width: 50, height: 50 };
+      const src: Bounds = { x: 100, y: 185, width: 50, height: 50 };
+      const blocker: Bounds = { x: 300, y: 185, width: 50, height: 50 };
+      const nonOverlapping: Bounds = { x: 50, y: 400, width: 40, height: 40 };
+      const flows: GatewayIncomingFlowInfo[] = [{ flow: { id: 'F_DetourIn' }, sourceBounds: src }];
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, blocker, nonOverlapping],
+      });
+      expect(usedPorts.has('bottom')).toBe(true);
+      const pts = routes.get('F_DetourIn')!;
+      expect(pts[0]).toEqual({ x: 150, y: 210 });
+      expect(pts[pts.length - 1]).toEqual({ x: 525, y: 235 });
+    });
+
+    it('routes incoming flow from activity bottom when horizontal corridor is blocked', () => {
+      const gw: Bounds = { x: 500, y: 185, width: 50, height: 50 };
+      const src: Bounds = { x: 100, y: 185, width: 100, height: 80 };
+      const blocker: Bounds = { x: 300, y: 185, width: 50, height: 50 };
+      const flows: GatewayIncomingFlowInfo[] = [{ flow: { id: 'F_ActDetour' }, sourceBounds: src }];
+      const { routes, usedPorts } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, blocker],
+      });
+      expect(usedPorts.has('bottom')).toBe(true);
+      const pts = routes.get('F_ActDetour')!;
+      expect(pts[0]).toEqual({ x: 150, y: 265 });
+      expect(pts[pts.length - 1]).toEqual({ x: 525, y: 235 });
+    });
+
+    it('routes direct bottom via stepped exit around an obstacle below the gateway', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const tgt: Bounds = { x: 300, y: 250, width: 100, height: 80 };
+      const blocker: Bounds = { x: 80, y: 200, width: 100, height: 80 };
+      const flows: GatewayFlowInfo[] = [{ flow: { id: 'F_Stepped' }, targetBounds: tgt }];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, tgt, blocker],
+        usedPorts: new Set(['right']),
+      });
+      const pts = routeMap.get('F_Stepped')!;
+      expect(pts).toHaveLength(5);
+      expect(pts[0]).toEqual({ x: 125, y: 150 });
+      expect(pts[1].y).toBe(175);
+      expect(pts[4]).toEqual({ x: 300, y: 290 });
+    });
+
+    it('falls back when stepped bottom exit has insufficient horizontal space to target', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const tgt: Bounds = { x: 150, y: 250, width: 100, height: 80 };
+      const blocker: Bounds = { x: 80, y: 200, width: 100, height: 80 };
+      const flows: GatewayFlowInfo[] = [{ flow: { id: 'F_Fallback' }, targetBounds: tgt }];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, tgt, blocker],
+        usedPorts: new Set(['right']),
+      });
+      const pts = routeMap.get('F_Fallback')!;
+      expect(pts[0].x).toBe(150);
+    });
+
+    it('falls back when stepped bottom exit corridor is obstructed', () => {
+      const gw: Bounds = { x: 100, y: 100, width: 50, height: 50 };
+      const tgt: Bounds = { x: 300, y: 250, width: 100, height: 80 };
+      const blocker: Bounds = { x: 80, y: 200, width: 100, height: 80 };
+      const gapBlocker: Bounds = { x: 140, y: 165, width: 30, height: 20 };
+      const flows: GatewayFlowInfo[] = [{ flow: { id: 'F_Blocked' }, targetBounds: tgt }];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, tgt, blocker, gapBlocker],
+        usedPorts: new Set(['right']),
+      });
+      const pts = routeMap.get('F_Blocked')!;
+      expect(pts[0].x).toBe(150);
     });
   });
 });
