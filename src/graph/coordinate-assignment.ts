@@ -378,7 +378,14 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
   }
   const siblingIndex = siblings.findIndex((e) => e.target === nodeId);
   const count = siblings.length;
-  const offset = siblingIndex - (count - 1) / 2;
+  // For an odd sibling count this centers exactly on the parent's track (the
+  // middle branch gets offset 0). For an even count there is no exact
+  // center, so round down rather than split the difference: that keeps one
+  // branch on the parent's own track instead of offsetting every branch by
+  // a fraction, which otherwise forces a bend on every branch at both the
+  // split and the merge (issue #88).
+  const centerIndex = Math.floor((count - 1) / 2);
+  const offset = siblingIndex - centerIndex;
   return parentTrack + offset;
 }
 

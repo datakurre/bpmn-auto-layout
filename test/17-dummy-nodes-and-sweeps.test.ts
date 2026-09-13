@@ -8,7 +8,7 @@ import {
   boundsCenter,
 } from '../src/graph/dummy-nodes';
 import { layoutProcess } from '../src/index';
-import { scoreDiagram } from '../src/layout-metrics';
+import { scoreDiagram, segmentCrossesBox } from '../src/layout-metrics';
 
 describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
   it('inserts virtual dummy nodes for edges spanning multiple ranks', () => {
@@ -272,10 +272,16 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     expect(bypassEdge).toBeDefined();
     const waypoints: Array<{ x: number; y: number }> = bypassEdge.waypoint;
 
-    // The route must stay clear of the intermediate task row it bypasses.
-    const taskBottom = findShape('Task_A1').bounds.y + findShape('Task_A1').bounds.height;
-    for (const wp of waypoints) {
-      expect(wp.y).toBeGreaterThanOrEqual(taskBottom);
+    // The route must stay clear of the intermediate tasks it bypasses. Its
+    // endpoints necessarily share the gateways' own exit/entry y (issue #88
+    // keeps one branch collinear with its gateway, which is now also the
+    // tasks' row), so what matters is that no segment actually crosses a
+    // bypassed task's bounds, not that every waypoint sits below the row.
+    for (const taskId of ['Task_A1', 'Task_A2', 'Task_A3']) {
+      const bounds = findShape(taskId).bounds;
+      for (let i = 0; i < waypoints.length - 1; i++) {
+        expect(segmentCrossesBox(waypoints[i], waypoints[i + 1], bounds)).toBe(false);
+      }
     }
 
     // Every segment is purely horizontal or vertical (orthogonal corridor routing).

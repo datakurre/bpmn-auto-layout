@@ -145,12 +145,12 @@
         <dc:Bounds x="1186" y="220" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Check_Capacity_di" bpmnElement="Supplier_Check_Capacity">
-        <dc:Bounds x="180" y="460" width="100" height="80" />
+        <dc:Bounds x="180" y="400" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Gateway_Price_di" bpmnElement="Supplier_Gateway_Price">
-        <dc:Bounds x="340" y="475" width="50" height="50" />
+        <dc:Bounds x="340" y="415" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="396" y="493" width="84" height="14" />
+          <dc:Bounds x="323" y="395" width="84" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Supplier_Draft_Quote_di" bpmnElement="Supplier_Draft_Quote">
@@ -224,12 +224,11 @@
         <di:waypoint x="1346" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Quote_di" bpmnElement="SF_Quote">
-        <di:waypoint x="365" y="475" />
-        <di:waypoint x="365" y="440" />
+        <di:waypoint x="390" y="440" />
         <di:waypoint x="450" y="440" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_Std_di" bpmnElement="SF_Std">
-        <di:waypoint x="365" y="525" />
+        <di:waypoint x="365" y="465" />
         <di:waypoint x="365" y="560" />
         <di:waypoint x="450" y="560" />
       </bpmndi:BPMNEdge>
@@ -238,8 +237,8 @@
         <di:waypoint x="720" y="680" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF1_di" bpmnElement="SF1">
-        <di:waypoint x="280" y="500" />
-        <di:waypoint x="340" y="500" />
+        <di:waypoint x="280" y="440" />
+        <di:waypoint x="340" y="440" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_To_Prod_1_di" bpmnElement="SF_To_Prod_1">
         <di:waypoint x="550" y="440" />
@@ -268,7 +267,7 @@
         <di:waypoint x="326" y="180" />
         <di:waypoint x="326" y="350" />
         <di:waypoint x="230" y="350" />
-        <di:waypoint x="230" y="460" />
+        <di:waypoint x="230" y="400" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Quote_di" bpmnElement="Msg_Quote">
         <di:waypoint x="500" y="400" />
