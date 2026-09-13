@@ -9,8 +9,24 @@ import {
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
-import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT, getElementDimensions } from '../di-constants';
+import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT } from '../di-constants';
+import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
+import {
+  isArtifact,
+  isAssociation,
+  collectScopeAssociations,
+  partitionArtifacts,
+  layoutConnectedArtifacts,
+  routeAssociations,
+} from './artifact-layout';
+import {
+  isEventSubProcess,
+  computeCurrentDiagramBounds,
+  layoutDisconnectedElements,
+} from './disconnected-layout';
 import type { AutoLayoutOptions, Bounds, Point } from '../types';
+
+export { routeAssociationEdge } from './artifact-layout';
 
 export interface ScopeLayoutResult {
   width: number;
@@ -150,7 +166,7 @@ interface PartitionedFlows {
   otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>;
 }
 
-function getRefId(ref: any): string | undefined {
+export function getRefId(ref: any): string | undefined {
   return ref?.id || ref;
 }
 
@@ -440,23 +456,6 @@ function buildScopeGraph(
   return graph;
 }
 
-function addBoundaryEventEdges(graph: DirectedGraph, boundaryEvents: any[], startOrder = 0): void {
-  for (let i = 0; i < boundaryEvents.length; i++) {
-    const bEvent = boundaryEvents[i];
-    graph.addNode(bEvent.id, bEvent, startOrder + i);
-    const hostId = getRefId(bEvent.attachedToRef);
-    if (hostId && graph.getNode(hostId)) {
-      graph.addEdge({
-        id: `_attach_${bEvent.id}`,
-        source: hostId,
-        target: bEvent.id,
-        data: null,
-        order: startOrder + i,
-      });
-    }
-  }
-}
-
 function addSequenceFlowEdges(graph: DirectedGraph, sequenceFlows: any[]): void {
   for (let i = 0; i < sequenceFlows.length; i++) {
     const flow = sequenceFlows[i];
@@ -501,7 +500,7 @@ function assignCoordinatesWithCustomDimensions(
   });
 }
 
-function offsetAndCollectChildren(
+export function offsetAndCollectChildren(
   child: ScopeLayoutResult,
   parentBounds: Bounds,
   collector: {
@@ -555,96 +554,6 @@ function computeScopeBoundingBox(shapes: Array<{ bounds: Bounds }>): {
   }
 
   return { minX, minY, maxX, maxY };
-}
-
-function placeBoundaries(
-  boundaryEvents: any[],
-  boundsMap: Map<string, Bounds>,
-  graph: DirectedGraph
-): void {
-  const eventsByHost = new Map<string, any[]>();
-  for (const b of boundaryEvents) {
-    const hostId = b.attachedToRef?.id || b.attachedToRef;
-    if (hostId) {
-      const list = eventsByHost.get(hostId) || [];
-      list.push(b);
-      eventsByHost.set(hostId, list);
-    }
-  }
-
-  for (const [hostId, events] of eventsByHost.entries()) {
-    const hostBounds = boundsMap.get(hostId);
-    if (hostBounds) {
-      sortBoundaryEventsByTarget(events, { hostBounds, graph, boundsMap });
-    }
-  }
-}
-
-interface BoundarySortContext {
-  hostBounds: Bounds;
-  graph: DirectedGraph;
-  boundsMap: Map<string, Bounds>;
-}
-
-function sortBoundaryEventsByTarget(events: any[], ctx: BoundarySortContext): void {
-  const { hostBounds, graph, boundsMap } = ctx;
-  events.sort((a, b) => {
-    const targetA = graph.outEdges(a.id)[0]?.target;
-    const targetB = graph.outEdges(b.id)[0]?.target;
-    const boundsA = targetA ? boundsMap.get(targetA) : undefined;
-    const boundsB = targetB ? boundsMap.get(targetB) : undefined;
-    const yA = boundsA ? boundsA.y : 0;
-    const yB = boundsB ? boundsB.y : 0;
-    if (yA !== yB) {
-      return yB - yA;
-    }
-    return a.id.localeCompare(b.id);
-  });
-
-  const count = events.length;
-  if (count === 1) {
-    const x = Math.round(hostBounds.x + (hostBounds.width - 36) / 2);
-    const y = Math.round(hostBounds.y + hostBounds.height - 18);
-    boundsMap.set(events[0].id, { x, y, width: 36, height: 36 });
-    return;
-  }
-
-  const minX = hostBounds.x + 10;
-  const maxX = hostBounds.x + hostBounds.width - 46;
-  const step = (maxX - minX) / (count - 1);
-  for (let i = 0; i < count; i++) {
-    const x = Math.round(minX + i * step);
-    const y = Math.round(hostBounds.y + hostBounds.height - 18);
-    boundsMap.set(events[i].id, { x, y, width: 36, height: 36 });
-  }
-}
-
-function routeBoundaryExit(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
-  const srcBottom: Point = {
-    x: Math.round(sourceBounds.x + sourceBounds.width / 2),
-    y: sourceBounds.y + sourceBounds.height,
-  };
-  const tgtEntry: Point = {
-    x: targetBounds.x,
-    y: Math.round(targetBounds.y + targetBounds.height / 2),
-  };
-  return [srcBottom, { x: srcBottom.x, y: tgtEntry.y }, tgtEntry];
-}
-
-function isEventSubProcess(el: any): boolean {
-  return Boolean(el.$type === 'bpmn:SubProcess' && el.triggeredByEvent);
-}
-
-function isArtifact(el: any): boolean {
-  return (
-    el.$type === 'bpmn:DataObjectReference' ||
-    el.$type === 'bpmn:DataStoreReference' ||
-    el.$type === 'bpmn:TextAnnotation'
-  );
-}
-
-function isAssociation(el: any): boolean {
-  return el.$type === 'bpmn:Association';
 }
 
 function isNonVisual(el: any): boolean {
@@ -722,365 +631,6 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
       waypoints: e.waypoints,
       isFeedback: feedbackEdges.has(e.element.id),
     });
-  }
-}
-
-function routeAssociations(
-  associations: any[],
-  boundsMap: Map<string, Bounds>,
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>
-): void {
-  for (const assoc of associations) {
-    if (edges.some((e) => e.element.id === assoc.id)) {
-      continue;
-    }
-    const srcId = getRefId(assoc.sourceRef);
-    const tgtId = getRefId(assoc.targetRef);
-    const srcBounds = boundsMap.get(srcId as string);
-    const tgtBounds = boundsMap.get(tgtId as string);
-    if (srcBounds && tgtBounds) {
-      const waypoints = routeAssociationEdge(srcBounds, tgtBounds);
-      edges.push({ element: assoc, waypoints });
-    }
-  }
-}
-
-function collectTaskDataAssociations(node: any): any[] {
-  const result: any[] = [];
-  for (const dia of node.dataInputAssociations || []) {
-    const src = Array.isArray(dia.sourceRef) ? dia.sourceRef[0] : dia.sourceRef;
-    const srcId = getRefId(src);
-    result.push({
-      $type: 'bpmn:Association',
-      id: dia.id ?? `Assoc_${srcId}_${node.id}`,
-      sourceRef: src,
-      targetRef: node,
-    });
-  }
-  for (const doa of node.dataOutputAssociations || []) {
-    const tgtId = getRefId(doa.targetRef);
-    result.push({
-      $type: 'bpmn:Association',
-      id: doa.id ?? `Assoc_${node.id}_${tgtId}`,
-      sourceRef: node,
-      targetRef: doa.targetRef,
-    });
-  }
-  return result;
-}
-
-function collectScopeAssociations(scopeElement: any, regularNodes: any[]): any[] {
-  const flowElements = scopeElement.flowElements || [];
-  const artifacts = scopeElement.artifacts || [];
-  const result = [...flowElements.filter(isAssociation), ...artifacts.filter(isAssociation)];
-
-  for (const node of regularNodes) {
-    result.push(...collectTaskDataAssociations(node));
-  }
-
-  return result;
-}
-
-interface ConnectedArtifactInfo {
-  artifact: any;
-  hostId: string;
-}
-
-function partitionArtifacts(
-  artifacts: any[],
-  associations: any[],
-  regularNodeIds: Set<string>
-): {
-  connected: ConnectedArtifactInfo[];
-  unconnected: any[];
-} {
-  const connected: ConnectedArtifactInfo[] = [];
-  const unconnected: any[] = [];
-
-  for (const art of artifacts) {
-    let hostId: string | undefined;
-    for (const assoc of associations) {
-      const srcId = getRefId(assoc.sourceRef);
-      const tgtId = getRefId(assoc.targetRef);
-      if (srcId === art.id && tgtId && regularNodeIds.has(tgtId)) {
-        hostId = tgtId;
-        break;
-      }
-      if (tgtId === art.id && srcId && regularNodeIds.has(srcId)) {
-        hostId = srcId;
-        break;
-      }
-    }
-    if (hostId) {
-      connected.push({ artifact: art, hostId });
-    } else {
-      unconnected.push(art);
-    }
-  }
-
-  return { connected, unconnected };
-}
-
-interface ConnectedLayoutContext {
-  boundsMap: Map<string, Bounds>;
-  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-}
-
-function layoutConnectedArtifacts(
-  connectedList: ConnectedArtifactInfo[],
-  ctx: ConnectedLayoutContext
-): void {
-  const byHost = new Map<string, any[]>();
-  for (const item of connectedList) {
-    const list = byHost.get(item.hostId) || [];
-    list.push(item.artifact);
-    byHost.set(item.hostId, list);
-  }
-
-  for (const [hostId, artifacts] of byHost.entries()) {
-    const hostBounds = ctx.boundsMap.get(hostId)!;
-    placeHostArtifacts(artifacts, hostBounds, ctx);
-  }
-}
-
-function placeHostArtifacts(
-  artifacts: any[],
-  hostBounds: Bounds,
-  ctx: ConnectedLayoutContext
-): void {
-  const aboveList: any[] = [];
-  const belowList: any[] = [];
-  const sideList: any[] = [];
-
-  for (const art of artifacts) {
-    if (art.$type === 'bpmn:DataStoreReference') {
-      belowList.push(art);
-    } else if (art.$type === 'bpmn:DataObjectReference') {
-      aboveList.push(art);
-    } else if (aboveList.length === 0) {
-      aboveList.push(art);
-    } else if (belowList.length === 0) {
-      belowList.push(art);
-    } else {
-      sideList.push(art);
-    }
-  }
-
-  const hostCenterX = Math.round(hostBounds.x + hostBounds.width / 2);
-  placeArtifactRow(aboveList, {
-    hostCenterX,
-    y: (h) => hostBounds.y - 30 - h,
-    ctx,
-  });
-  placeArtifactRow(belowList, {
-    hostCenterX,
-    y: () => hostBounds.y + hostBounds.height + 30,
-    ctx,
-  });
-  placeArtifactSide(sideList, hostBounds, ctx);
-}
-
-interface RowPlacementConfig {
-  hostCenterX: number;
-  y: (height: number) => number;
-  ctx: ConnectedLayoutContext;
-}
-
-function placeArtifactRow(artifacts: any[], config: RowPlacementConfig): void {
-  if (artifacts.length === 0) {
-    return;
-  }
-  const dims = artifacts.map((a) => getElementDimensions(a.$type));
-  const totalWidth = dims.reduce((sum, d) => sum + d.width, 0) + (artifacts.length - 1) * 20;
-  let curX = Math.round(config.hostCenterX - totalWidth / 2);
-
-  for (let i = 0; i < artifacts.length; i++) {
-    const art = artifacts[i];
-    const dim = dims[i];
-    const bounds: Bounds = {
-      x: curX,
-      y: config.y(dim.height),
-      width: dim.width,
-      height: dim.height,
-    };
-    config.ctx.boundsMap.set(art.id, bounds);
-    config.ctx.shapes.push({ element: art, bounds });
-    curX += dim.width + 20;
-  }
-}
-
-function placeArtifactSide(
-  artifacts: any[],
-  hostBounds: Bounds,
-  ctx: ConnectedLayoutContext
-): void {
-  let curX = hostBounds.x + hostBounds.width + 30;
-  for (const art of artifacts) {
-    const dim = getElementDimensions(art.$type);
-    const bounds: Bounds = {
-      x: curX,
-      y: Math.round(hostBounds.y + (hostBounds.height - dim.height) / 2),
-      width: dim.width,
-      height: dim.height,
-    };
-    ctx.boundsMap.set(art.id, bounds);
-    ctx.shapes.push({ element: art, bounds });
-    curX += dim.width + 20;
-  }
-}
-
-export function routeAssociationEdge(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
-  const overlapMinX = Math.max(sourceBounds.x, targetBounds.x);
-  const overlapMaxX = Math.min(
-    sourceBounds.x + sourceBounds.width,
-    targetBounds.x + targetBounds.width
-  );
-
-  if (overlapMinX < overlapMaxX) {
-    const midX = Math.round((overlapMinX + overlapMaxX) / 2);
-    if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
-      return [
-        { x: midX, y: sourceBounds.y + sourceBounds.height },
-        { x: midX, y: targetBounds.y },
-      ];
-    }
-    if (targetBounds.y + targetBounds.height <= sourceBounds.y) {
-      return [
-        { x: midX, y: sourceBounds.y },
-        { x: midX, y: targetBounds.y + targetBounds.height },
-      ];
-    }
-  }
-
-  const overlapMinY = Math.max(sourceBounds.y, targetBounds.y);
-  const overlapMaxY = Math.min(
-    sourceBounds.y + sourceBounds.height,
-    targetBounds.y + targetBounds.height
-  );
-
-  if (overlapMinY < overlapMaxY) {
-    const midY = Math.round((overlapMinY + overlapMaxY) / 2);
-    if (sourceBounds.x + sourceBounds.width <= targetBounds.x) {
-      return [
-        { x: sourceBounds.x + sourceBounds.width, y: midY },
-        { x: targetBounds.x, y: midY },
-      ];
-    }
-    if (targetBounds.x + targetBounds.width <= sourceBounds.x) {
-      return [
-        { x: sourceBounds.x, y: midY },
-        { x: targetBounds.x + targetBounds.width, y: midY },
-      ];
-    }
-  }
-
-  return routeDiagonalAssociation(sourceBounds, targetBounds);
-}
-
-function routeDiagonalAssociation(src: Bounds, tgt: Bounds): Point[] {
-  const srcCenter: Point = {
-    x: Math.round(src.x + src.width / 2),
-    y: Math.round(src.y + src.height / 2),
-  };
-  const tgtCenter: Point = {
-    x: Math.round(tgt.x + tgt.width / 2),
-    y: Math.round(tgt.y + tgt.height / 2),
-  };
-
-  if (src.x + src.width <= tgt.x) {
-    const p1: Point = { x: src.x + src.width, y: srcCenter.y };
-    const p3: Point = {
-      x: tgtCenter.x,
-      y: srcCenter.y < tgtCenter.y ? tgt.y : tgt.y + tgt.height,
-    };
-    return [p1, { x: p3.x, y: p1.y }, p3];
-  }
-
-  const p1: Point = {
-    x: srcCenter.x,
-    y: srcCenter.y < tgtCenter.y ? src.y + src.height : src.y,
-  };
-  const p3: Point = {
-    x: tgt.x + tgt.width,
-    y: tgtCenter.y,
-  };
-  return [p1, { x: p1.x, y: p3.y }, p3];
-}
-
-function computeCurrentDiagramBounds(
-  shapes: Array<{ bounds: Bounds }>,
-  edges: Array<{ waypoints: Point[] }>
-): { minX: number; maxX: number; maxY: number } {
-  if (shapes.length === 0) {
-    return { minX: 100, maxX: 500, maxY: 40 };
-  }
-  let minX = shapes[0].bounds.x;
-  let maxX = shapes[0].bounds.x + shapes[0].bounds.width;
-  let maxY = shapes[0].bounds.y + shapes[0].bounds.height;
-
-  for (const s of shapes) {
-    minX = Math.min(minX, s.bounds.x);
-    maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
-    maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
-  }
-  for (const e of edges) {
-    for (const wp of e.waypoints) {
-      minX = Math.min(minX, wp.x);
-      maxX = Math.max(maxX, wp.x);
-      maxY = Math.max(maxY, wp.y);
-    }
-  }
-  return { minX, maxX, maxY };
-}
-
-interface DisconnectedLayoutContext {
-  childScopeResults: Map<string, ScopeLayoutResult>;
-  boundsMap: Map<string, Bounds>;
-  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
-}
-
-function layoutDisconnectedElements(
-  items: any[],
-  diagramBounds: { minX: number; maxX: number; maxY: number },
-  ctx: DisconnectedLayoutContext
-): void {
-  const rowStartX = diagramBounds.minX;
-  const rowBoundaryX = Math.max(diagramBounds.maxX, rowStartX + 600);
-  let currentX = rowStartX;
-  let currentY = diagramBounds.maxY + 60;
-  let rowMaxHeight = 0;
-
-  for (const item of items) {
-    const childResult = isEventSubProcess(item) ? ctx.childScopeResults.get(item.id) : undefined;
-    const width = childResult
-      ? Math.max(SUBPROCESS_MIN_WIDTH, childResult.width)
-      : getElementDimensions(item.$type).width;
-    const height = childResult
-      ? Math.max(SUBPROCESS_MIN_HEIGHT, childResult.height)
-      : getElementDimensions(item.$type).height;
-
-    if (currentX > rowStartX && currentX + width > rowBoundaryX) {
-      currentX = rowStartX;
-      currentY += rowMaxHeight + 40;
-      rowMaxHeight = 0;
-    }
-
-    const bounds: Bounds = { x: currentX, y: currentY, width, height };
-    ctx.boundsMap.set(item.id, bounds);
-
-    if (childResult) {
-      ctx.shapes.push({ element: item, bounds, isExpanded: true });
-      offsetAndCollectChildren(childResult, bounds, {
-        shapes: ctx.shapes,
-        edges: ctx.edges,
-      });
-    } else {
-      ctx.shapes.push({ element: item, bounds });
-    }
-
-    currentX += width + 40;
-    rowMaxHeight = Math.max(rowMaxHeight, height);
   }
 }
 
