@@ -97,16 +97,27 @@ export function alignMergeNodeTrack(
  * points to pass through: the flow's own exit point, the center of each dummy
  * node bounds along the way, then the flow's own entry point.
  *
- * NOT currently wired into the layout pipeline -- deliberately (see #81).
- * Routing through a corridor only pays off when the corridor is roughly
- * straight, and nothing straightens it yet: `computeFlatTracks` is a single
- * forward pass with no barycenter/median sweep, so a dummy chain wanders.
- * Because each consecutive anchor pair is routed independently below, a
- * wandering chain costs ~2 bends per hop against 2 for the direct route, which
- * measured as a net regression across the whole corpus.
+ * NOT wired into the layout pipeline (see #81) -- and not just pending a
+ * straightening sweep. `computeFlatTracks` already runs one
+ * (`refineDummyTracksWithBarycenterSweeps`, two forward/backward passes), and
+ * it works: a chain's dummies do land on a straight line between their real
+ * endpoints. That still doesn't help, because a multi-rank edge's target is
+ * -- by construction of `assignLayers`' longest-path ranking -- essentially
+ * always a merge point: a node only ends up several ranks past one
+ * particular parent when some *other*, typically longer, incoming path
+ * pushed its rank up, and that other path usually joins at the very node the
+ * bypass also targets. A merge target's track is deliberately the average of
+ * every one of its parents (`alignMergeNodeTrack`), not slaved to any one of
+ * them, so the straightened chain lines up with a track the target was never
+ * going to sit on. Verified exhaustively: every dummy-chain edge in the full
+ * fixture corpus (curated + regression + generated) targets a merge node,
+ * with zero exceptions, and a synthetic single-incoming-edge bypass target
+ * produces byte-identical output whether routed through the corridor or
+ * direct -- the corridor is never wrong, just provably inert.
  *
- * Re-wire this from `routeScopeEdges` once the straightening sweep exists, and
- * only if the corpus bend count goes down when you do.
+ * Making this pay off would mean biasing merge-track alignment toward one
+ * preferred parent instead of averaging all of them -- a change to how every
+ * merge in every diagram looks, not a narrow follow-up to this function.
  */
 export function routeEdgeThroughDummyChain(anchors: Point[], allBounds?: Bounds[]): Point[] {
   let waypoints: Point[] = [];
