@@ -357,8 +357,25 @@ describe('gateway-router', () => {
         allBounds: [gwBounds, tgt],
       });
       const pts = routeMap.get('Flow_BottomToTop')!;
+      expect(pts).toHaveLength(4);
       expect(pts[0]).toEqual({ x: 225, y: 250 });
-      expect(pts[2]).toEqual({ x: 425, y: 325 });
+      expect(pts[1]).toEqual({ x: 225, y: 288 });
+      expect(pts[2]).toEqual({ x: 425, y: 288 });
+      expect(pts[3]).toEqual({ x: 425, y: 325 });
+    });
+
+    it('falls back when routeOppositePortStep is obstructed for bottom to top flow', () => {
+      const tgt: Bounds = { x: 400, y: 325, width: 50, height: 50 };
+      const blocker: Bounds = { x: 300, y: 280, width: 30, height: 20 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_BottomToTopBlocked' }, targetBounds: tgt, targetPort: 'top' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker],
+      });
+      const pts = routeMap.get('Flow_BottomToTopBlocked')!;
+      expect(pts.length).toBeGreaterThanOrEqual(3);
     });
 
     it('routes to targetPort bottom directly when corridor is clear', () => {
@@ -463,8 +480,25 @@ describe('gateway-router', () => {
         allBounds: [gwBounds, tgt],
       });
       const pts = routeMap.get('Flow_TopToBottom')!;
+      expect(pts).toHaveLength(4);
       expect(pts[0]).toEqual({ x: 225, y: 200 });
-      expect(pts[2]).toEqual({ x: 425, y: 125 });
+      expect(pts[1]).toEqual({ x: 225, y: 163 });
+      expect(pts[2]).toEqual({ x: 425, y: 163 });
+      expect(pts[3]).toEqual({ x: 425, y: 125 });
+    });
+
+    it('falls back when routeOppositePortStep is obstructed for top to bottom flow', () => {
+      const tgt: Bounds = { x: 400, y: 75, width: 50, height: 50 };
+      const blocker: Bounds = { x: 300, y: 155, width: 30, height: 20 };
+      const flows: GatewayFlowInfo[] = [
+        { flow: { id: 'Flow_TopToBottomBlocked' }, targetBounds: tgt, targetPort: 'bottom' },
+      ];
+      const routeMap = routeGatewayOutgoingEdges(flows, {
+        gatewayBounds: gwBounds,
+        allBounds: [gwBounds, tgt, blocker],
+      });
+      const pts = routeMap.get('Flow_TopToBottomBlocked')!;
+      expect(pts.length).toBeGreaterThanOrEqual(3);
     });
 
     it('falls back to right port when target is above with targetPort bottom and vertical gap < 40', () => {

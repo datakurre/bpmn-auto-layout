@@ -17,7 +17,7 @@
     <bpmn:task id="Task_Manual_Review" name="Manual Underwriting Review" />
     <bpmn:boundaryEvent id="Timer_Review_SLA" name="24h SLA" attachedToRef="Task_Manual_Review" />
     <bpmn:task id="Task_Expedite" name="Expedite to Senior Team" />
-    <bpmn:exclusiveGateway id="Gateway_Underwriter" name="Underwriter Decision" />
+    <bpmn:exclusiveGateway id="Gateway_Underwriter" name="Underwriter&#10;Decision" />
     <bpmn:task id="Task_Request_Collateral" name="Negotiate Collateral" />
     <bpmn:exclusiveGateway id="Join_Approve" name="Approve Branch" />
     <bpmn:task id="Task_Prepare_Contract" name="Prepare Loan Agreement" />
@@ -82,7 +82,7 @@
       <bpmndi:BPMNShape id="Gateway_Risk_Tier_di" bpmnElement="Gateway_Risk_Tier">
         <dc:Bounds x="736" y="155" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="732" y="211" width="58" height="14" />
+          <dc:Bounds x="775" y="152" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Fast_Approve_di" bpmnElement="Task_Fast_Approve">
@@ -106,7 +106,7 @@
       <bpmndi:BPMNShape id="Join_Review_di" bpmnElement="Join_Review">
         <dc:Bounds x="871" y="275" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="761" y="293" width="104" height="14" />
+          <dc:Bounds x="844" y="255" width="104" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Manual_Review_di" bpmnElement="Task_Manual_Review">
@@ -118,7 +118,7 @@
       <bpmndi:BPMNShape id="Gateway_Underwriter_di" bpmnElement="Gateway_Underwriter">
         <dc:Bounds x="1166" y="275" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1135" y="255" width="112" height="14" />
+          <dc:Bounds x="1205" y="258" width="64" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Request_Collateral_di" bpmnElement="Task_Request_Collateral">
@@ -174,8 +174,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_Med_Risk_di" bpmnElement="LF_Med_Risk">
         <di:waypoint x="761" y="205" />
-        <di:waypoint x="896" y="205" />
-        <di:waypoint x="896" y="275" />
+        <di:waypoint x="761" y="300" />
+        <di:waypoint x="871" y="300" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_To_Decline_di" bpmnElement="LF_To_Decline">
         <di:waypoint x="1351" y="180" />
@@ -191,7 +191,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_UW_Decline_di" bpmnElement="LF_UW_Decline">
         <di:waypoint x="1191" y="275" />
-        <di:waypoint x="1326" y="275" />
+        <di:waypoint x="1191" y="240" />
+        <di:waypoint x="1326" y="240" />
         <di:waypoint x="1326" y="205" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="LF_UW_Cond_di" bpmnElement="LF_UW_Cond">

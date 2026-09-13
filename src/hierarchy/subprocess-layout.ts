@@ -194,6 +194,13 @@ export function assignMergeIncomingPorts(
     }
   }
 
+  if (forwardFlows.length <= 1) {
+    for (const f of forwardFlows) {
+      ports.set(f.flow.id, 'left');
+    }
+    return ports;
+  }
+
   const above: IncomingFlowCandidate[] = [];
   const below: IncomingFlowCandidate[] = [];
   const center: IncomingFlowCandidate[] = [];

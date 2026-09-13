@@ -266,6 +266,23 @@ function findObstacleBelowTarget(entryX: number, tgtBottomY: number, obstacles: 
   return minObstacleTop;
 }
 
+function routeOppositePortStep(exit: Point, entry: Point, obstacles: Bounds[]): Point[] | null {
+  const midY = Math.round((exit.y + entry.y) / 2);
+  const stepClear =
+    isVerticalCorridorClear(exit.x, { start: exit.y, end: midY }, obstacles) &&
+    isHorizontalCorridorClear(midY, { start: exit.x, end: entry.x }, obstacles) &&
+    isVerticalCorridorClear(entry.x, { start: midY, end: entry.y }, obstacles);
+  if (stepClear) {
+    return [
+      { x: exit.x, y: exit.y },
+      { x: exit.x, y: midY },
+      { x: entry.x, y: midY },
+      { x: entry.x, y: entry.y },
+    ];
+  }
+  return null;
+}
+
 function routeToTargetTop(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptions): Point[] {
   const exitX = opts.exitPort === 'bottom' ? Math.round(gw.x + gw.width / 2) : gw.x + gw.width;
   const exitY = opts.exitPort === 'bottom' ? gw.y + gw.height : Math.round(gw.y + gw.height / 2);
@@ -273,6 +290,17 @@ function routeToTargetTop(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptions)
   const entryY = tgt.y;
 
   const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
+
+  if (opts.exitPort === 'bottom') {
+    const stepPts = routeOppositePortStep(
+      { x: exitX, y: exitY },
+      { x: entryX, y: entryY },
+      obstacles
+    );
+    if (stepPts) {
+      return stepPts;
+    }
+  }
 
   const directClear =
     isHorizontalCorridorClear(exitY, { start: exitX, end: entryX }, obstacles) &&
@@ -327,6 +355,17 @@ function routeToTargetBottom(gw: Bounds, tgt: Bounds, opts: TargetPortRouteOptio
   const entryY = tgt.y + tgt.height;
 
   const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
+
+  if (opts.exitPort === 'top') {
+    const stepPts = routeOppositePortStep(
+      { x: exitX, y: exitY },
+      { x: entryX, y: entryY },
+      obstacles
+    );
+    if (stepPts) {
+      return stepPts;
+    }
+  }
 
   const directClear =
     isHorizontalCorridorClear(exitY, { start: exitX, end: entryX }, obstacles) &&

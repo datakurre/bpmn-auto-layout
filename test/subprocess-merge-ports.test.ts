@@ -59,6 +59,24 @@ describe('subprocess-layout merge port assignment', () => {
     expect(ports.get('F_BelowFar')).toBe('left');
   });
 
+  it('assigns single forward flow with feedback flow to left port', () => {
+    const flows: IncomingFlowCandidate[] = [
+      {
+        flow: { id: 'F_ForwardAbove' },
+        sourceBounds: { x: 100, y: 100, width: 100, height: 80 },
+      },
+      {
+        flow: { id: 'F_Feedback' },
+        sourceBounds: { x: 400, y: 200, width: 100, height: 80 },
+        isFeedback: true,
+      },
+    ];
+
+    const ports = assignMergeIncomingPorts(flows, gwBounds);
+    expect(ports.get('F_ForwardAbove')).toBe('left');
+    expect(ports.get('F_Feedback')).toBe('left');
+  });
+
   it('handles computeMergeTargetPorts with missing source bounds and single-incoming gateways', () => {
     const gatewaySet = new Set(['GW_Merge', 'GW_Single']);
     const ctx: ScopeRouteContext = {
