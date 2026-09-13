@@ -165,7 +165,7 @@
       <bpmndi:BPMNShape id="Timer_SLA_di" bpmnElement="Timer_SLA">
         <dc:Bounds x="848" y="342" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="752" y="362" width="86" height="14" />
+          <dc:Bounds x="889" y="383" width="86" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="F_To_Triage_di" bpmnElement="F_To_Triage">

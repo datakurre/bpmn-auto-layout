@@ -1,5 +1,6 @@
 import {
   ARTIFACT_LABEL_MARGIN,
+  BOUNDARY_EVENT_LABEL_MARGIN,
   EVENT_LABEL_MARGIN,
   FLOW_LABEL_MARGIN,
   GATEWAY_LABEL_MARGIN,
@@ -282,14 +283,14 @@ function computeOrthogonalElementBounds(
   if (side === 'right') {
     return {
       x: elementBounds.x + elementBounds.width + margin,
-      y: isBoundary ? cy + 2 : cy - dim.height / 2,
+      y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
       width: dim.width,
       height: dim.height,
     };
   }
   return {
     x: elementBounds.x - margin - dim.width,
-    y: isBoundary ? cy + 2 : cy - dim.height / 2,
+    y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
     width: dim.width,
     height: dim.height,
   };
@@ -449,6 +450,8 @@ export function layoutElementLabel(
     margin = GATEWAY_LABEL_MARGIN;
   } else if (isArtifact(shape.element)) {
     margin = ARTIFACT_LABEL_MARGIN;
+  } else if (isBoundaryEvent(shape.element)) {
+    margin = BOUNDARY_EVENT_LABEL_MARGIN;
   }
 
   const cctx: CollisionContext = {
