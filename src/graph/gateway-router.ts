@@ -127,6 +127,7 @@ function routeDirectBottom(gw: Bounds, tgt: Bounds): Point[] {
 interface DirectRightOptions {
   stepXOffset: number;
   collinearTgtX?: number;
+  allBounds?: Bounds[];
 }
 
 function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Point[] {
@@ -136,8 +137,29 @@ function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Po
   const entryY = Math.round(tgt.y + tgt.height / 2);
 
   if (exitY === entryY) {
+    const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
+    if (isHorizontalCorridorClear(exitY, { start: exitX, end: entryX }, obstacles)) {
+      return [
+        { x: exitX, y: exitY },
+        { x: entryX, y: entryY },
+      ];
+    }
+    // Something now sits between the gateway and its collinear target on
+    // this same row (e.g. a chain of same-track nodes a bypass edge jumps
+    // over, per issue #88). Detour below it: corridor routing is currently
+    // unwired (#81), so this is the only avoidance a multi-rank collinear
+    // edge gets.
+    let channelY = exitY;
+    for (const b of obstacles) {
+      if (Math.max(exitX, b.x) < Math.min(entryX, b.x + b.width)) {
+        channelY = Math.max(channelY, b.y + b.height);
+      }
+    }
+    channelY += 40;
     return [
       { x: exitX, y: exitY },
+      { x: exitX, y: channelY },
+      { x: entryX, y: channelY },
       { x: entryX, y: entryY },
     ];
   }
@@ -596,6 +618,7 @@ function routeRightFlow(gw: Bounds, rf: GatewayFlowInfo, ctx: RightFlowRouteCont
   return routeDirectRight(gw, rf.targetBounds, {
     stepXOffset: ctx.stepOffset,
     collinearTgtX: ctx.collinearTgtX,
+    allBounds: ctx.allBounds,
   });
 }
 

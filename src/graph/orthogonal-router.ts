@@ -102,6 +102,86 @@ function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteCo
   return waypoints;
 }
 
+interface ForwardStepBlockerContext {
+  yStart: number;
+  yEnd: number;
+  obstacles: Bounds[];
+  ignore: Bounds[];
+}
+
+/**
+ * The S-bend's vertical leg sits at `stepX` and must not pass through an
+ * unrelated shape that now happens to sit between source and target (e.g. a
+ * sibling gateway branch kept collinear with the gateway by issue #88's
+ * fix). Finds the leftmost obstacle straddling `stepX` within the leg's
+ * y-span, if any.
+ */
+function findForwardStepBlockerX(stepX: number, ctx: ForwardStepBlockerContext): number {
+  const minY = Math.min(ctx.yStart, ctx.yEnd);
+  const maxY = Math.max(ctx.yStart, ctx.yEnd);
+  let blockingX = Infinity;
+  for (const b of ctx.obstacles) {
+    if (ctx.ignore.includes(b)) {
+      continue;
+    }
+    if (
+      stepX > b.x &&
+      stepX < b.x + b.width &&
+      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
+    ) {
+      blockingX = Math.min(blockingX, b.x);
+    }
+  }
+  return blockingX;
+}
+
+interface ClearForwardStepContext {
+  srcExit: Point;
+  tgtEntry: Point;
+  obstacles: Bounds[] | undefined;
+  ignore: Bounds[];
+}
+
+function findClearForwardStepX(stepX: number, ctx: ClearForwardStepContext): number {
+  if (!ctx.obstacles || ctx.obstacles.length === 0) {
+    return stepX;
+  }
+  const blockingX = findForwardStepBlockerX(stepX, {
+    yStart: ctx.srcExit.y,
+    yEnd: ctx.tgtEntry.y,
+    obstacles: ctx.obstacles,
+    ignore: ctx.ignore,
+  });
+  if (blockingX === Infinity) {
+    return stepX;
+  }
+  const candidate = blockingX - 20;
+  return candidate > ctx.srcExit.x ? candidate : stepX;
+}
+
+interface CollinearSpan {
+  xStart: number;
+  xEnd: number;
+  ignore: Bounds[];
+}
+
+/**
+ * Whether some obstacle sits directly on a straight collinear run between
+ * two x positions at height `y` -- e.g. a chain of same-track nodes a
+ * multi-rank bypass edge jumps over.
+ */
+function isCollinearPathBlocked(y: number, span: CollinearSpan, obstacles: Bounds[]): boolean {
+  const minX = Math.min(span.xStart, span.xEnd);
+  const maxX = Math.max(span.xStart, span.xEnd);
+  return obstacles.some(
+    (b) =>
+      !span.ignore.includes(b) &&
+      y > b.y &&
+      y < b.y + b.height &&
+      Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)
+  );
+}
+
 export function routeOrthogonalEdge(
   sourceBounds: Bounds,
   targetBounds: Bounds,
@@ -119,15 +199,36 @@ export function routeOrthogonalEdge(
       y: Math.round(targetBounds.y + targetBounds.height / 2),
     };
 
-    // Straight collinear connection (0 bends)
+    // Straight collinear connection (0 bends), unless something now sits
+    // between source and target on that same track -- a multi-rank edge
+    // bypassing a chain of same-track nodes (e.g. a sibling branch kept
+    // collinear with its gateway by issue #88) can no longer assume the
+    // row is clear, since corridor routing is currently unwired (#81).
     if (srcExit.y === tgtEntry.y) {
-      return [srcExit, tgtEntry];
+      if (
+        !allBounds ||
+        !isCollinearPathBlocked(
+          srcExit.y,
+          { xStart: srcExit.x, xEnd: tgtEntry.x, ignore: [sourceBounds, targetBounds] },
+          allBounds
+        )
+      ) {
+        return [srcExit, tgtEntry];
+      }
+      const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
+      return [srcExit, { x: srcExit.x, y: channelY }, { x: tgtEntry.x, y: channelY }, tgtEntry];
     }
 
     // Forward S-bend (Manhattan step with 2 bends)
     const gap = tgtEntry.x - srcExit.x;
     const stepX = gap > 100 ? tgtEntry.x - 30 : Math.round((srcExit.x + tgtEntry.x) / 2);
-    return [srcExit, { x: stepX, y: srcExit.y }, { x: stepX, y: tgtEntry.y }, tgtEntry];
+    const clearStepX = findClearForwardStepX(stepX, {
+      srcExit,
+      tgtEntry,
+      obstacles: allBounds,
+      ignore: [sourceBounds, targetBounds],
+    });
+    return [srcExit, { x: clearStepX, y: srcExit.y }, { x: clearStepX, y: tgtEntry.y }, tgtEntry];
   }
 
   // Forward wrapped edge (target is on a lower row and behind source)

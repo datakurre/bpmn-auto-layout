@@ -13,6 +13,24 @@ describe('orthogonal-router', () => {
     ]);
   });
 
+  it('detours a collinear connection below an obstacle sitting between source and target', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 100, width: 100, height: 80 };
+    // Sits on the same row (y 120-160 straddles the collinear y=140) between
+    // the two, e.g. a sibling branch kept collinear with its gateway (#88).
+    const obstacle: Bounds = { x: 300, y: 120, width: 100, height: 40 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, obstacle]);
+
+    // channelY = max(src bottom 180, tgt bottom 180, obstacle bottom 160) + 40 = 220
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 200, y: 220 },
+      { x: 500, y: 220 },
+      { x: 500, y: 140 },
+    ]);
+  });
+
   it('routes forward non-collinear connection with gap > 100', () => {
     const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
     const tgt: Bounds = { x: 350, y: 200, width: 100, height: 80 };
@@ -35,6 +53,41 @@ describe('orthogonal-router', () => {
     expect(waypoints[1]).toEqual({ x: 225, y: 140 });
     expect(waypoints[2]).toEqual({ x: 225, y: 240 });
     expect(waypoints[3]).toEqual({ x: 250, y: 240 });
+  });
+
+  it('shifts the forward S-bend step around an obstacle straddling the default stepX', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 300, width: 100, height: 80 };
+    // Straddles the default stepX (500 - 30 = 470) and overlaps the leg's y-span.
+    const obstacle: Bounds = { x: 450, y: 200, width: 60, height: 40 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, obstacle]);
+
+    // Shifted to just left of the obstacle: 450 - 20 = 430.
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 430, y: 140 },
+      { x: 430, y: 340 },
+      { x: 500, y: 340 },
+    ]);
+  });
+
+  it('keeps the default stepX when clearing the obstacle would push it behind the source exit', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 300, width: 100, height: 80 };
+    // Straddles the default stepX (470) but starts so close to the source
+    // exit (200) that shifting 20px left of it would go backwards.
+    const obstacle: Bounds = { x: 210, y: 200, width: 300, height: 40 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, obstacle]);
+
+    // Falls back to the unshifted default stepX (500 - 30 = 470).
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 470, y: 140 },
+      { x: 470, y: 340 },
+      { x: 500, y: 340 },
+    ]);
   });
 
   it('routes feedback loop when allBounds is omitted', () => {

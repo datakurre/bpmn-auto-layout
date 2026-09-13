@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { BpmnModdle } from 'bpmn-moddle';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
@@ -40,6 +41,59 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
 
     expectImageSnapshotMatch(resultXml, '07-two-lanes-pool');
+  });
+
+  it('layouts a same-lane 3-way split whose first branch gets a negative local track', async () => {
+    // Within a single lane, calculateSingleParentTrack centers a 3-way split
+    // on its parent's track (offsets -1, 0, +1), so the first branch's local
+    // track goes negative before normalizeLaneTracks shifts the whole lane
+    // back to a non-negative baseline.
+    const builder = new BpmnBuilder('Proc_Triage');
+    builder
+      .addParticipant('Pool_Triage', 'Proc_Triage', 'Triage')
+      .addStartEvent('Start_1', 'Start')
+      .addExclusiveGateway('Split_1', 'Split')
+      .addTask('Task_A', 'Branch A')
+      .addTask('Task_B', 'Branch B')
+      .addTask('Task_C', 'Branch C')
+      .addExclusiveGateway('Join_1', 'Join')
+      .addEndEvent('End_1', 'End')
+      .addLane(
+        'Lane_1',
+        ['Start_1', 'Split_1', 'Task_A', 'Task_B', 'Task_C', 'Join_1', 'End_1'],
+        'Lane 1'
+      )
+      .addSequenceFlow('Flow_1', 'Start_1', 'Split_1')
+      .addSequenceFlow('Flow_2', 'Split_1', 'Task_A')
+      .addSequenceFlow('Flow_3', 'Split_1', 'Task_B')
+      .addSequenceFlow('Flow_4', 'Split_1', 'Task_C')
+      .addSequenceFlow('Flow_5', 'Task_A', 'Join_1')
+      .addSequenceFlow('Flow_6', 'Task_B', 'Join_1')
+      .addSequenceFlow('Flow_7', 'Task_C', 'Join_1')
+      .addSequenceFlow('Flow_8', 'Join_1', 'End_1');
+
+    const inputXml = await builder.toXml();
+    const resultXml = await layoutProcess(inputXml);
+
+    const score = await scoreDiagram(resultXml);
+    expect(score.isValid).toBe(true);
+    expect(score.hardViolations.shapeOverlaps).toBe(0);
+    expect(score.hardViolations.edgeShapeCrossings).toBe(0);
+    expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+
+    const moddle = new BpmnModdle();
+    const { rootElement } = await moddle.fromXML(resultXml);
+    const plane = (rootElement as any).diagrams[0].plane;
+    const findShape = (id: string) =>
+      plane.planeElement.find((el: any) => el.bpmnElement?.id === id);
+
+    // All shapes must land within the lane's bounds, confirming the
+    // negative local track was normalized rather than escaping upward.
+    const laneShape = findShape('Lane_1');
+    for (const id of ['Task_A', 'Task_B', 'Task_C']) {
+      const bounds = findShape(id).bounds;
+      expect(bounds.y).toBeGreaterThanOrEqual(laneShape.bounds.y);
+    }
   });
 
   it('layouts collaboration with multiple pools and inter-pool message flows', async () => {
