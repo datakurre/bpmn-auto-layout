@@ -119,6 +119,21 @@ export class BpmnBuilder {
     return this.addFlowNode('bpmn:IntermediateCatchEvent', id, name);
   }
 
+  public addIntermediateThrowEvent(id: string, name?: string, eventDefinitionType?: string): this {
+    if (!eventDefinitionType) {
+      return this.addFlowNode('bpmn:IntermediateThrowEvent', id, name);
+    }
+    const def = this.moddle.create(eventDefinitionType);
+    const element = this.moddle.create('bpmn:IntermediateThrowEvent', {
+      id,
+      name,
+      eventDefinitions: [def],
+    });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
   public addBoundaryEvent(
     idOrConfig: string | BoundaryEventConfig,
     attachedToRef?: string,
@@ -205,6 +220,37 @@ export class BpmnBuilder {
     const subProcess = this.moddle.create('bpmn:AdHocSubProcess', {
       id,
       name,
+    });
+    subProcess.flowElements = [];
+    this.process.flowElements.push(subProcess);
+    this.elementMap.set(id, subProcess);
+
+    if (configure) {
+      const originalProcess = this.process;
+      this.process = subProcess;
+      configure(this);
+      this.process = originalProcess;
+    }
+
+    return this;
+  }
+
+  public addCompensationTask(id: string, name?: string): this {
+    const element = this.moddle.create('bpmn:Task', { id, name, isForCompensation: true });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
+  }
+
+  public addCompensationSubProcess(
+    id: string,
+    name?: string,
+    configure?: (builder: BpmnBuilder) => void
+  ): this {
+    const subProcess = this.moddle.create('bpmn:SubProcess', {
+      id,
+      name,
+      isForCompensation: true,
     });
     subProcess.flowElements = [];
     this.process.flowElements.push(subProcess);

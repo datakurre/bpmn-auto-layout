@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_SubProcessCompensation" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Start" />
+    <bpmn:task id="Task_Charge" name="Charge Card" />
+    <bpmn:endEvent id="End_1" name="Done" />
+    <bpmn:boundaryEvent id="Boundary_CompCharge" attachedToRef="Task_Charge">
+      <bpmn:compensateEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:subProcess id="Handler_RefundProcess" name="Refund Process" isForCompensation="true">
+      <bpmn:startEvent id="Sub_Start" name="Start" />
+      <bpmn:task id="Sub_ValidateRefund" name="Validate Refund" />
+      <bpmn:task id="Sub_IssueRefund" name="Issue Refund" />
+      <bpmn:endEvent id="Sub_End" name="Done" />
+      <bpmn:sequenceFlow id="SubFlow_1" sourceRef="Sub_Start" targetRef="Sub_ValidateRefund" />
+      <bpmn:sequenceFlow id="SubFlow_2" sourceRef="Sub_ValidateRefund" targetRef="Sub_IssueRefund" />
+      <bpmn:sequenceFlow id="SubFlow_3" sourceRef="Sub_IssueRefund" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Charge" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Charge" targetRef="End_1" />
+    <bpmn:association id="Assoc_1" sourceRef="Boundary_CompCharge" targetRef="Handler_RefundProcess" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_SubProcessCompensation">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="102" y="168" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Charge_di" bpmnElement="Task_Charge">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
+        <dc:Bounds x="356" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="357" y="168" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_CompCharge_di" bpmnElement="Boundary_CompCharge">
+        <dc:Bounds x="228" y="162" width="36" height="36" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Handler_RefundProcess_di" bpmnElement="Handler_RefundProcess" isExpanded="true">
+        <dc:Bounds x="100" y="258" width="512" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="130" y="315" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="132" y="361" width="28" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_ValidateRefund_di" bpmnElement="Sub_ValidateRefund">
+        <dc:Bounds x="226" y="293" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_IssueRefund_di" bpmnElement="Sub_IssueRefund">
+        <dc:Bounds x="386" y="293" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="546" y="315" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="547" y="361" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
+        <di:waypoint x="166" y="333" />
+        <di:waypoint x="226" y="333" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_2_di" bpmnElement="SubFlow_2">
+        <di:waypoint x="326" y="333" />
+        <di:waypoint x="386" y="333" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_3_di" bpmnElement="SubFlow_3">
+        <di:waypoint x="486" y="333" />
+        <di:waypoint x="546" y="333" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_1_di" bpmnElement="Assoc_1">
+        <di:waypoint x="246" y="198" />
+        <di:waypoint x="246" y="258" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -15,6 +15,7 @@ describe('BpmnBuilder', () => {
       .addParallelGateway('Gate_2', 'Fork')
       .addInclusiveGateway('Gate_3', 'Multi')
       .addIntermediateCatchEvent('Catch_1', 'Wait')
+      .addIntermediateThrowEvent('Throw_1', 'Signal')
       .addBoundaryEvent('Bound_1', 'Task_1', 'Error')
       .addEndEvent('End_1', 'Finish');
 
@@ -25,6 +26,7 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('Gate_2');
     expect(xml).toContain('Gate_3');
     expect(xml).toContain('Catch_1');
+    expect(xml).toContain('Throw_1');
     expect(xml).toContain('Bound_1');
     expect(xml).toContain('End_1');
   });
@@ -141,6 +143,23 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('adHocSubProcess');
     expect(xml).toContain('Sub_Task_A');
     expect(xml).toContain('AdHoc_Empty');
+  });
+
+  it('supports compensation task and compensation sub-process with and without callback', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addCompensationTask('CompTask_1', 'Cancel Booking')
+      .addCompensationSubProcess('CompSub_1', 'Refund Process', (sub) => {
+        sub.addTask('Sub_Task_A', 'Issue Refund');
+      })
+      .addCompensationSubProcess('CompSub_Empty', 'Empty Compensation Sub');
+
+    const xml = await builder.toXml();
+    expect(xml).toContain('CompTask_1');
+    expect(xml).toContain('isForCompensation="true"');
+    expect(xml).toContain('CompSub_1');
+    expect(xml).toContain('Sub_Task_A');
+    expect(xml).toContain('CompSub_Empty');
   });
 
   it('supports boundary event config with event definition and cancelActivity', async () => {

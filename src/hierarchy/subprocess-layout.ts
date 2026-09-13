@@ -73,6 +73,7 @@ export function layoutScope(
     boundaryEvents,
     sequenceFlows,
     eventSubProcesses,
+    compensationHandlers,
     regularNodes,
     allArtifacts,
     allAssociations,
@@ -82,6 +83,7 @@ export function layoutScope(
     regularNodes.length === 0 &&
     boundaryEvents.length === 0 &&
     eventSubProcesses.length === 0 &&
+    compensationHandlers.length === 0 &&
     allArtifacts.length === 0
   ) {
     return { width: 100, height: 80, minX: 0, minY: 0, shapes: [], edges: [] };
@@ -116,7 +118,7 @@ export function layoutScope(
   layoutConnectedArtifacts(connected, { boundsMap, shapes });
   routeAssociations(allAssociations, boundsMap, edges);
 
-  const disconnectedItems = [...eventSubProcesses, ...unconnected];
+  const disconnectedItems = [...eventSubProcesses, ...compensationHandlers, ...unconnected];
   if (disconnectedItems.length > 0) {
     const diagramBounds = computeCurrentDiagramBounds(shapes, edges);
     layoutDisconnectedElements(disconnectedItems, diagramBounds, {
@@ -777,9 +779,14 @@ interface ScopeElementsPartition {
   boundaryEvents: any[];
   sequenceFlows: any[];
   eventSubProcesses: any[];
+  compensationHandlers: any[];
   regularNodes: any[];
   allArtifacts: any[];
   allAssociations: any[];
+}
+
+function isCompensationHandler(el: any): boolean {
+  return el.isForCompensation === true;
 }
 
 export function partitionScopeElements(scopeElement: any): ScopeElementsPartition {
@@ -787,11 +794,13 @@ export function partitionScopeElements(scopeElement: any): ScopeElementsPartitio
   const boundaryEvents = flowElements.filter((el: any) => el.$type === 'bpmn:BoundaryEvent');
   const sequenceFlows = flowElements.filter((el: any) => el.$type === 'bpmn:SequenceFlow');
   const eventSubProcesses = flowElements.filter(isEventSubProcess);
+  const compensationHandlers = flowElements.filter(isCompensationHandler);
   const regularNodes = flowElements.filter(
     (el: any) =>
       el.$type !== 'bpmn:SequenceFlow' &&
       el.$type !== 'bpmn:BoundaryEvent' &&
       !isEventSubProcess(el) &&
+      !isCompensationHandler(el) &&
       !isArtifact(el) &&
       !isAssociation(el) &&
       !isNonVisual(el)
@@ -807,6 +816,7 @@ export function partitionScopeElements(scopeElement: any): ScopeElementsPartitio
     boundaryEvents,
     sequenceFlows,
     eventSubProcesses,
+    compensationHandlers,
     regularNodes,
     allArtifacts,
     allAssociations,

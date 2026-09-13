@@ -207,7 +207,90 @@ export function layoutConnectedArtifacts(
   }
 }
 
-function routeDiagonalAssociation(src: Bounds, tgt: Bounds): Point[] {
+function isSameBounds(a: Bounds, b?: Bounds): boolean {
+  return (
+    b !== undefined && a.x === b.x && a.y === b.y && a.width === b.width && a.height === b.height
+  );
+}
+
+function filterObstacles(obstacles?: Bounds[], src?: Bounds, tgt?: Bounds): Bounds[] {
+  if (!obstacles || obstacles.length === 0) {
+    return [];
+  }
+  return obstacles.filter((obs) => !isSameBounds(obs, src) && !isSameBounds(obs, tgt));
+}
+
+function isSegmentObstructed(a: Point, b: Point, obs: Bounds): boolean {
+  if (a.x === b.x) {
+    if (a.x <= obs.x || a.x >= obs.x + obs.width) {
+      return false;
+    }
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    return Math.max(minY, obs.y) < Math.min(maxY, obs.y + obs.height);
+  }
+  if (a.y <= obs.y || a.y >= obs.y + obs.height) {
+    return false;
+  }
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  return Math.max(minX, obs.x) < Math.min(maxX, obs.x + obs.width);
+}
+
+function isPathObstructed(waypoints: Point[], obstacles: Bounds[]): boolean {
+  for (const obs of obstacles) {
+    for (let i = 0; i < waypoints.length - 1; i++) {
+      if (isSegmentObstructed(waypoints[i], waypoints[i + 1], obs)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+function hasSiblingInRow(tgt: Bounds, obstacles: Bounds[]): boolean {
+  return obstacles.some(
+    (obs) => Math.abs(obs.y - tgt.y) < 10 && obs.height === tgt.height && obs.x !== tgt.x
+  );
+}
+
+function routeLeftwardDiagonal(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
+  const srcCenter: Point = {
+    x: Math.round(src.x + src.width / 2),
+    y: Math.round(src.y + src.height / 2),
+  };
+  const tgtCenter: Point = {
+    x: Math.round(tgt.x + tgt.width / 2),
+    y: Math.round(tgt.y + tgt.height / 2),
+  };
+  const isAbove = srcCenter.y < tgtCenter.y;
+  const p1: Point = {
+    x: srcCenter.x,
+    y: isAbove ? src.y + src.height : src.y,
+  };
+  const candidateRightPort: Point[] = [
+    p1,
+    { x: p1.x, y: tgtCenter.y },
+    { x: tgt.x + tgt.width, y: tgtCenter.y },
+  ];
+
+  const filtered = filterObstacles(obstacles, src, tgt);
+  const useTopOrBottom =
+    isPathObstructed(candidateRightPort, filtered) || hasSiblingInRow(tgt, filtered);
+
+  if (!useTopOrBottom) {
+    return candidateRightPort;
+  }
+
+  const midY = isAbove
+    ? Math.round((src.y + src.height + tgt.y) / 2)
+    : Math.round((src.y + tgt.y + tgt.height) / 2);
+  const targetY = isAbove ? tgt.y : tgt.y + tgt.height;
+
+  return [p1, { x: p1.x, y: midY }, { x: tgtCenter.x, y: midY }, { x: tgtCenter.x, y: targetY }];
+}
+
+function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
   const srcCenter: Point = {
     x: Math.round(src.x + src.width / 2),
     y: Math.round(src.y + src.height / 2),
@@ -226,18 +309,14 @@ function routeDiagonalAssociation(src: Bounds, tgt: Bounds): Point[] {
     return [p1, { x: p3.x, y: p1.y }, p3];
   }
 
-  const p1: Point = {
-    x: srcCenter.x,
-    y: srcCenter.y < tgtCenter.y ? src.y + src.height : src.y,
-  };
-  const p3: Point = {
-    x: tgt.x + tgt.width,
-    y: tgtCenter.y,
-  };
-  return [p1, { x: p1.x, y: p3.y }, p3];
+  return routeLeftwardDiagonal(src, tgt, obstacles);
 }
 
-export function routeAssociationEdge(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
+export function routeAssociationEdge(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  obstacles?: Bounds[]
+): Point[] {
   const overlapMinX = Math.max(sourceBounds.x, targetBounds.x);
   const overlapMaxX = Math.min(
     sourceBounds.x + sourceBounds.width,
@@ -282,7 +361,7 @@ export function routeAssociationEdge(sourceBounds: Bounds, targetBounds: Bounds)
     }
   }
 
-  return routeDiagonalAssociation(sourceBounds, targetBounds);
+  return routeDiagonalAssociation(sourceBounds, targetBounds, obstacles);
 }
 
 export function routeAssociations(
@@ -290,6 +369,7 @@ export function routeAssociations(
   boundsMap: Map<string, Bounds>,
   edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>
 ): void {
+  const obstacles = [...boundsMap.values()];
   for (const assoc of associations) {
     if (edges.some((e) => e.element.id === assoc.id)) {
       continue;
@@ -299,7 +379,7 @@ export function routeAssociations(
     const srcBounds = boundsMap.get(srcId as string);
     const tgtBounds = boundsMap.get(tgtId as string);
     if (srcBounds && tgtBounds) {
-      const waypoints = routeAssociationEdge(srcBounds, tgtBounds);
+      const waypoints = routeAssociationEdge(srcBounds, tgtBounds, obstacles);
       edges.push({ element: assoc, waypoints });
     }
   }

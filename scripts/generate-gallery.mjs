@@ -224,6 +224,37 @@ const SNAPSHOT_METADATA = {
       'An error-triggered event sub-process with its own severity-based gateway split, packed alongside disconnected artifacts.',
     tags: ['Event Sub-Process', 'Gateway', 'Artifacts'],
   },
+  '13-single-compensation-handler.png': {
+    title: 'Single Compensation Handler',
+    iteration: '13',
+    category: 'Compensation Handlers',
+    description:
+      'A compensation boundary event associated to a standalone handler task with no sequence-flow connections.',
+    tags: ['Compensation', 'Boundary Event', 'Association'],
+  },
+  '13-compensation-subprocess-handler.png': {
+    title: 'Compensation Handler Sub-Process',
+    iteration: '13',
+    category: 'Compensation Handlers',
+    description:
+      'A compensation handler that is itself an expanded sub-process, recursively laid out and row-packed below the main flow.',
+    tags: ['Compensation', 'Sub-Process', 'Recursive Layout'],
+  },
+  '13-intermediate-throw-compensate.png': {
+    title: 'Intermediate Throw Compensation Event',
+    iteration: '13',
+    category: 'Compensation Handlers',
+    description: 'A mid-flow intermediate throw event explicitly triggering compensation.',
+    tags: ['Compensation', 'Intermediate Throw Event'],
+  },
+  '13-multiple-compensation-handlers.png': {
+    title: 'Multiple Compensation Handlers',
+    iteration: '13',
+    category: 'Compensation Handlers',
+    description:
+      'Three tasks each with their own compensation boundary event and handler, stress-testing row-packing and association routing.',
+    tags: ['Compensation', 'Row Packing', 'Multiple Handlers'],
+  },
 };
 
 export function generateGallery() {

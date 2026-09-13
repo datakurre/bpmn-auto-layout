@@ -334,7 +334,7 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(q2[0].x).toBe(50);
     expect(q2[2].y).toBe(50);
 
-    // 3. src right and above tgt (diagonal)
+    // 3. src right and above tgt (diagonal) — enters tgt at its right edge, centered on tgt's y
     const q3 = routeAssociationEdge(
       { x: 100, y: 0, width: 50, height: 50 },
       { x: 0, y: 100, width: 50, height: 50 }
@@ -343,7 +343,7 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(q3[0].y).toBe(50);
     expect(q3[2].x).toBe(50);
 
-    // 4. src right and below tgt (diagonal)
+    // 4. src right and below tgt (diagonal) — enters tgt at its right edge, centered on tgt's y
     const q4 = routeAssociationEdge(
       { x: 100, y: 100, width: 50, height: 50 },
       { x: 0, y: 0, width: 50, height: 50 }
@@ -351,6 +351,33 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(q4.length).toBe(3);
     expect(q4[0].y).toBe(100);
     expect(q4[2].x).toBe(50);
+
+    // 4b. src right and above tgt with obstacle blocking right port — enters tgt at top edge (4 points)
+    const q3Obstructed = routeAssociationEdge(
+      { x: 100, y: 0, width: 50, height: 50 },
+      { x: 0, y: 100, width: 50, height: 50 },
+      [
+        { x: 120, y: 80, width: 50, height: 50 },
+        { x: 10, y: 0, width: 20, height: 20 }, // obs with a.x >= obs.x + obs.width and a.y >= obs.y + obs.height
+      ]
+    );
+    expect(q3Obstructed.length).toBe(4);
+
+    // 4c. src right and below tgt with obstacle blocking right port — enters tgt at bottom edge (4 points)
+    const q4Obstructed = routeAssociationEdge(
+      { x: 100, y: 100, width: 50, height: 50 },
+      { x: 0, y: 0, width: 50, height: 50 },
+      [{ x: 120, y: 20, width: 50, height: 50 }]
+    );
+    expect(q4Obstructed.length).toBe(4);
+
+    // 4d. src right and above tgt with horizontal obstacle blocking horizontal entry
+    const q3HorizBlock = routeAssociationEdge(
+      { x: 100, y: 0, width: 50, height: 50 },
+      { x: 0, y: 100, width: 50, height: 50 },
+      [{ x: 60, y: 110, width: 30, height: 30 }]
+    );
+    expect(q3HorizBlock.length).toBe(4);
 
     // 5. src horizontally overlapping and below tgt
     const vOverlapBelow = routeAssociationEdge(
