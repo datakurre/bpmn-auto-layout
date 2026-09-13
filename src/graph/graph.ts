@@ -50,11 +50,24 @@ export class DirectedGraph {
   }
 
   public getNodes(): GraphNode[] {
-    return Array.from(this.nodes.values()).sort((a, b) => a.id.localeCompare(b.id));
+    return Array.from(this.nodes.values()).sort((a, b) => {
+      const oA = a.order ?? 0;
+      const oB = b.order ?? 0;
+      if (oA !== oB) {
+        return oA - oB;
+      }
+      return a.id.localeCompare(b.id);
+    });
   }
 
   public getEdges(): GraphEdge[] {
-    return Array.from(this.edges.values()).sort((a, b) => a.id.localeCompare(b.id));
+    // Edge order is always defined here: addEdge defaults it to 0.
+    return Array.from(this.edges.values()).sort((a, b) => {
+      if (a.order !== b.order) {
+        return a.order! - b.order!;
+      }
+      return a.id.localeCompare(b.id);
+    });
   }
 
   public outEdges(nodeId: string): GraphEdge[] {

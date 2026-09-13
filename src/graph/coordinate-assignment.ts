@@ -195,7 +195,65 @@ function computeFlatTracks(
     resolveRankCollisions(nodesInRank, tracks);
   }
 
+  refineDummyTracksWithBarycenterSweeps({ graph, ranks, ctx }, maxRank);
+
   return tracks;
+}
+
+const DUMMY_TRACK_SWEEP_ITERATIONS = 2;
+
+interface SweepContext {
+  graph: DirectedGraph;
+  ranks: Map<string, number>;
+  ctx: TrackContext;
+}
+
+/**
+ * Dummy nodes are free virtual routing points reserved along the corridor of a
+ * multi-rank edge; nudging them toward the barycenter of their neighbors (a
+ * forward/backward Sugiyama-style sweep) straightens their chain and reduces
+ * bends without perturbing the placement of any real BPMN element.
+ */
+function refineDummyTracksWithBarycenterSweeps(sweep: SweepContext, maxRank: number): void {
+  const hasDummyNodes = sweep.graph.getNodes().some((n) => n.data?.isDummy);
+  if (!hasDummyNodes) {
+    return;
+  }
+
+  for (let iter = 0; iter < DUMMY_TRACK_SWEEP_ITERATIONS; iter++) {
+    for (let r = maxRank - 1; r >= 0; r--) {
+      sweepRankDummyBarycenter(sweep, r, 'out');
+    }
+    for (let r = 0; r <= maxRank; r++) {
+      sweepRankDummyBarycenter(sweep, r, 'in');
+    }
+  }
+}
+
+function sweepRankDummyBarycenter(
+  sweep: SweepContext,
+  rank: number,
+  direction: 'in' | 'out'
+): void {
+  const { graph, ranks, ctx } = sweep;
+  const nodesInRank = graph.getNodes().filter((n) => (ranks.get(n.id) || 0) === rank);
+  const dummiesInRank = nodesInRank.filter((n) => n.data?.isDummy);
+  if (dummiesInRank.length === 0) {
+    return;
+  }
+
+  for (const node of dummiesInRank) {
+    // Each dummy node has exactly one in-edge and one out-edge by construction
+    // (see insertDummyNodes), and neither is ever a feedback edge.
+    const neighborEdges = direction === 'out' ? graph.outEdges(node.id) : graph.inEdges(node.id);
+    const neighborIds = neighborEdges.map((e) => (direction === 'out' ? e.target : e.source));
+    // The full forward pass above already assigned a track to every node.
+    const neighborTracks = neighborIds.map((id) => ctx.tracks.get(id)!);
+    const barycenter = neighborTracks.reduce((a, b) => a + b, 0) / neighborTracks.length;
+    ctx.tracks.set(node.id, barycenter);
+  }
+
+  resolveRankCollisions(nodesInRank, ctx.tracks);
 }
 
 function computeLaneAwareTracks(
@@ -325,7 +383,7 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
 }
 
 function resolveRankCollisions(
-  nodesInRank: Array<{ id: string; data?: any }>,
+  nodesInRank: Array<{ id: string; data?: any; order?: number }>,
   tracks: Map<string, number>
 ): void {
   const regularNodes = nodesInRank.filter((n) => n.data?.$type !== 'bpmn:BoundaryEvent');
@@ -334,6 +392,11 @@ function resolveRankCollisions(
     const tB = tracks.get(b.id) || 0;
     if (tA !== tB) {
       return tA - tB;
+    }
+    const oA = a.order ?? 0;
+    const oB = b.order ?? 0;
+    if (oA !== oB) {
+      return oA - oB;
     }
     return a.id.localeCompare(b.id);
   });

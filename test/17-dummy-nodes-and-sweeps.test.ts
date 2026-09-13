@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
+import { BpmnModdle } from 'bpmn-moddle';
 import { DirectedGraph } from '../src/graph/graph';
-import { insertDummyNodes, alignMergeNodeTrack } from '../src/graph/dummy-nodes';
+import {
+  insertDummyNodes,
+  alignMergeNodeTrack,
+  routeEdgeThroughDummyChain,
+} from '../src/graph/dummy-nodes';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
 
@@ -48,6 +53,30 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     const outD2 = augmentedGraph.outEdges('_dummy_long_flow_2');
     expect(outD2).toHaveLength(1);
     expect(outD2[0].target).toBe('N3');
+  });
+
+  it('returns the ordered dummy chain per originating edge id', () => {
+    const graph = new DirectedGraph();
+    graph.addNode('N0', null, 0);
+    graph.addNode('N1', null, 1);
+    graph.addNode('N2', null, 2);
+    graph.addNode('N3', null, 3);
+
+    graph.addEdge({ id: 'long_flow', source: 'N0', target: 'N3', data: null, order: 0 });
+    graph.addEdge({ id: 'short_flow', source: 'N0', target: 'N1', data: null, order: 1 });
+
+    const ranks = new Map<string, number>([
+      ['N0', 0],
+      ['N1', 1],
+      ['N2', 2],
+      ['N3', 3],
+    ]);
+
+    const { edgeDummyChains } = insertDummyNodes(graph, ranks);
+
+    expect(edgeDummyChains.get('long_flow')).toEqual(['_dummy_long_flow_1', '_dummy_long_flow_2']);
+    // Single-rank edges never get a chain entry.
+    expect(edgeDummyChains.has('short_flow')).toBe(false);
   });
 
   it('skips feedback edges and boundary attachment edges when inserting dummy nodes', () => {
@@ -137,5 +166,106 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+  });
+
+  describe('routeEdgeThroughDummyChain (issue #81)', () => {
+    it('returns a two-point route as-is when there is no dummy chain to walk', () => {
+      const waypoints = routeEdgeThroughDummyChain([
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ]);
+
+      expect(waypoints).toEqual([
+        { x: 0, y: 0 },
+        { x: 100, y: 0 },
+      ]);
+    });
+
+    it('walks straight through collinear dummy points with zero bends', () => {
+      const waypoints = routeEdgeThroughDummyChain([
+        { x: 100, y: 200 },
+        { x: 200, y: 200 },
+        { x: 300, y: 200 },
+        { x: 400, y: 200 },
+      ]);
+
+      // Fully collinear anchors must simplify down to the two endpoints.
+      expect(waypoints).toEqual([
+        { x: 100, y: 200 },
+        { x: 400, y: 200 },
+      ]);
+    });
+
+    it('produces an orthogonal path through dummy points that change track', () => {
+      const waypoints = routeEdgeThroughDummyChain([
+        { x: 100, y: 200 },
+        { x: 200, y: 200 },
+        { x: 300, y: 320 },
+        { x: 400, y: 320 },
+      ]);
+
+      expect(waypoints[0]).toEqual({ x: 100, y: 200 });
+      expect(waypoints[waypoints.length - 1]).toEqual({ x: 400, y: 320 });
+
+      // Every segment must be purely horizontal or vertical.
+      for (let i = 1; i < waypoints.length; i++) {
+        const prev = waypoints[i - 1];
+        const curr = waypoints[i];
+        const isOrthogonal = prev.x === curr.x || prev.y === curr.y;
+        expect(isOrthogonal).toBe(true);
+      }
+    });
+  });
+
+  it('routes a bypass edge through its dummy chain corridor with fewer bends than a naive endpoint jump', async () => {
+    const bypassXml = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Defs_Bypass2" targetNamespace="https://example.com/bpmn">
+  <bpmn:process id="Proc_Bypass2" isExecutable="false">
+    <bpmn:startEvent id="Start" />
+    <bpmn:exclusiveGateway id="Split" />
+    <bpmn:task id="Task_A1" name="Step 1" />
+    <bpmn:task id="Task_A2" name="Step 2" />
+    <bpmn:task id="Task_A3" name="Step 3" />
+    <bpmn:exclusiveGateway id="Join" />
+    <bpmn:endEvent id="End" />
+    <bpmn:sequenceFlow id="F0" sourceRef="Start" targetRef="Split" />
+    <bpmn:sequenceFlow id="F_Work_1" sourceRef="Split" targetRef="Task_A1" />
+    <bpmn:sequenceFlow id="F_Work_2" sourceRef="Task_A1" targetRef="Task_A2" />
+    <bpmn:sequenceFlow id="F_Work_3" sourceRef="Task_A2" targetRef="Task_A3" />
+    <bpmn:sequenceFlow id="F_Work_4" sourceRef="Task_A3" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_Bypass" sourceRef="Split" targetRef="Join" />
+    <bpmn:sequenceFlow id="F_End" sourceRef="Join" targetRef="End" />
+  </bpmn:process>
+</bpmn:definitions>`;
+
+    const layoutedXml = await layoutProcess(bypassXml);
+    const score = await scoreDiagram(layoutedXml);
+    expect(score.isValid).toBe(true);
+    expect(score.hardViolations.shapeOverlaps).toBe(0);
+    expect(score.hardViolations.edgeShapeCrossings).toBe(0);
+    expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+
+    const moddle = new BpmnModdle();
+    const { rootElement } = await moddle.fromXML(layoutedXml);
+    const plane = (rootElement as any).diagrams[0].plane;
+    const bypassEdge = plane.planeElement.find((el: any) => el.bpmnElement?.id === 'F_Bypass');
+    const findShape = (id: string) =>
+      plane.planeElement.find((el: any) => el.bpmnElement?.id === id);
+
+    expect(bypassEdge).toBeDefined();
+    const waypoints: Array<{ x: number; y: number }> = bypassEdge.waypoint;
+
+    // The route must stay clear of the intermediate task row it bypasses.
+    const taskBottom = findShape('Task_A1').bounds.y + findShape('Task_A1').bounds.height;
+    for (const wp of waypoints) {
+      expect(wp.y).toBeGreaterThanOrEqual(taskBottom);
+    }
+
+    // Every segment is purely horizontal or vertical (orthogonal corridor routing).
+    for (let i = 1; i < waypoints.length; i++) {
+      const isOrthogonal =
+        waypoints[i - 1].x === waypoints[i].x || waypoints[i - 1].y === waypoints[i].y;
+      expect(isOrthogonal).toBe(true);
+    }
   });
 });
