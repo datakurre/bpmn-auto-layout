@@ -42,18 +42,38 @@ export interface HardViolations {
   shapeOverlaps: number;
   edgeShapeCrossings: number;
   nonOrthogonalSegments: number;
-  collinearDeviations: number;
 }
 
 export interface QualityMetrics {
   totalBends: number;
   totalEdgeLength: number;
   edgeCrossings: number;
-  symmetryError: number;
+}
+
+export interface ContainerCompactness {
+  id: string;
+  elementId: string;
+  width: number;
+  height: number;
+  area: number;
+  aspectRatio: number;
+  densityRatio: number;
+}
+
+export interface CompactnessMetrics {
+  width: number;
+  height: number;
+  area: number;
+  aspectRatio: number;
+  densityRatio: number;
+  containers: ContainerCompactness[];
 }
 
 export interface DiagramQualityScore {
   hardViolations: HardViolations;
   metrics: QualityMetrics;
+  compactness: CompactnessMetrics;
   isValid: boolean;
 }
+
+export type { LayoutWarning, LayoutWarningCode } from './layout-warnings';

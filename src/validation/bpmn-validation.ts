@@ -1,4 +1,5 @@
 import type { AutoLayoutOptions } from '../types';
+import { addWarning, type LayoutWarning } from '../layout-warnings';
 
 function getRefId(ref: any): string | undefined {
   if (!ref) {
@@ -40,15 +41,23 @@ function collectContainersAndFlows(
 function checkFlowEndpoints(
   entry: FlowEntry,
   containerOf: Map<string, string>
-): string | undefined {
+): LayoutWarning | undefined {
   const srcId = getRefId(entry.flow.sourceRef);
   if (!srcId || !containerOf.has(srcId)) {
-    return `Sequence flow "${entry.flow.id}" references unresolvable sourceRef "${srcId || 'undefined'}"`;
+    return {
+      code: 'UNRESOLVED_SEQUENCE_FLOW',
+      elementId: entry.flow.id,
+      message: `Sequence flow "${entry.flow.id}" references unresolvable sourceRef "${srcId || 'undefined'}"`,
+    };
   }
 
   const tgtId = getRefId(entry.flow.targetRef);
   if (!tgtId || !containerOf.has(tgtId)) {
-    return `Sequence flow "${entry.flow.id}" references unresolvable targetRef "${tgtId || 'undefined'}"`;
+    return {
+      code: 'UNRESOLVED_SEQUENCE_FLOW',
+      elementId: entry.flow.id,
+      message: `Sequence flow "${entry.flow.id}" references unresolvable targetRef "${tgtId || 'undefined'}"`,
+    };
   }
 
   return undefined;
@@ -57,18 +66,26 @@ function checkFlowEndpoints(
 function checkFlowBoundaries(
   entry: FlowEntry,
   containerOf: Map<string, string>
-): string | undefined {
+): LayoutWarning | undefined {
   const srcId = getRefId(entry.flow.sourceRef)!;
   const tgtId = getRefId(entry.flow.targetRef)!;
 
   const srcContainer = containerOf.get(srcId);
   if (srcContainer !== entry.containerId) {
-    return `Sequence flow "${entry.flow.id}" belongs to container "${entry.containerId}" but its source "${srcId}" lives in container "${srcContainer}" -- sequence flows cannot cross container boundaries`;
+    return {
+      code: 'CROSS_CONTAINER_FLOW',
+      elementId: entry.flow.id,
+      message: `Sequence flow "${entry.flow.id}" belongs to container "${entry.containerId}" but its source "${srcId}" lives in container "${srcContainer}" -- sequence flows cannot cross container boundaries`,
+    };
   }
 
   const tgtContainer = containerOf.get(tgtId);
   if (tgtContainer !== entry.containerId) {
-    return `Sequence flow "${entry.flow.id}" belongs to container "${entry.containerId}" but its target "${tgtId}" lives in container "${tgtContainer}" -- sequence flows cannot cross container boundaries`;
+    return {
+      code: 'CROSS_CONTAINER_FLOW',
+      elementId: entry.flow.id,
+      message: `Sequence flow "${entry.flow.id}" belongs to container "${entry.containerId}" but its target "${tgtId}" lives in container "${tgtContainer}" -- sequence flows cannot cross container boundaries`,
+    };
   }
 
   return undefined;
@@ -77,16 +94,20 @@ function checkFlowBoundaries(
 function validateSingleFlow(
   entry: FlowEntry,
   containerOf: Map<string, string>
-): string | undefined {
+): LayoutWarning | undefined {
   return checkFlowEndpoints(entry, containerOf) || checkFlowBoundaries(entry, containerOf);
 }
 
-export function validateFlowContainers(definitions: any, options?: AutoLayoutOptions): string[] {
+export function validateFlowContainers(
+  definitions: any,
+  options?: AutoLayoutOptions,
+  warningsOut?: LayoutWarning[]
+): LayoutWarning[] {
   const ctx: FlowCollectorContext = {
     containerOf: new Map<string, string>(),
     flows: [],
   };
-  const warnings: string[] = [];
+  const warnings: LayoutWarning[] = [];
 
   const rootElements = definitions?.rootElements || [];
   for (const root of rootElements) {
@@ -96,12 +117,13 @@ export function validateFlowContainers(definitions: any, options?: AutoLayoutOpt
   }
 
   for (const entry of ctx.flows) {
-    const errorMsg = validateSingleFlow(entry, ctx.containerOf);
-    if (errorMsg) {
+    const warning = validateSingleFlow(entry, ctx.containerOf);
+    if (warning) {
       if (!options?.lenientFlowValidation) {
-        throw new Error(errorMsg);
+        throw new Error(warning.message);
       }
-      warnings.push(errorMsg);
+      warnings.push(warning);
+      addWarning(warningsOut, warning);
     }
   }
 

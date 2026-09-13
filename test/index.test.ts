@@ -28,4 +28,11 @@ describe('bpmn-auto-layout', () => {
     expect(result).toContain('bpmn:definitions');
     expect(result).toContain('Process_1');
   });
+
+  it('exports layoutProcessWithDiagnostics', async () => {
+    const { layoutProcessWithDiagnostics } = await import('../src/index');
+    const result = await layoutProcessWithDiagnostics(sampleBpmn);
+    expect(result.xml).toContain('bpmn:definitions');
+    expect(result.warnings).toEqual([]);
+  });
 });

@@ -9,6 +9,7 @@ import {
 import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/label-layout';
 import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
+import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
 import type { AutoLayoutOptions, Bounds } from './types';
 
 interface ParticipantLayoutParams {
@@ -44,14 +45,22 @@ export class LayoutEngine {
   }
 
   public async layout(xml: string): Promise<string> {
+    const result = await this.layoutWithDiagnostics(xml);
+    return result.xml;
+  }
+
+  public async layoutWithDiagnostics(
+    xml: string
+  ): Promise<{ xml: string; warnings: LayoutWarning[] }> {
+    const warnings: LayoutWarning[] = [];
     const { rootElement } = await this.moddle.fromXML(xml);
     const definitions: any = rootElement;
-    validateFlowContainers(definitions, this.options);
+    validateFlowContainers(definitions, this.options, warnings);
     const targetElement = this.selectTargetElement(definitions);
 
     if (!targetElement) {
       const { xml: unformatted } = await this.moddle.toXML(definitions, { format: true });
-      return unformatted;
+      return { xml: unformatted, warnings };
     }
 
     const diagram = this.diGenerator.ensureDiagram(definitions, targetElement);
@@ -67,9 +76,10 @@ export class LayoutEngine {
     }
 
     normalizePlaneOrigin(diagram.plane);
+    collectPlaneDiagnostics(diagram.plane, warnings);
 
     const { xml: resultXml } = await this.moddle.toXML(definitions, { format: true });
-    return resultXml;
+    return { xml: resultXml, warnings };
   }
 
   private selectTargetElement(definitions: any): any {

@@ -1,5 +1,13 @@
 import { BpmnModdle } from 'bpmn-moddle';
-import type { Bounds, DiagramQualityScore, HardViolations, Point, QualityMetrics } from './types';
+import type {
+  Bounds,
+  CompactnessMetrics,
+  ContainerCompactness,
+  DiagramQualityScore,
+  HardViolations,
+  Point,
+  QualityMetrics,
+} from './types';
 
 interface ExtractedShape {
   id: string;
@@ -17,32 +25,39 @@ interface ExtractedEdge {
   waypoints: Point[];
 }
 
-function boxesOverlap(a: Bounds, b: Bounds): boolean {
+export function boxesOverlap(a: Bounds, b: Bounds): boolean {
   return a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;
 }
 
-function isPointStrictlyInsideBox(pt: Point, box: Bounds): boolean {
-  const margin = 1;
-  return (
-    pt.x > box.x + margin &&
-    pt.x < box.x + box.width - margin &&
-    pt.y > box.y + margin &&
-    pt.y < box.y + box.height - margin
-  );
-}
-
-function segmentCrossesBox(p1: Point, p2: Point, box: Bounds): boolean {
-  const minX = Math.min(p1.x, p2.x);
-  const maxX = Math.max(p1.x, p2.x);
-  const minY = Math.min(p1.y, p2.y);
-  const maxY = Math.max(p1.y, p2.y);
-
-  if (maxX <= box.x || minX >= box.x + box.width || maxY <= box.y || minY >= box.y + box.height) {
-    return false;
+export function segmentCrossesBox(p1: Point, p2: Point, box: Bounds): boolean {
+  if (p1.y === p2.y) {
+    const y = p1.y;
+    if (y <= box.y || y >= box.y + box.height) {
+      return false;
+    }
+    const segMinX = Math.min(p1.x, p2.x);
+    const segMaxX = Math.max(p1.x, p2.x);
+    return Math.max(segMinX, box.x) < Math.min(segMaxX, box.x + box.width);
   }
 
-  const mid: Point = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
-  return isPointStrictlyInsideBox(mid, box);
+  if (p1.x === p2.x) {
+    const x = p1.x;
+    if (x <= box.x || x >= box.x + box.width) {
+      return false;
+    }
+    const segMinY = Math.min(p1.y, p2.y);
+    const segMaxY = Math.max(p1.y, p2.y);
+    return Math.max(segMinY, box.y) < Math.min(segMaxY, box.y + box.height);
+  }
+
+  const segMinX = Math.min(p1.x, p2.x);
+  const segMaxX = Math.max(p1.x, p2.x);
+  const segMinY = Math.min(p1.y, p2.y);
+  const segMaxY = Math.max(p1.y, p2.y);
+  return (
+    Math.max(segMinX, box.x) < Math.min(segMaxX, box.x + box.width) &&
+    Math.max(segMinY, box.y) < Math.min(segMaxY, box.y + box.height)
+  );
 }
 
 function segmentsCross(segA: { p1: Point; p2: Point }, segB: { p1: Point; p2: Point }): boolean {
@@ -66,6 +81,105 @@ function segmentsCross(segA: { p1: Point; p2: Point }, segB: { p1: Point; p2: Po
   return vx > hMinX && vx < hMaxX && hy > vMinY && hy < vMaxY;
 }
 
+function computeDiagramBoundingBox(
+  shapes: ExtractedShape[],
+  edges: ExtractedEdge[]
+): { minX: number; minY: number; maxX: number; maxY: number } {
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+
+  for (const s of shapes) {
+    minX = Math.min(minX, s.bounds.x);
+    minY = Math.min(minY, s.bounds.y);
+    maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
+    maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
+  }
+
+  for (const e of edges) {
+    for (const pt of e.waypoints) {
+      minX = Math.min(minX, pt.x);
+      minY = Math.min(minY, pt.y);
+      maxX = Math.max(maxX, pt.x);
+      maxY = Math.max(maxY, pt.y);
+    }
+  }
+
+  return { minX, minY, maxX, maxY };
+}
+
+function computeContainerCompactness(
+  container: ExtractedShape,
+  flowShapes: ExtractedShape[]
+): ContainerCompactness {
+  const cWidth = container.bounds.width;
+  const cHeight = container.bounds.height;
+  const cArea = cWidth * cHeight;
+  const cAspectRatio = cHeight > 0 ? Number((cWidth / cHeight).toFixed(2)) : 0;
+
+  let cNodeArea = 0;
+  for (const s of flowShapes) {
+    if (
+      s.bounds.x >= container.bounds.x &&
+      s.bounds.y >= container.bounds.y &&
+      s.bounds.x + s.bounds.width <= container.bounds.x + container.bounds.width &&
+      s.bounds.y + s.bounds.height <= container.bounds.y + container.bounds.height
+    ) {
+      cNodeArea += s.bounds.width * s.bounds.height;
+    }
+  }
+  const cDensityRatio = cArea > 0 ? Number((cNodeArea / cArea).toFixed(4)) : 0;
+
+  return {
+    id: container.id,
+    elementId: container.elementId,
+    width: cWidth,
+    height: cHeight,
+    area: cArea,
+    aspectRatio: cAspectRatio,
+    densityRatio: cDensityRatio,
+  };
+}
+
+function evaluateCompactness(shapes: ExtractedShape[], edges: ExtractedEdge[]): CompactnessMetrics {
+  const bbox = computeDiagramBoundingBox(shapes, edges);
+  if (!Number.isFinite(bbox.minX)) {
+    return {
+      width: 0,
+      height: 0,
+      area: 0,
+      aspectRatio: 0,
+      densityRatio: 0,
+      containers: [],
+    };
+  }
+
+  const width = bbox.maxX - bbox.minX;
+  const height = bbox.maxY - bbox.minY;
+  const area = width * height;
+  const aspectRatio = height > 0 ? Number((width / height).toFixed(2)) : 0;
+
+  const flowShapes = shapes.filter((s) => !s.isContainer);
+  let totalNodeArea = 0;
+  for (const s of flowShapes) {
+    totalNodeArea += s.bounds.width * s.bounds.height;
+  }
+  const densityRatio = area > 0 ? Number((totalNodeArea / area).toFixed(4)) : 0;
+
+  const containerShapes = shapes.filter((s) => s.isContainer);
+  const containers = containerShapes.map((c) => computeContainerCompactness(c, flowShapes));
+
+  return {
+    width,
+    height,
+    area,
+    aspectRatio,
+    densityRatio,
+    containers,
+  };
+}
+
 export async function scoreDiagram(xml: string): Promise<DiagramQualityScore> {
   const moddle = new BpmnModdle();
   const { rootElement } = await moddle.fromXML(xml);
@@ -73,13 +187,13 @@ export async function scoreDiagram(xml: string): Promise<DiagramQualityScore> {
 
   const hardViolations = evaluateHardViolations(shapes, edges);
   const metrics = evaluateQualityMetrics(edges);
+  const compactness = evaluateCompactness(shapes, edges);
   const isValid =
     hardViolations.shapeOverlaps === 0 &&
     hardViolations.edgeShapeCrossings === 0 &&
-    hardViolations.nonOrthogonalSegments === 0 &&
-    hardViolations.collinearDeviations === 0;
+    hardViolations.nonOrthogonalSegments === 0;
 
-  return { hardViolations, metrics, isValid };
+  return { hardViolations, metrics, compactness, isValid };
 }
 
 function parseDiShape(elem: any): ExtractedShape | undefined {
@@ -144,7 +258,6 @@ function evaluateHardViolations(shapes: ExtractedShape[], edges: ExtractedEdge[]
     shapeOverlaps: countShapeOverlaps(shapes),
     edgeShapeCrossings: countEdgeShapeCrossings(shapes, edges),
     nonOrthogonalSegments: countNonOrthogonalSegments(edges),
-    collinearDeviations: 0,
   };
 }
 
@@ -228,6 +341,5 @@ function evaluateQualityMetrics(edges: ExtractedEdge[]): QualityMetrics {
     totalBends,
     totalEdgeLength,
     edgeCrossings,
-    symmetryError: 0,
   };
 }

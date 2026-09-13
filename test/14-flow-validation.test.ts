@@ -138,8 +138,10 @@ describe('Issue #82: Flow Container Boundary & Resolution Validation', () => {
 
     const warnings = validateFlowContainers(mockDefs, { lenientFlowValidation: true });
     expect(warnings.length).toBe(2);
-    expect(warnings[0]).toContain('unresolvable sourceRef');
-    expect(warnings[1]).toContain('source "SubT1" lives in container');
+    expect(warnings[0].code).toBe('UNRESOLVED_SEQUENCE_FLOW');
+    expect(warnings[0].message).toContain('unresolvable sourceRef');
+    expect(warnings[1].code).toBe('CROSS_CONTAINER_FLOW');
+    expect(warnings[1].message).toContain('source "SubT1" lives in container');
 
     const emptyWarnings = validateFlowContainers(undefined);
     expect(emptyWarnings).toEqual([]);
