@@ -4,7 +4,28 @@ import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
 import { expectImageSnapshotMatch } from './helpers/snapshot-helper';
 
+import { routeBoundaryExit } from '../src/hierarchy/boundary-events';
+
 describe('Iteration 5: Boundary Events', () => {
+  it('routes boundary exits cleanly around horizontal obstacles or when unblocked', () => {
+    const src = { x: 100, y: 100, width: 36, height: 36 };
+    const tgt = { x: 300, y: 220, width: 100, height: 80 };
+
+    const unblockedNoObs = routeBoundaryExit(src, tgt);
+    expect(unblockedNoObs.length).toBe(3);
+
+    const unblockedEmpty = routeBoundaryExit(src, tgt, []);
+    expect(unblockedEmpty.length).toBe(3);
+
+    const obs = { x: 150, y: 250, width: 50, height: 40 };
+    const detoured = routeBoundaryExit(src, tgt, [obs]);
+    expect(detoured.length).toBe(5);
+
+    const vObs = { x: 110, y: 150, width: 20, height: 30 };
+    const vBlocked = routeBoundaryExit(src, tgt, [vObs]);
+    expect(vBlocked.length).toBe(3);
+  });
+
   it('layouts task with a boundary event and its exception flow', async () => {
     const builder = new BpmnBuilder();
     builder

@@ -44,7 +44,7 @@ export function assignCoordinates(
     ? computeLaneAwareTracks(graph, ranks, options!)
     : computeFlatTracks(graph, ranks, options?.feedbackEdges);
 
-  return computeFinalBounds(nodes, tracks, { colWidths, colX, ranks, rankRows });
+  return computeFinalBounds(nodes, tracks, { colWidths, colX, ranks, rankRows, graph });
 }
 
 function groupNodesByRank(
@@ -68,6 +68,86 @@ interface ColInfo {
   colX: Map<number, number>;
   ranks: Map<string, number>;
   rankRows: Map<number, number>;
+  graph?: DirectedGraph;
+}
+
+interface TrackExtent {
+  top: number;
+  bottom: number;
+}
+
+interface TrackYContext {
+  nodes: Array<{ id: string; data?: any }>;
+  tracks: Map<string, number>;
+  colInfo: ColInfo;
+  rowOffsets: Map<number, number>;
+}
+
+function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
+  const extents = new Map<number, TrackExtent>();
+  const graph = ctx.colInfo.graph;
+
+  for (const node of ctx.nodes) {
+    const rank = ctx.colInfo.ranks.get(node.id) || 0;
+    const row = ctx.colInfo.rankRows.get(rank) || 0;
+    const baseTrack = ctx.tracks.get(node.id) || 0;
+    const rowOffset = ctx.rowOffsets.get(row) || 0;
+    const track = baseTrack + rowOffset;
+
+    const dim = node.data?.isDummy
+      ? { width: 0, height: 0 }
+      : getElementDimensions(node.data?.$type);
+    const h = node.data?.customHeight ?? dim.height;
+    const hasBottomBoundary = Boolean(
+      graph && graph.outEdges(node.id).some((e) => e.id.startsWith('_attach_'))
+    );
+    const topHalf = Math.max(40, Math.ceil(h / 2));
+    const bottomHalf = Math.max(40, Math.ceil(h / 2) + (hasBottomBoundary ? 20 : 0));
+
+    const existing = extents.get(track);
+    if (!existing) {
+      extents.set(track, { top: topHalf, bottom: bottomHalf });
+    } else {
+      existing.top = Math.max(existing.top, topHalf);
+      existing.bottom = Math.max(existing.bottom, bottomHalf);
+    }
+  }
+  return extents;
+}
+
+function computeTrackYPositions(ctx: TrackYContext): Map<number, number> {
+  const extents = collectTrackExtents(ctx);
+  const sortedTracks = Array.from(extents.keys()).sort((a, b) => a - b);
+  const trackYMap = new Map<number, number>();
+
+  const baseIdx = Math.max(
+    0,
+    sortedTracks.findIndex((t) => t >= 0)
+  );
+  const baseTrack = sortedTracks[baseIdx];
+  trackYMap.set(baseTrack, 140 + baseTrack * 120);
+
+  for (let i = baseIdx + 1; i < sortedTracks.length; i++) {
+    const prevTrack = sortedTracks[i - 1];
+    const currTrack = sortedTracks[i];
+    const prevExt = extents.get(prevTrack)!;
+    const currExt = extents.get(currTrack)!;
+    const emptyTrackSpan = Math.max(0, currTrack - prevTrack - 1);
+    const step = prevExt.bottom + 40 + currExt.top + emptyTrackSpan * 120;
+    trackYMap.set(currTrack, trackYMap.get(prevTrack)! + step);
+  }
+
+  for (let i = baseIdx - 1; i >= 0; i--) {
+    const nextTrack = sortedTracks[i + 1];
+    const currTrack = sortedTracks[i];
+    const nextExt = extents.get(nextTrack)!;
+    const currExt = extents.get(currTrack)!;
+    const emptyTrackSpan = Math.max(0, nextTrack - currTrack - 1);
+    const step = nextExt.top + 40 + currExt.bottom + emptyTrackSpan * 120;
+    trackYMap.set(currTrack, trackYMap.get(nextTrack)! - step);
+  }
+
+  return trackYMap;
 }
 
 function computeRowTrackOffsets(
@@ -105,9 +185,8 @@ function computeFinalBounds(
   colInfo: ColInfo
 ): Map<string, Bounds> {
   const boundsMap = new Map<string, Bounds>();
-  const centerY = 140;
-  const trackSpacing = 120;
   const rowOffsets = computeRowTrackOffsets(nodes, tracks, colInfo);
+  const trackYMap = computeTrackYPositions({ nodes, tracks, colInfo, rowOffsets });
 
   for (const node of nodes) {
     const rank = colInfo.ranks.get(node.id) || 0;
@@ -123,7 +202,7 @@ function computeFinalBounds(
     const baseTrack = tracks.get(node.id)!;
     const rowOffset = rowOffsets.get(row)!;
     const track = baseTrack + rowOffset;
-    const trackY = centerY + track * trackSpacing;
+    const trackY = trackYMap.get(track)!;
     const y = Math.round(trackY - h / 2);
 
     boundsMap.set(node.id, { x, y, width: w, height: h });
@@ -357,6 +436,22 @@ function calculateSingleNodeTrack(
   return alignMergeNodeTrack(node.id, inEdges, ctx.tracks);
 }
 
+function getSiblingBranchOffset(
+  siblings: Array<{ target: string }>,
+  siblingIndex: number,
+  graph: DirectedGraph
+): number {
+  if (siblings.length === 2) {
+    const hasBottom0 = graph.outEdges(siblings[0].target).some((e) => e.id.startsWith('_attach_'));
+    const hasBottom1 = graph.outEdges(siblings[1].target).some((e) => e.id.startsWith('_attach_'));
+    if (hasBottom0 && !hasBottom1) {
+      return siblingIndex === 0 ? 0 : -1;
+    }
+  }
+  const centerIndex = Math.floor((siblings.length - 1) / 2);
+  return siblingIndex - centerIndex;
+}
+
 function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: TrackContext): number {
   const parentNode = ctx.graph.getNode(parentId);
   if (parentNode?.data?.$type === 'bpmn:BoundaryEvent') {
@@ -377,16 +472,7 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
     return parentTrack;
   }
   const siblingIndex = siblings.findIndex((e) => e.target === nodeId);
-  const count = siblings.length;
-  // For an odd sibling count this centers exactly on the parent's track (the
-  // middle branch gets offset 0). For an even count there is no exact
-  // center, so round down rather than split the difference: that keeps one
-  // branch on the parent's own track instead of offsetting every branch by
-  // a fraction, which otherwise forces a bend on every branch at both the
-  // split and the merge (issue #88).
-  const centerIndex = Math.floor((count - 1) / 2);
-  const offset = siblingIndex - centerIndex;
-  return parentTrack + offset;
+  return parentTrack + getSiblingBranchOffset(siblings, siblingIndex, ctx.graph);
 }
 
 function resolveRankCollisions(

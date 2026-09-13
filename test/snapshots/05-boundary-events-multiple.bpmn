@@ -31,15 +31,15 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Error_di" bpmnElement="End_Error">
-        <dc:Bounds x="452" y="242" width="36" height="36" />
+        <dc:Bounds x="452" y="262" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="449" y="288" width="38" height="14" />
+          <dc:Bounds x="449" y="308" width="38" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Timeout_di" bpmnElement="End_Timeout">
-        <dc:Bounds x="452" y="362" width="36" height="36" />
+        <dc:Bounds x="452" y="382" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="441" y="408" width="58" height="14" />
+          <dc:Bounds x="441" y="428" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Boundary_Error_di" bpmnElement="Boundary_Error">
@@ -64,13 +64,13 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Err_di" bpmnElement="Flow_Err">
         <di:waypoint x="268" y="198" />
-        <di:waypoint x="268" y="260" />
-        <di:waypoint x="452" y="260" />
+        <di:waypoint x="268" y="280" />
+        <di:waypoint x="452" y="280" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Time_di" bpmnElement="Flow_Time">
         <di:waypoint x="224" y="198" />
-        <di:waypoint x="224" y="380" />
-        <di:waypoint x="452" y="380" />
+        <di:waypoint x="224" y="400" />
+        <di:waypoint x="452" y="400" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

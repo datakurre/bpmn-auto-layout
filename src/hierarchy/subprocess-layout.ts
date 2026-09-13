@@ -126,6 +126,7 @@ export function layoutScope(
       boundsMap,
       shapes,
       edges,
+      associations: allAssociations,
     });
     routeAssociations(allAssociations, boundsMap, edges);
   }
@@ -515,7 +516,7 @@ function routeOtherFlows(
   for (const { flow, srcId, srcBounds, tgtBounds } of otherFlows) {
     const isFromBoundary = boundaryEvents.some((b: any) => b.id === srcId);
     const waypoints = isFromBoundary
-      ? routeBoundaryExit(srcBounds, tgtBounds)
+      ? routeBoundaryExit(srcBounds, tgtBounds, allBounds)
       : routeOrthogonalEdge(srcBounds, tgtBounds, allBounds);
     edges.push({ element: flow, waypoints });
   }

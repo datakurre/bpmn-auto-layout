@@ -3,6 +3,8 @@ import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
 import { layoutScope } from '../src/hierarchy/subprocess-layout';
+import { routeAssociationEdge } from '../src/hierarchy/artifact-layout';
+import { layoutDisconnectedElements } from '../src/hierarchy/disconnected-layout';
 import { expectSnapshotMatch } from './helpers/snapshot-helper';
 
 describe('Iteration 13: Compensation Handlers', () => {
@@ -269,5 +271,56 @@ describe('Iteration 13: Compensation Handlers', () => {
     });
     expect(result.shapes.length).toBe(1);
     expect(result.shapes[0].element.id).toBe('CompTask_Solo');
+  });
+
+  it('routes vertical association detours cleanly around blockers in both directions', () => {
+    const src = { x: 1120, y: 100, width: 36, height: 36 };
+    const tgt = { x: 1100, y: 500, width: 100, height: 80 };
+    const blocker = { x: 1100, y: 250, width: 100, height: 100 };
+    const rightBlocker = { x: 1210, y: 250, width: 50, height: 100 };
+
+    const leftDetour = routeAssociationEdge(src, tgt, [blocker, rightBlocker]);
+    expect(leftDetour.length).toBe(6);
+
+    const upwardDetour = routeAssociationEdge(tgt, src, [blocker]);
+    expect(upwardDetour.length).toBe(6);
+
+    const leftBlocker = { x: 1000, y: 250, width: 100, height: 100 };
+    const blockedBoth = routeAssociationEdge(src, tgt, [blocker, rightBlocker, leftBlocker]);
+    expect(blockedBoth).toBeDefined();
+
+    const blockedBothUp = routeAssociationEdge(tgt, src, [blocker, rightBlocker, leftBlocker]);
+    expect(blockedBothUp).toBeDefined();
+
+    const srcDiagonal = { x: 400, y: 100, width: 36, height: 36 };
+    const tgtDiagonal = { x: 100, y: 300, width: 100, height: 80 };
+    const leftSibling = { x: 20, y: 300, width: 50, height: 80 };
+    const otherRowObstacle = { x: 20, y: 600, width: 50, height: 80 };
+    const siblingRoute = routeAssociationEdge(srcDiagonal, tgtDiagonal, [
+      otherRowObstacle,
+      leftSibling,
+    ]);
+    expect(siblingRoute).toBeDefined();
+
+    const clearRightRoute = routeAssociationEdge(srcDiagonal, tgtDiagonal, [otherRowObstacle]);
+    expect(clearRightRoute).toBeDefined();
+    expect(clearRightRoute.length).toBe(3);
+  });
+
+  it('handles compensation handler when association host is not in boundsMap', () => {
+    const boundsMap = new Map();
+    const shapes: any[] = [];
+    layoutDisconnectedElements(
+      [{ id: 'Handler_Orphan', isForCompensation: true, $type: 'bpmn:Task' }],
+      { minX: 100, maxX: 500, maxY: 100 },
+      {
+        childScopeResults: new Map(),
+        boundsMap,
+        shapes,
+        edges: [],
+        associations: [{ sourceRef: 'Missing_Host', targetRef: 'Handler_Orphan' }],
+      }
+    );
+    expect(boundsMap.has('Handler_Orphan')).toBe(true);
   });
 });

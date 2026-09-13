@@ -326,11 +326,65 @@ function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]
   return routeLeftwardDiagonal(src, tgt, obstacles);
 }
 
+function routeVerticalDetour(
+  source: Bounds,
+  target: Bounds,
+  obstacles: Bounds[]
+): Point[] | undefined {
+  const overlapMinX = Math.max(source.x, target.x);
+  const overlapMaxX = Math.min(source.x + source.width, target.x + target.width);
+  const midX = Math.round((overlapMinX + overlapMaxX) / 2);
+  const startY = source.y + source.height;
+  const endY = target.y;
+
+  const blockers = obstacles.filter(
+    (obs) =>
+      midX > obs.x &&
+      midX < obs.x + obs.width &&
+      Math.max(startY, obs.y) < Math.min(endY, obs.y + obs.height)
+  );
+
+  const maxRight = Math.max(...blockers.map((b) => b.x + b.width));
+  const minLeft = Math.min(...blockers.map((b) => b.x));
+  const firstTop = Math.min(...blockers.map((b) => b.y));
+  const lastBottom = Math.max(...blockers.map((b) => b.y + b.height));
+
+  const stepDownY = Math.round((startY + firstTop) / 2);
+  const stepUpY = Math.round((lastBottom + endY) / 2);
+
+  const candidateRight: Point[] = [
+    { x: midX, y: startY },
+    { x: midX, y: stepDownY },
+    { x: maxRight + 20, y: stepDownY },
+    { x: maxRight + 20, y: stepUpY },
+    { x: midX, y: stepUpY },
+    { x: midX, y: endY },
+  ];
+  if (!isPathObstructed(candidateRight, obstacles)) {
+    return candidateRight;
+  }
+
+  const candidateLeft: Point[] = [
+    { x: midX, y: startY },
+    { x: midX, y: stepDownY },
+    { x: minLeft - 20, y: stepDownY },
+    { x: minLeft - 20, y: stepUpY },
+    { x: midX, y: stepUpY },
+    { x: midX, y: endY },
+  ];
+  if (!isPathObstructed(candidateLeft, obstacles)) {
+    return candidateLeft;
+  }
+
+  return undefined;
+}
+
 export function routeAssociationEdge(
   sourceBounds: Bounds,
   targetBounds: Bounds,
   obstacles?: Bounds[]
 ): Point[] {
+  const filtered = filterObstacles(obstacles, sourceBounds, targetBounds);
   const overlapMinX = Math.max(sourceBounds.x, targetBounds.x);
   const overlapMaxX = Math.min(
     sourceBounds.x + sourceBounds.width,
@@ -340,16 +394,30 @@ export function routeAssociationEdge(
   if (overlapMinX < overlapMaxX) {
     const midX = Math.round((overlapMinX + overlapMaxX) / 2);
     if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
-      return [
+      const direct = [
         { x: midX, y: sourceBounds.y + sourceBounds.height },
         { x: midX, y: targetBounds.y },
       ];
+      if (!isPathObstructed(direct, filtered)) {
+        return direct;
+      }
+      const detour = routeVerticalDetour(sourceBounds, targetBounds, filtered);
+      if (detour) {
+        return detour;
+      }
     }
     if (targetBounds.y + targetBounds.height <= sourceBounds.y) {
-      return [
+      const direct = [
         { x: midX, y: sourceBounds.y },
         { x: midX, y: targetBounds.y + targetBounds.height },
       ];
+      if (!isPathObstructed(direct, filtered)) {
+        return direct;
+      }
+      const detour = routeVerticalDetour(targetBounds, sourceBounds, filtered);
+      if (detour) {
+        return detour.reverse();
+      }
     }
   }
 

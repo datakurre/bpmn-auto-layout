@@ -85,7 +85,28 @@ export function placeBoundaries(
   }
 }
 
-export function routeBoundaryExit(sourceBounds: Bounds, targetBounds: Bounds): Point[] {
+function isSegmentObstructed(a: Point, b: Point, obs: Bounds): boolean {
+  if (a.x === b.x) {
+    if (a.x <= obs.x || a.x >= obs.x + obs.width) {
+      return false;
+    }
+    const minY = Math.min(a.y, b.y);
+    const maxY = Math.max(a.y, b.y);
+    return Math.max(minY, obs.y) < Math.min(maxY, obs.y + obs.height);
+  }
+  if (a.y <= obs.y || a.y >= obs.y + obs.height) {
+    return false;
+  }
+  const minX = Math.min(a.x, b.x);
+  const maxX = Math.max(a.x, b.x);
+  return Math.max(minX, obs.x) < Math.min(maxX, obs.x + obs.width);
+}
+
+export function routeBoundaryExit(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  obstacles?: Bounds[]
+): Point[] {
   const srcBottom: Point = {
     x: Math.round(sourceBounds.x + sourceBounds.width / 2),
     y: sourceBounds.y + sourceBounds.height,
@@ -94,5 +115,33 @@ export function routeBoundaryExit(sourceBounds: Bounds, targetBounds: Bounds): P
     x: targetBounds.x,
     y: Math.round(targetBounds.y + targetBounds.height / 2),
   };
-  return [srcBottom, { x: srcBottom.x, y: tgtEntry.y }, tgtEntry];
+  const corner = { x: srcBottom.x, y: tgtEntry.y };
+  if (!obstacles || obstacles.length === 0) {
+    return [srcBottom, corner, tgtEntry];
+  }
+
+  const filtered = obstacles.filter((obs) => obs !== sourceBounds && obs !== targetBounds);
+  const isDirectBlocked = filtered.some(
+    (obs) =>
+      isSegmentObstructed(srcBottom, corner, obs) || isSegmentObstructed(corner, tgtEntry, obs)
+  );
+  if (!isDirectBlocked) {
+    return [srcBottom, corner, tgtEntry];
+  }
+
+  const hBlockers = filtered.filter((obs) => isSegmentObstructed(corner, tgtEntry, obs));
+  if (hBlockers.length > 0) {
+    const maxBottom = Math.max(...hBlockers.map((b) => b.y + b.height));
+    const detourY = maxBottom + 20;
+    const stepX = Math.max(srcBottom.x, targetBounds.x - 20);
+    return [
+      srcBottom,
+      { x: srcBottom.x, y: detourY },
+      { x: stepX, y: detourY },
+      { x: stepX, y: tgtEntry.y },
+      tgtEntry,
+    ];
+  }
+
+  return [srcBottom, corner, tgtEntry];
 }
