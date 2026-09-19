@@ -542,6 +542,12 @@ describe('path-alignment unit tests', () => {
         sourceRef: 'Fail',
         targetRef: 'Fail',
       };
+      const flowToNoBounds = {
+        $type: 'bpmn:SequenceFlow',
+        id: 'F_ToNoBounds',
+        sourceRef: 'Fail',
+        targetRef: 'NoBounds',
+      };
       const flowMissingNode = {
         $type: 'bpmn:SequenceFlow',
         id: 'F_Missing',
@@ -569,6 +575,7 @@ describe('path-alignment unit tests', () => {
           flowDownstreamNull,
           flowDownstreamJoin,
           flowDownstreamLoop,
+          flowToNoBounds,
           flowMissingNode,
         ],
       };
@@ -584,7 +591,7 @@ describe('path-alignment unit tests', () => {
           { element: obs, bounds: { x: 100, y: 160, width: 100, height: 80 } },
           { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
           { element: col2, bounds: { x: 350, y: 160, width: 100, height: 80 } },
-          { element: fail, bounds: { x: 180, y: 100, width: 100, height: 80 } },
+          { element: fail, bounds: { x: 180, y: 100, width: 100, height: 50 } },
           { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
         ],
         edges: [
@@ -608,6 +615,52 @@ describe('path-alignment unit tests', () => {
       const res = alignIntraProcessBranches({ process, result });
       expect(res).toBe(true);
       expect(result.shapes[0].bounds.x).toBe(300);
+    });
+
+    it('returns false when candidate gateway shift causes overlap with an existing node', () => {
+      const gw = { id: 'G1', $type: 'bpmn:ExclusiveGateway' };
+      const join = { id: 'G2', $type: 'bpmn:ExclusiveGateway' };
+      const obs = { id: 'T_obs', $type: 'bpmn:Task' };
+      const col1 = { id: 'T_col1', $type: 'bpmn:Task' };
+      const obstacleAtTarget = { id: 'T_block', $type: 'bpmn:Task' };
+
+      const flowJoin = { id: 'F_join', $type: 'bpmn:SequenceFlow', sourceRef: gw, targetRef: join };
+      const flowOther = {
+        id: 'F_other',
+        $type: 'bpmn:SequenceFlow',
+        sourceRef: gw,
+        targetRef: join,
+      };
+
+      const process = {
+        flowElements: [gw, join, obs, col1, obstacleAtTarget, flowJoin, flowOther],
+      };
+
+      const result: ScopeLayoutResult = {
+        width: 1000,
+        height: 600,
+        minX: 100,
+        minY: 100,
+        shapes: [
+          { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
+          { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
+          { element: obs, bounds: { x: 100, y: 160, width: 100, height: 80 } },
+          { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
+          { element: obstacleAtTarget, bounds: { x: 300, y: 100, width: 100, height: 80 } },
+        ],
+        edges: [
+          {
+            element: flowJoin,
+            waypoints: [
+              { x: 125, y: 150 },
+              { x: 600, y: 225 },
+            ],
+          },
+        ],
+      };
+
+      const res = alignIntraProcessBranches({ process, result });
+      expect(res).toBe(false);
     });
   });
 

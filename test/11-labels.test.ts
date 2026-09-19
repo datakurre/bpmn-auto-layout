@@ -24,7 +24,7 @@ import {
 } from '../src/graph/label-layout';
 import {
   EVENT_LABEL_MARGIN,
-  BOUNDARY_EVENT_LABEL_MARGIN,
+  BOUNDARY_EVENT_DIAGONAL_MARGIN,
   GATEWAY_LABEL_MARGIN,
   ARTIFACT_LABEL_MARGIN,
   FLOW_LABEL_MARGIN,
@@ -693,12 +693,12 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       });
 
       expect(boundaryShape.labelBounds).toBeDefined();
-      // Should be placed to the right, tightly below the task border using BOUNDARY_EVENT_LABEL_MARGIN
+      // Should be placed to the right, tightly below the task border using BOUNDARY_EVENT_DIAGONAL_MARGIN
       expect(boundaryShape.labelBounds!.y).toBe(
-        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_LABEL_MARGIN
+        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
       );
       expect(boundaryShape.labelBounds!.x).toBe(
-        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_LABEL_MARGIN
+        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_DIAGONAL_MARGIN
       );
     });
 
@@ -799,6 +799,24 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
         });
         expect(evShape.labelBounds).toBeDefined();
       }
+
+      // Boundary event diagonal placement when orthogonal sides are blocked
+      const beShape: PlacedShape = {
+        element: { id: 'BE_D', $type: 'bpmn:BoundaryEvent', name: 'Timeout Warning' },
+        bounds: { x: 200, y: 200, width: 36, height: 36 },
+      };
+      const beObstacles: PlacedShape[] = [
+        { element: { id: 'O_T' }, bounds: { x: 180, y: 120, width: 70, height: 70 } },
+        { element: { id: 'O_B' }, bounds: { x: 180, y: 236, width: 70, height: 70 } },
+        { element: { id: 'O_R' }, bounds: { x: 236, y: 180, width: 70, height: 70 } },
+        { element: { id: 'O_L' }, bounds: { x: 110, y: 180, width: 70, height: 70 } },
+      ];
+      const beLabels: any[] = [];
+      layoutElementLabel(beShape, beLabels, {
+        shapes: [beShape, ...beObstacles],
+        edges: [],
+      });
+      expect(beShape.labelBounds).toBeDefined();
     });
   });
 });

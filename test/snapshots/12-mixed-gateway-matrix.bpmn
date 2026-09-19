@@ -81,7 +81,7 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Direct_di" bpmnElement="Task_Direct">
-        <dc:Bounds x="306" y="220" width="100" height="80" />
+        <dc:Bounds x="306" y="340" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Incl_Join_di" bpmnElement="Gate_Incl_Join">
         <dc:Bounds x="1116" y="235" width="50" height="50" />
@@ -104,10 +104,10 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_PathB_di" bpmnElement="Flow_PathB">
         <di:waypoint x="221" y="165" />
-        <di:waypoint x="221" y="260" />
-        <di:waypoint x="306" y="260" />
+        <di:waypoint x="221" y="380" />
+        <di:waypoint x="306" y="380" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="231" y="206" width="38" height="14" />
+          <dc:Bounds x="231" y="266" width="38" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_P1_di" bpmnElement="Flow_P1">
@@ -116,9 +116,7 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_P2_di" bpmnElement="Flow_P2">
         <di:waypoint x="356" y="165" />
-        <di:waypoint x="356" y="193" />
-        <di:waypoint x="436" y="193" />
-        <di:waypoint x="436" y="260" />
+        <di:waypoint x="356" y="260" />
         <di:waypoint x="466" y="260" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToInner_di" bpmnElement="Flow_ToInner">
@@ -172,9 +170,8 @@
         <di:waypoint x="1031" y="165" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Direct_Join_di" bpmnElement="Flow_Direct_Join">
-        <di:waypoint x="356" y="300" />
-        <di:waypoint x="356" y="340" />
-        <di:waypoint x="1141" y="340" />
+        <di:waypoint x="406" y="380" />
+        <di:waypoint x="1141" y="380" />
         <di:waypoint x="1141" y="285" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

@@ -102,10 +102,10 @@ function isSegmentObstructed(a: Point, b: Point, obs: Bounds): boolean {
   return Math.max(minX, obs.x) < Math.min(maxX, obs.x + obs.width);
 }
 
-export function routeBoundaryExit(
+function routeBackwardBoundaryExit(
   sourceBounds: Bounds,
   targetBounds: Bounds,
-  obstacles?: Bounds[]
+  filtered: Bounds[]
 ): Point[] {
   const srcBottom: Point = {
     x: Math.round(sourceBounds.x + sourceBounds.width / 2),
@@ -115,12 +115,81 @@ export function routeBoundaryExit(
     x: targetBounds.x,
     y: Math.round(targetBounds.y + targetBounds.height / 2),
   };
+  const minX = Math.min(sourceBounds.x, targetBounds.x);
+  const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
+  let maxBottomY = Math.max(
+    sourceBounds.y + sourceBounds.height,
+    targetBounds.y + targetBounds.height
+  );
+  for (const b of filtered) {
+    if (b.x + b.width >= minX && b.x <= maxX) {
+      maxBottomY = Math.max(maxBottomY, b.y + b.height);
+    }
+  }
+  const channelY = maxBottomY + 40;
+  const stepTgtX = targetBounds.x - 20;
+
+  const dropBlockers = filtered.filter((obs) =>
+    isSegmentObstructed(srcBottom, { x: srcBottom.x, y: channelY }, obs)
+  );
+  if (dropBlockers.length > 0) {
+    const minTop = Math.min(...dropBlockers.map((b) => b.y));
+    const maxRight = Math.max(...dropBlockers.map((b) => b.x + b.width));
+    const stepY = Math.round((srcBottom.y + minTop) / 2);
+    const stepX = maxRight + 20;
+    return [
+      srcBottom,
+      { x: srcBottom.x, y: stepY },
+      { x: stepX, y: stepY },
+      { x: stepX, y: channelY },
+      { x: stepTgtX, y: channelY },
+      { x: stepTgtX, y: tgtEntry.y },
+      tgtEntry,
+    ];
+  }
+
+  return [
+    srcBottom,
+    { x: srcBottom.x, y: channelY },
+    { x: stepTgtX, y: channelY },
+    { x: stepTgtX, y: tgtEntry.y },
+    tgtEntry,
+  ];
+}
+
+export function routeBoundaryExit(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  obstacles?: Bounds[]
+): Point[] {
+  const srcBottom: Point = {
+    x: Math.round(sourceBounds.x + sourceBounds.width / 2),
+    y: sourceBounds.y + sourceBounds.height,
+  };
+  const tgtCenter: Point = {
+    x: Math.round(targetBounds.x + targetBounds.width / 2),
+    y: Math.round(targetBounds.y + targetBounds.height / 2),
+  };
+  if (
+    targetBounds.y >= sourceBounds.y + sourceBounds.height &&
+    Math.abs(srcBottom.x - tgtCenter.x) <= 20
+  ) {
+    return [srcBottom, { x: srcBottom.x, y: targetBounds.y }];
+  }
+  const tgtEntry: Point = {
+    x: targetBounds.x,
+    y: tgtCenter.y,
+  };
   const corner = { x: srcBottom.x, y: tgtEntry.y };
+  const filtered = (obstacles || []).filter((obs) => obs !== sourceBounds && obs !== targetBounds);
+  if (targetBounds.x <= sourceBounds.x) {
+    return routeBackwardBoundaryExit(sourceBounds, targetBounds, filtered);
+  }
+
   if (!obstacles || obstacles.length === 0) {
     return [srcBottom, corner, tgtEntry];
   }
 
-  const filtered = obstacles.filter((obs) => obs !== sourceBounds && obs !== targetBounds);
   const isDirectBlocked = filtered.some(
     (obs) =>
       isSegmentObstructed(srcBottom, corner, obs) || isSegmentObstructed(corner, tgtEntry, obs)
@@ -129,9 +198,32 @@ export function routeBoundaryExit(
     return [srcBottom, corner, tgtEntry];
   }
 
+  const vBlockers = filtered.filter((obs) => isSegmentObstructed(srcBottom, corner, obs));
+  if (vBlockers.length > 0) {
+    const maxBottom = Math.max(srcBottom.y, ...vBlockers.map((b) => b.y + b.height));
+    const minTop = Math.min(...vBlockers.map((b) => b.y));
+    const maxRight = Math.max(...vBlockers.map((b) => b.x + b.width));
+    const stepY = corner.y < srcBottom.y ? maxBottom + 20 : Math.round((srcBottom.y + minTop) / 2);
+    const stepX = Math.max(maxRight + 20, srcBottom.x + 20);
+    if (stepX < tgtEntry.x) {
+      return [
+        srcBottom,
+        { x: srcBottom.x, y: stepY },
+        { x: stepX, y: stepY },
+        { x: stepX, y: tgtEntry.y },
+        tgtEntry,
+      ];
+    }
+  }
+
   const hBlockers = filtered.filter((obs) => isSegmentObstructed(corner, tgtEntry, obs));
   if (hBlockers.length > 0) {
-    const maxBottom = Math.max(...hBlockers.map((b) => b.y + b.height));
+    let maxBottom = Math.max(...hBlockers.map((b) => b.y + b.height));
+    for (const b of filtered) {
+      if (b.x + b.width >= srcBottom.x && b.x <= tgtEntry.x) {
+        maxBottom = Math.max(maxBottom, b.y + b.height);
+      }
+    }
     const detourY = maxBottom + 20;
     const stepX = Math.max(srcBottom.x, targetBounds.x - 20);
     return [

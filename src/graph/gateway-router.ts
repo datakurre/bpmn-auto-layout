@@ -223,14 +223,51 @@ function routeCollinearWithDetour(exit: Point, entry: Point, obstacles: Bounds[]
   ];
 }
 
+export interface ClearStepParams {
+  exitX: number;
+  entryX: number;
+  span: LinearSpan;
+}
+
+export function findClearStepX(
+  baseStepX: number,
+  params: ClearStepParams,
+  obstacles: Bounds[]
+): number {
+  const { exitX, entryX, span } = params;
+  if (isVerticalCorridorClear(baseStepX, span, obstacles)) {
+    return baseStepX;
+  }
+  const minY = Math.min(span.start, span.end);
+  const maxY = Math.max(span.start, span.end);
+  const blockers = obstacles.filter(
+    (b) =>
+      baseStepX > b.x &&
+      baseStepX < b.x + b.width &&
+      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
+  );
+  const minObstacleX = Math.min(...blockers.map((b) => b.x));
+  const maxObstacleX = Math.max(...blockers.map((b) => b.x + b.width));
+
+  const leftCandidate = minObstacleX - 20;
+  if (leftCandidate > exitX && isVerticalCorridorClear(leftCandidate, span, obstacles)) {
+    return leftCandidate;
+  }
+  const rightCandidate = maxObstacleX + 20;
+  if (rightCandidate < entryX && isVerticalCorridorClear(rightCandidate, span, obstacles)) {
+    return rightCandidate;
+  }
+  return baseStepX;
+}
+
 function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Point[] {
   const exitX = gw.x + gw.width;
   const exitY = Math.round(gw.y + gw.height / 2);
   const entryX = tgt.x;
   const entryY = Math.round(tgt.y + tgt.height / 2);
 
+  const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
   if (exitY === entryY) {
-    const obstacles = getOtherObstacles({ allBounds: opts.allBounds, gw }, tgt);
     return routeCollinearWithDetour({ x: exitX, y: exitY }, { x: entryX, y: entryY }, obstacles);
   }
 
@@ -238,7 +275,12 @@ function routeDirectRight(gw: Bounds, tgt: Bounds, opts: DirectRightOptions): Po
   const baseStepX = opts.collinearTgtX
     ? Math.round((exitX + opts.collinearTgtX) / 2)
     : defaultStepX;
-  const stepX = baseStepX + opts.stepXOffset;
+  const initialStepX = baseStepX + opts.stepXOffset;
+  const stepX = findClearStepX(
+    initialStepX,
+    { exitX, entryX, span: { start: exitY, end: entryY } },
+    obstacles
+  );
   return [
     { x: exitX, y: exitY },
     { x: stepX, y: exitY },

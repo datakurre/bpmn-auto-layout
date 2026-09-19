@@ -304,7 +304,28 @@ function routeLeftwardDiagonal(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): 
   return [p1, { x: tgtCenter.x, y: p1.y }, { x: tgtCenter.x, y: targetY }];
 }
 
-function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
+function computeRightwardMidY(p1: Point, targetY: number, obstacles: Bounds[]): number {
+  const isAbove = p1.y < targetY;
+  const startY = Math.min(p1.y, targetY);
+  const endY = Math.max(p1.y, targetY);
+  const blockers = obstacles.filter(
+    (obs) =>
+      p1.x > obs.x &&
+      p1.x < obs.x + obs.width &&
+      Math.max(startY, obs.y) < Math.min(endY, obs.y + obs.height)
+  );
+  if (blockers.length === 0) {
+    return Math.round((p1.y + targetY) / 2);
+  }
+  if (isAbove) {
+    const firstTop = Math.min(...blockers.map((b) => b.y));
+    return Math.round((p1.y + firstTop) / 2);
+  }
+  const lastBottom = Math.max(...blockers.map((b) => b.y + b.height));
+  return Math.round((lastBottom + p1.y) / 2);
+}
+
+function routeRightwardDiagonal(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
   const srcCenter: Point = {
     x: Math.round(src.x + src.width / 2),
     y: Math.round(src.y + src.height / 2),
@@ -313,14 +334,45 @@ function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]
     x: Math.round(tgt.x + tgt.width / 2),
     y: Math.round(tgt.y + tgt.height / 2),
   };
+  const isAbove = srcCenter.y < tgtCenter.y;
+  const targetY = isAbove ? tgt.y : tgt.y + tgt.height;
+  const pSide: Point = { x: src.x + src.width, y: srcCenter.y };
+  const candidateSidePort: Point[] = [
+    pSide,
+    { x: tgtCenter.x, y: pSide.y },
+    { x: tgtCenter.x, y: targetY },
+  ];
 
+  const filtered = filterObstacles(obstacles, src, tgt);
+  const useTopOrBottom =
+    isPathObstructed(candidateSidePort, filtered) || hasSiblingInRow(tgt, filtered);
+
+  if (!useTopOrBottom) {
+    return candidateSidePort;
+  }
+
+  const p1: Point = {
+    x: srcCenter.x,
+    y: isAbove ? src.y + src.height : src.y,
+  };
+  const midY = computeRightwardMidY(p1, targetY, filtered);
+
+  const steppedRoute: Point[] = [
+    p1,
+    { x: p1.x, y: midY },
+    { x: tgtCenter.x, y: midY },
+    { x: tgtCenter.x, y: targetY },
+  ];
+  if (!isPathObstructed(steppedRoute, filtered)) {
+    return steppedRoute;
+  }
+
+  return [p1, { x: tgtCenter.x, y: p1.y }, { x: tgtCenter.x, y: targetY }];
+}
+
+function routeDiagonalAssociation(src: Bounds, tgt: Bounds, obstacles?: Bounds[]): Point[] {
   if (src.x + src.width <= tgt.x) {
-    const p1: Point = { x: src.x + src.width, y: srcCenter.y };
-    const p3: Point = {
-      x: tgtCenter.x,
-      y: srcCenter.y < tgtCenter.y ? tgt.y : tgt.y + tgt.height,
-    };
-    return [p1, { x: p3.x, y: p1.y }, p3];
+    return routeRightwardDiagonal(src, tgt, obstacles);
   }
 
   return routeLeftwardDiagonal(src, tgt, obstacles);

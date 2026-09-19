@@ -41,17 +41,21 @@ export interface DisconnectedLayoutContext {
   associations?: any[];
 }
 
-function getItemHostPreferredX(item: any, ctx: DisconnectedLayoutContext): number {
+function getItemHostBounds(item: any, ctx: DisconnectedLayoutContext): Bounds | undefined {
   if (!ctx.associations || !item.isForCompensation) {
-    return -1;
+    return undefined;
   }
   const assoc = ctx.associations.find((a: any) => getRefId(a.targetRef) === item.id);
   if (!assoc) {
-    return -1;
+    return undefined;
   }
   const srcId = getRefId(assoc.sourceRef);
-  const srcBounds = ctx.boundsMap.get(srcId as string);
-  return srcBounds ? srcBounds.x : -1;
+  return ctx.boundsMap.get(srcId as string);
+}
+
+function getItemHostPreferredX(item: any, ctx: DisconnectedLayoutContext): number {
+  const b = getItemHostBounds(item, ctx);
+  return b ? b.x : -1;
 }
 
 export function layoutDisconnectedElements(
@@ -66,10 +70,13 @@ export function layoutDisconnectedElements(
   let rowMaxHeight = 0;
 
   const sortedItems = [...items].sort((a, b) => {
-    const prefA = getItemHostPreferredX(a, ctx);
-    const prefB = getItemHostPreferredX(b, ctx);
-    if (prefA >= 0 && prefB >= 0) {
-      return prefA - prefB;
+    const bA = getItemHostBounds(a, ctx);
+    const bB = getItemHostBounds(b, ctx);
+    if (bA && bB) {
+      if (bA.x !== bB.x) {
+        return bA.x - bB.x;
+      }
+      return bB.y - bA.y;
     }
     return 0;
   });

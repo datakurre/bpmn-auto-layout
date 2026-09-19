@@ -37,6 +37,7 @@ export const LANE_HEADER_WIDTH = 30;
 export const POOL_PADDING = 20;
 export const EVENT_LABEL_MARGIN = 10;
 export const BOUNDARY_EVENT_LABEL_MARGIN = 0;
+export const BOUNDARY_EVENT_DIAGONAL_MARGIN = -3;
 export const GATEWAY_LABEL_MARGIN = 6;
 export const ARTIFACT_LABEL_MARGIN = 10;
 export const FLOW_LABEL_MARGIN = 10;

@@ -1,5 +1,6 @@
 import {
   ARTIFACT_LABEL_MARGIN,
+  BOUNDARY_EVENT_DIAGONAL_MARGIN,
   BOUNDARY_EVENT_LABEL_MARGIN,
   EVENT_LABEL_MARGIN,
   FLOW_LABEL_MARGIN,
@@ -32,6 +33,8 @@ export interface CollisionContext {
   edges: PlacedEdge[];
   placedLabels: Bounds[];
   ignoreElementId?: string;
+  attachedToHostId?: string;
+  lanes?: Array<{ element: any; bounds: Bounds }>;
 }
 
 export function isEvent(element: any): boolean {
@@ -254,20 +257,22 @@ export function doesSegmentCollideWithBox(p1: Point, p2: Point, box: Bounds): bo
   return true;
 }
 
-export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
-  for (const s of cctx.shapes) {
-    if (s.element.id === cctx.ignoreElementId) {
-      continue;
-    }
-    const t = s.element?.$type;
-    if (t === 'bpmn:Participant' || t === 'bpmn:Lane' || s.isExpanded) {
-      continue;
-    }
-    if (boxesOverlap(box, s.bounds)) {
-      return true;
-    }
-  }
+function doesBoxCollideWithContainerBoundaries(box: Bounds, containerBounds: Bounds): boolean {
+  const { x, y, width, height } = containerBounds;
+  const pTL = { x, y };
+  const pTR = { x: x + width, y };
+  const pBL = { x, y: y + height };
+  const pBR = { x: x + width, y: y + height };
 
+  return (
+    doesSegmentCollideWithBox(pTL, pTR, box) ||
+    doesSegmentCollideWithBox(pBL, pBR, box) ||
+    doesSegmentCollideWithBox(pTL, pBL, box) ||
+    doesSegmentCollideWithBox(pTR, pBR, box)
+  );
+}
+
+function doesBoxCollideWithEdges(box: Bounds, cctx: CollisionContext): boolean {
   for (const edge of cctx.edges) {
     if (edge.element.id === cctx.ignoreElementId) {
       continue;
@@ -278,6 +283,40 @@ export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
         return true;
       }
     }
+  }
+  return false;
+}
+
+export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
+  for (const s of cctx.shapes) {
+    if (s.element.id === cctx.ignoreElementId) {
+      continue;
+    }
+    const t = s.element?.$type;
+    if (t === 'bpmn:Participant' || t === 'bpmn:Lane' || s.isExpanded) {
+      if (
+        s.element.id !== cctx.attachedToHostId &&
+        doesBoxCollideWithContainerBoundaries(box, s.bounds)
+      ) {
+        return true;
+      }
+      continue;
+    }
+    if (boxesOverlap(box, s.bounds)) {
+      return true;
+    }
+  }
+
+  if (cctx.lanes) {
+    for (const lane of cctx.lanes) {
+      if (doesBoxCollideWithContainerBoundaries(box, lane.bounds)) {
+        return true;
+      }
+    }
+  }
+
+  if (doesBoxCollideWithEdges(box, cctx)) {
+    return true;
   }
 
   return cctx.placedLabels.some((lbl) => boxesOverlap(box, lbl));
@@ -318,16 +357,18 @@ function computeOrthogonalElementBounds(
     };
   }
   if (side === 'right') {
+    const dMargin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : margin;
     return {
-      x: elementBounds.x + elementBounds.width + margin,
-      y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
+      x: elementBounds.x + elementBounds.width + dMargin,
+      y: isBoundary ? elementBounds.y + elementBounds.height + dMargin : cy - dim.height / 2,
       width: dim.width,
       height: dim.height,
     };
   }
+  const dMargin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : margin;
   return {
-    x: elementBounds.x - margin - dim.width,
-    y: isBoundary ? elementBounds.y + elementBounds.height + margin : cy - dim.height / 2,
+    x: elementBounds.x - dMargin - dim.width,
+    y: isBoundary ? elementBounds.y + elementBounds.height + dMargin : cy - dim.height / 2,
     width: dim.width,
     height: dim.height,
   };
@@ -364,7 +405,9 @@ function computeDiagonalElementBounds(
   if (isGateway(geom.element)) {
     return computeGatewayDiagonalBounds(geom, corner);
   }
-  const { elementBounds, dim, margin } = geom;
+  const isBoundary = isBoundaryEvent(geom.element);
+  const margin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : geom.margin;
+  const { elementBounds, dim } = geom;
   if (corner === 'top-right') {
     return {
       x: elementBounds.x + elementBounds.width + margin,
@@ -491,11 +534,16 @@ export function layoutElementLabel(
     margin = BOUNDARY_EVENT_LABEL_MARGIN;
   }
 
+  const attachedToRef = shape.element?.attachedToRef;
+  const hostId = attachedToRef?.id || attachedToRef;
+
   const cctx: CollisionContext = {
     shapes: ctx.shapes,
     edges: ctx.edges,
     placedLabels,
     ignoreElementId: shape.element.id,
+    attachedToHostId: hostId,
+    lanes: ctx.lanes,
   };
   const pctx: PlacementContext = { shape, margin, cctx };
 
@@ -578,6 +626,7 @@ export function layoutPathLabel(
     edges: ctx.edges,
     placedLabels,
     ignoreElementId: edge.element.id,
+    lanes: ctx.lanes,
   };
 
   for (const text of wrapCandidates) {

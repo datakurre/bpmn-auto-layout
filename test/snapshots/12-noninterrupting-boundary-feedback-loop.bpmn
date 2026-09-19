@@ -61,7 +61,7 @@
       <bpmndi:BPMNShape id="Boundary_Escalation_di" bpmnElement="Boundary_Escalation">
         <dc:Bounds x="338" y="162" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="374" y="198" width="92" height="14" />
+          <dc:Bounds x="371" y="195" width="92" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">

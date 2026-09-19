@@ -7,6 +7,7 @@ import {
   type ScopeLayoutResult,
 } from './subprocess-layout';
 import { findFeedbackEdges } from '../graph/cycle-removal';
+import { boxesOverlap } from '../layout-metrics';
 
 export interface CollaborationAlignmentContext {
   definitions: any;
@@ -461,6 +462,10 @@ function evaluateGatewayCandidate(
     nodeMap: ctx.nodeMap,
   });
 
+  if (doesShiftCauseOverlap({ candidateGateway: node, deltaX, nonJoinNodes }, ctx)) {
+    return undefined;
+  }
+
   return {
     candidateGateway: node,
     joinGateway: ctx.nodeMap.get(joinId)!,
@@ -469,6 +474,35 @@ function evaluateGatewayCandidate(
     targetX,
     deltaX,
   };
+}
+
+interface CandidateShiftSpec {
+  candidateGateway: any;
+  deltaX: number;
+  nonJoinNodes: any[];
+}
+
+function doesShiftCauseOverlap(shift: CandidateShiftSpec, ctx: GatewayCandidateContext): boolean {
+  const shiftNodes = [shift.candidateGateway, ...shift.nonJoinNodes];
+  const shiftIds = new Set(shiftNodes.map((n) => n.id));
+  const unshiftedBounds = ctx.regularNodes
+    .filter((other) => !shiftIds.has(other.id))
+    .map((other) => ctx.boundsMap.get(other.id))
+    .filter((b): b is Bounds => Boolean(b));
+
+  return shiftNodes.some((n) => {
+    const orig = ctx.boundsMap.get(n.id);
+    if (!orig) {
+      return false;
+    }
+    const shiftedBounds: Bounds = {
+      x: orig.x + shift.deltaX,
+      y: orig.y,
+      width: orig.width,
+      height: orig.height,
+    };
+    return unshiftedBounds.some((other) => boxesOverlap(shiftedBounds, other));
+  });
 }
 
 function findCandidateObstacle(
@@ -507,8 +541,10 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
 
   const nodesToShift = [candidate.candidateGateway, ...candidate.nonJoinNodes];
   for (const n of nodesToShift) {
-    const b = boundsMap.get(n.id)!;
-    b.x += candidate.deltaX;
+    const b = boundsMap.get(n.id);
+    if (b) {
+      b.x += candidate.deltaX;
+    }
   }
 
   const rerouted = rerouteProcessEdges(process, boundsMap, ctx.feedbackEdges);

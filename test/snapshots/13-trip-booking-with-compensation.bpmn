@@ -130,10 +130,10 @@
       <bpmndi:BPMNShape id="Handler_CancelFlight_di" bpmnElement="Handler_CancelFlight">
         <dc:Bounds x="228" y="398" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Handler_CancelHotel_di" bpmnElement="Handler_CancelHotel">
+      <bpmndi:BPMNShape id="Handler_CancelCar_di" bpmnElement="Handler_CancelCar">
         <dc:Bounds x="498" y="398" width="100" height="80" />
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNShape id="Handler_CancelCar_di" bpmnElement="Handler_CancelCar">
+      <bpmndi:BPMNShape id="Handler_CancelHotel_di" bpmnElement="Handler_CancelHotel">
         <dc:Bounds x="638" y="398" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Handler_RefundPayment_di" bpmnElement="Handler_RefundPayment" isExpanded="true">
@@ -233,15 +233,12 @@
       <bpmndi:BPMNEdge id="Assoc_Hotel_di" bpmnElement="Assoc_Hotel">
         <di:waypoint x="516" y="198" />
         <di:waypoint x="516" y="219" />
-        <di:waypoint x="586" y="219" />
-        <di:waypoint x="586" y="368" />
-        <di:waypoint x="516" y="368" />
-        <di:waypoint x="516" y="398" />
+        <di:waypoint x="688" y="219" />
+        <di:waypoint x="688" y="398" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Assoc_Car_di" bpmnElement="Assoc_Car">
-        <di:waypoint x="534" y="320" />
-        <di:waypoint x="688" y="320" />
-        <di:waypoint x="688" y="398" />
+        <di:waypoint x="516" y="338" />
+        <di:waypoint x="516" y="398" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Assoc_Payment_di" bpmnElement="Assoc_Payment">
         <di:waypoint x="791" y="198" />

@@ -349,13 +349,18 @@ function partitionScopeFlows(
         });
         gatewayOutgoingFlows.set(srcId!, list);
       } else if (gatewaySet.has(tgtId!)) {
-        const list = gatewayIncomingFlows.get(tgtId!) || [];
-        list.push({
-          flow,
-          sourceBounds: srcBounds,
-          isFeedback: ctx.feedbackEdges?.has(flow.id),
-        });
-        gatewayIncomingFlows.set(tgtId!, list);
+        const isFromBoundary = ctx.boundaryEvents.some((b: any) => b.id === srcId);
+        if (isFromBoundary) {
+          otherFlows.push({ flow, srcId: srcId!, srcBounds, tgtBounds });
+        } else {
+          const list = gatewayIncomingFlows.get(tgtId!) || [];
+          list.push({
+            flow,
+            sourceBounds: srcBounds,
+            isFeedback: ctx.feedbackEdges?.has(flow.id),
+          });
+          gatewayIncomingFlows.set(tgtId!, list);
+        }
       } else {
         otherFlows.push({ flow, srcId: srcId!, srcBounds, tgtBounds });
       }
@@ -682,6 +687,42 @@ interface RegularFlowContext {
   edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
+function alignTerminalBoundaryRanks(
+  boundaryEvents: any[],
+  graph: DirectedGraph,
+  ranks: Map<string, number>
+): void {
+  for (const bEvent of boundaryEvents) {
+    const hostId = getRefId(bEvent.attachedToRef);
+    if (!hostId || !ranks.has(hostId)) {
+      continue;
+    }
+    const hostNode = graph.getNode(hostId);
+    if (isSubProcessType(hostNode?.data?.$type)) {
+      continue;
+    }
+    const hostBoundaries = graph.outEdges(hostId).filter((e) => e.id.startsWith('_attach_'));
+    if (hostBoundaries.length !== 1) {
+      continue;
+    }
+    const outEdges = graph.outEdges(bEvent.id);
+    if (outEdges.length !== 1) {
+      continue;
+    }
+    const targetId = outEdges[0].target;
+    const targetNode = graph.getNode(targetId);
+    if (
+      targetNode?.data?.$type === 'bpmn:EndEvent' &&
+      graph.inEdges(targetId).length === 1 &&
+      graph.outEdges(targetId).length === 0
+    ) {
+      const hostRank = ranks.get(hostId)!;
+      ranks.set(bEvent.id, hostRank);
+      ranks.set(targetId, hostRank);
+    }
+  }
+}
+
 function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const {
     scopeElement,
@@ -699,6 +740,7 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
   const feedbackEdges = findFeedbackEdges(graph);
   const ranks = assignLayers(graph, feedbackEdges);
+  alignTerminalBoundaryRanks(boundaryEvents, graph, ranks);
   const nodeToLane = extractNodeToLaneMap(scopeElement);
 
   const { augmentedGraph, augmentedRanks } = insertDummyNodes(graph, ranks, {

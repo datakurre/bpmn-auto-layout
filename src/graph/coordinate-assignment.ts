@@ -271,7 +271,7 @@ function computeFlatTracks(
         .filter((e) => !feedbackEdges?.has(e.id) && !e.id.startsWith('_attach_'));
       tracks.set(node.id, calculateSingleNodeTrack(node, inEdges, ctx));
     }
-    resolveRankCollisions(nodesInRank, tracks);
+    resolveRankCollisions(nodesInRank, tracks, graph);
   }
 
   refineDummyTracksWithBarycenterSweeps({ graph, ranks, ctx }, maxRank);
@@ -332,7 +332,7 @@ function sweepRankDummyBarycenter(
     ctx.tracks.set(node.id, barycenter);
   }
 
-  resolveRankCollisions(nodesInRank, ctx.tracks);
+  resolveRankCollisions(nodesInRank, ctx.tracks, graph);
 }
 
 function computeLaneAwareTracks(
@@ -353,6 +353,15 @@ function computeLaneAwareTracks(
 
     for (let r = 0; r <= maxRank; r++) {
       const nodesInRank = laneNodes.filter((n) => (ranks.get(n.id) || 0) === r);
+      nodesInRank.sort((a, b) => {
+        const aIsTarget = graph
+          .inEdges(a.id)
+          .some((e) => graph.getNode(e.source)?.data?.$type === 'bpmn:BoundaryEvent');
+        const bIsTarget = graph
+          .inEdges(b.id)
+          .some((e) => graph.getNode(e.source)?.data?.$type === 'bpmn:BoundaryEvent');
+        return Number(aIsTarget) - Number(bIsTarget);
+      });
       for (const node of nodesInRank) {
         const inEdges = graph
           .inEdges(node.id)
@@ -364,7 +373,7 @@ function computeLaneAwareTracks(
           );
         localTracks.set(node.id, calculateSingleNodeTrack(node, inEdges, ctx));
       }
-      resolveRankCollisions(nodesInRank, localTracks);
+      resolveRankCollisions(nodesInRank, localTracks, graph);
     }
 
     const count = normalizeLaneTracks(laneNodes, localTracks);
@@ -436,6 +445,22 @@ function calculateSingleNodeTrack(
   return alignMergeNodeTrack(node.id, inEdges, ctx.tracks);
 }
 
+function getBranchExtents(nodeId: string, graph: DirectedGraph): { up: number; down: number } {
+  const outEdges = graph.outEdges(nodeId).filter((e) => !e.id.startsWith('_attach_'));
+  const attachCount = graph
+    .outEdges(nodeId)
+    .filter((e) => e.id.startsWith('_attach_') && graph.outEdges(e.target).length > 0).length;
+
+  if (outEdges.length <= 1) {
+    return { up: 0, down: attachCount };
+  }
+  const center = Math.floor((outEdges.length - 1) / 2);
+  return {
+    up: center,
+    down: outEdges.length - 1 - center + attachCount,
+  };
+}
+
 function getSiblingBranchOffset(
   siblings: Array<{ target: string }>,
   siblingIndex: number,
@@ -448,8 +473,17 @@ function getSiblingBranchOffset(
       return siblingIndex === 0 ? 0 : -1;
     }
   }
+
+  const relPositions: number[] = [0];
+  for (let i = 1; i < siblings.length; i++) {
+    const prevExt = getBranchExtents(siblings[i - 1].target, graph);
+    const currExt = getBranchExtents(siblings[i].target, graph);
+    const step = Math.max(1, prevExt.down + currExt.up + 1);
+    relPositions.push(relPositions[i - 1] + step);
+  }
+
   const centerIndex = Math.floor((siblings.length - 1) / 2);
-  return siblingIndex - centerIndex;
+  return relPositions[siblingIndex] - relPositions[centerIndex];
 }
 
 function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: TrackContext): number {
@@ -477,7 +511,8 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
 
 function resolveRankCollisions(
   nodesInRank: Array<{ id: string; data?: any; order?: number }>,
-  tracks: Map<string, number>
+  tracks: Map<string, number>,
+  graph: DirectedGraph
 ): void {
   const regularNodes = nodesInRank.filter((n) => n.data?.$type !== 'bpmn:BoundaryEvent');
   regularNodes.sort((a, b) => {
@@ -499,9 +534,13 @@ function resolveRankCollisions(
     const currId = regularNodes[i].id;
     const prevTrack = tracks.get(prevId) || 0;
     let currTrack = tracks.get(currId) || 0;
+    const attachCount = graph
+      .outEdges(prevId)
+      .filter((e) => e.id.startsWith('_attach_') && graph.outEdges(e.target).length > 0).length;
+    const minSpacing = 1 + attachCount;
 
-    if (currTrack < prevTrack + 1) {
-      currTrack = prevTrack + 1;
+    if (currTrack < prevTrack + minSpacing) {
+      currTrack = prevTrack + minSpacing;
       tracks.set(currId, currTrack);
     }
   }

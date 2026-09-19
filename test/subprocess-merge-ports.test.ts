@@ -77,6 +77,26 @@ describe('subprocess-layout merge port assignment', () => {
     expect(ports.get('F_Feedback')).toBe('left');
   });
 
+  it('assigns center flow to bottom port when direct corridor to merge gateway is blocked', () => {
+    const flows: IncomingFlowCandidate[] = [
+      {
+        flow: { id: 'F_Above' },
+        sourceBounds: { x: 100, y: 50, width: 100, height: 80 },
+      },
+      {
+        flow: { id: 'F_CenterBlocked' },
+        sourceBounds: { x: 50, y: 185, width: 100, height: 80 },
+      },
+    ];
+    // Obstacle blocking horizontal path between x=150 and x=300 at gwCenterY=225
+    const obstacle: Bounds = { x: 200, y: 200, width: 50, height: 50 };
+    const allBounds = [gwBounds, flows[0].sourceBounds, flows[1].sourceBounds, obstacle];
+
+    const ports = assignMergeIncomingPorts(flows, gwBounds, allBounds);
+    expect(ports.get('F_Above')).toBe('top');
+    expect(ports.get('F_CenterBlocked')).toBe('bottom');
+  });
+
   it('handles computeMergeTargetPorts with missing source bounds and single-incoming gateways', () => {
     const gatewaySet = new Set(['GW_Merge', 'GW_Single']);
     const ctx: ScopeRouteContext = {

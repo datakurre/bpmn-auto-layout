@@ -215,6 +215,28 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     );
     expect(diagSrcLeft.length).toBe(3);
 
+    // 4b. Diagonal: Source left and below target with obstacle in column
+    const diagSrcLeftBelow = routeAssociationEdge(
+      { x: 50, y: 200, width: 50, height: 50 },
+      { x: 200, y: 50, width: 50, height: 50 },
+      [
+        { x: 60, y: 120, width: 30, height: 30 },
+        { x: 300, y: 50, width: 50, height: 50 },
+      ]
+    );
+    expect(diagSrcLeftBelow.length).toBe(4);
+
+    // 4c. Diagonal: Source left and above target with stepped route obstructed
+    const diagSrcLeftBlockedStepped = routeAssociationEdge(
+      { x: 50, y: 50, width: 50, height: 50 },
+      { x: 200, y: 200, width: 50, height: 50 },
+      [
+        { x: 100, y: 140, width: 40, height: 30 },
+        { x: 300, y: 200, width: 50, height: 50 },
+      ]
+    );
+    expect(diagSrcLeftBlockedStepped.length).toBe(3);
+
     // 5. Diagonal: Source to the right of target
     const diagSrcRight = routeAssociationEdge(
       { x: 200, y: 50, width: 50, height: 50 },

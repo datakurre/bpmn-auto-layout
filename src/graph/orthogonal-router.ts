@@ -55,16 +55,22 @@ function shouldUseUpwardFeedbackRoute(
   targetBounds: Bounds,
   allBounds: Bounds[]
 ): boolean {
-  if (Math.abs(sourceBounds.y - targetBounds.y) > 20) {
-    return false;
-  }
   const minX = Math.min(sourceBounds.x, targetBounds.x);
   const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
-  if (!hasBoundaryEventBelowInSpan({ minX, maxX }, allBounds)) {
+  const maxY = Math.min(sourceBounds.y, targetBounds.y);
+  if (hasObstaclesAboveInSpan({ minX, maxX, maxY }, allBounds)) {
     return false;
   }
-  const maxY = Math.min(sourceBounds.y, targetBounds.y);
-  return !hasObstaclesAboveInSpan({ minX, maxX, maxY }, allBounds);
+  if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
+    return true;
+  }
+  if (
+    Math.abs(sourceBounds.y - targetBounds.y) <= 20 &&
+    hasBoundaryEventBelowInSpan({ minX, maxX }, allBounds)
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function computeChannelYTop(
@@ -103,10 +109,22 @@ function computeChannelY(sourceBounds: Bounds, targetBounds: Bounds, allBounds?:
 
   if (allBounds) {
     const minX = Math.min(sourceBounds.x, targetBounds.x);
-    const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
-    for (const b of allBounds) {
-      if (b.x + b.width >= minX && b.x <= maxX) {
-        maxBottomY = Math.max(maxBottomY, b.y + b.height);
+    for (let iter = 0; iter < 3; iter++) {
+      const rawStepX = getClearSourceStepX(sourceBounds, maxBottomY + 40, allBounds);
+      const maxX = Math.max(
+        sourceBounds.x + sourceBounds.width,
+        targetBounds.x + targetBounds.width,
+        rawStepX
+      );
+      let changed = false;
+      for (const b of allBounds) {
+        if (b.x + b.width >= minX && b.x <= maxX && b.y + b.height > maxBottomY) {
+          maxBottomY = b.y + b.height;
+          changed = true;
+        }
+      }
+      if (!changed) {
+        break;
       }
     }
   }
@@ -117,6 +135,25 @@ function computeChannelY(sourceBounds: Bounds, targetBounds: Bounds, allBounds?:
 interface FeedbackRouteContext {
   channelY: number;
   allBounds?: Bounds[];
+}
+
+function getClearSourceStepX(src: Bounds, channelY: number, obstacles: Bounds[]): number {
+  let stepX = src.x + src.width + 20;
+  const srcRightY = Math.round(src.y + src.height / 2);
+  const minY = Math.min(srcRightY, channelY);
+  const maxY = Math.max(srcRightY, channelY);
+
+  for (const b of obstacles) {
+    if (b === src) {
+      continue;
+    }
+    if (b.x + b.width >= stepX && b.x >= src.x) {
+      if (Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)) {
+        stepX = Math.max(stepX, b.x + b.width + 20);
+      }
+    }
+  }
+  return stepX;
 }
 
 function getClearTargetStepX(tgt: Bounds, channelY: number, obstacles: Bounds[]): number {
@@ -166,7 +203,7 @@ function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteCo
 
   if (srcBlocked) {
     const srcRight: Point = { x: src.x + src.width, y: Math.round(src.y + src.height / 2) };
-    const srcStepX = src.x + src.width + 20;
+    const srcStepX = getClearSourceStepX(src, ctx.channelY, ctx.allBounds!);
     waypoints.push(srcRight, { x: srcStepX, y: srcRight.y }, { x: srcStepX, y: ctx.channelY });
   } else {
     waypoints.push(srcBottom, { x: srcBottom.x, y: ctx.channelY });
@@ -373,16 +410,18 @@ export function routeOrthogonalEdge(
     return [srcExit, { x: clearStepX, y: srcExit.y }, { x: clearStepX, y: tgtEntry.y }, tgtEntry];
   }
 
+  // Feedback loop upward if clear
+  if (allBounds && shouldUseUpwardFeedbackRoute(sourceBounds, targetBounds, allBounds)) {
+    const channelY = computeChannelYTop(sourceBounds, targetBounds, allBounds);
+    return computeUpwardFeedbackWaypoints(sourceBounds, targetBounds, channelY);
+  }
+
   // Forward wrapped edge (target is on a lower row and behind source)
   if (sourceBounds.y + sourceBounds.height + 20 <= targetBounds.y) {
     return routeForwardWrappedEdge(sourceBounds, targetBounds);
   }
 
   // Feedback loop (target is at or behind source)
-  if (allBounds && shouldUseUpwardFeedbackRoute(sourceBounds, targetBounds, allBounds)) {
-    const channelY = computeChannelYTop(sourceBounds, targetBounds, allBounds);
-    return computeUpwardFeedbackWaypoints(sourceBounds, targetBounds, channelY);
-  }
   const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
   return computeFeedbackWaypoints(sourceBounds, targetBounds, { channelY, allBounds });
 }

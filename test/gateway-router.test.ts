@@ -5,6 +5,7 @@ import {
   isHorizontalCorridorClear,
   routeGatewayOutgoingEdges,
   routeGatewayIncomingEdges,
+  findClearStepX,
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../src/graph/gateway-router';
@@ -987,6 +988,60 @@ describe('gateway-router', () => {
       });
       const pts = routeMap.get('F_Blocked')!;
       expect(pts[0].x).toBe(150);
+    });
+  });
+
+  describe('findClearStepX', () => {
+    it('returns baseStepX when vertical corridor is clear', () => {
+      const step = findClearStepX(
+        250,
+        { exitX: 100, entryX: 400, span: { start: 100, end: 300 } },
+        []
+      );
+      expect(step).toBe(250);
+    });
+
+    it('returns baseStepX when blockers array is empty', () => {
+      const obstacles = [{ x: 500, y: 100, width: 50, height: 50 }];
+      const step = findClearStepX(
+        250,
+        { exitX: 100, entryX: 400, span: { start: 100, end: 300 } },
+        obstacles
+      );
+      expect(step).toBe(250);
+    });
+
+    it('returns leftCandidate when clear', () => {
+      const obstacle = { x: 240, y: 150, width: 50, height: 50 };
+      const step = findClearStepX(
+        250,
+        { exitX: 100, entryX: 400, span: { start: 100, end: 300 } },
+        [obstacle]
+      );
+      expect(step).toBe(220);
+    });
+
+    it('returns rightCandidate when left candidate is blocked but right is clear', () => {
+      const blocker = { x: 240, y: 150, width: 50, height: 50 };
+      const leftBlocker = { x: 100, y: 150, width: 130, height: 50 };
+      const step = findClearStepX(
+        250,
+        { exitX: 100, entryX: 400, span: { start: 100, end: 300 } },
+        [blocker, leftBlocker]
+      );
+      expect(step).toBe(310);
+    });
+
+    it('returns baseStepX when all candidates are blocked', () => {
+      const blocker = { x: 240, y: 150, width: 50, height: 50 };
+      const leftBlocker = { x: 100, y: 150, width: 130, height: 50 };
+      const rightBlocker = { x: 300, y: 150, width: 100, height: 50 };
+      const step = findClearStepX(
+        250,
+        { exitX: 100, entryX: 400, span: { start: 100, end: 300 } },
+        [blocker, leftBlocker, rightBlocker]
+      );
+      expect(step).toBe(250);
     });
   });
 });

@@ -95,4 +95,37 @@ describe('Iteration 3: Branching & Gateways', () => {
 
     expectImageSnapshotMatch(resultXml, '03-asymmetric-branches');
   });
+
+  it('allocates tracks for 2-way split when branch 0 has a boundary event', async () => {
+    const builder = new BpmnBuilder();
+    builder
+      .addStartEvent('Start_1', 'Start')
+      .addParallelGateway('Split_1', 'Fork')
+      .addTask('Task_Deploy', 'Deploy')
+      .addTask('Task_Notify', 'Notify')
+      .addBoundaryEvent({
+        id: 'Boundary_Timeout',
+        attachedToRef: 'Task_Deploy',
+        eventDefinitionType: 'bpmn:TimerEventDefinition',
+      })
+      .addEndEvent('End_Timeout', 'Timeout End')
+      .addParallelGateway('Join_1', 'Join')
+      .addEndEvent('End_1', 'Done')
+      .addSequenceFlow('Flow_1', 'Start_1', 'Split_1')
+      .addSequenceFlow('Flow_Deploy', 'Split_1', 'Task_Deploy')
+      .addSequenceFlow('Flow_Notify', 'Split_1', 'Task_Notify')
+      .addSequenceFlow('Flow_Join1', 'Task_Deploy', 'Join_1')
+      .addSequenceFlow('Flow_Join2', 'Task_Notify', 'Join_1')
+      .addSequenceFlow('Flow_Timeout', 'Boundary_Timeout', 'End_Timeout')
+      .addSequenceFlow('Flow_Done', 'Join_1', 'End_1');
+
+    const inputXml = await builder.toXml();
+    const resultXml = await layoutProcess(inputXml);
+
+    const score = await scoreDiagram(resultXml);
+    expect(score.isValid).toBe(true);
+    expect(score.hardViolations.shapeOverlaps).toBe(0);
+    expect(score.hardViolations.edgeShapeCrossings).toBe(0);
+    expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+  });
 });
