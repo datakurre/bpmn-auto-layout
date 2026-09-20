@@ -360,7 +360,7 @@ interface DirectIncomingLeftOptions {
   allBounds?: Bounds[];
 }
 
-interface IncomingStepContext {
+export interface IncomingStepContext {
   exitX: number;
   exitY: number;
   entryY: number;
@@ -368,22 +368,56 @@ interface IncomingStepContext {
   obstacles: Bounds[];
 }
 
-function findClearIncomingStepX(initialStepX: number, ctx: IncomingStepContext): number {
-  let stepX = initialStepX;
+function findHorizontalBlockingX(stepX: number, ctx: IncomingStepContext): number {
   let blockingX = Infinity;
   for (const b of ctx.obstacles) {
     if (b.x > ctx.exitX && b.x < stepX && ctx.exitY > b.y && ctx.exitY < b.y + b.height) {
       blockingX = Math.min(blockingX, b.x);
     }
   }
-  if (blockingX < Infinity) {
-    const candidate = Math.min(ctx.exitX + 20, blockingX - 20) + ctx.stepXOffset;
-    if (candidate > ctx.exitX) {
-      stepX = candidate;
-    }
+  return blockingX;
+}
+
+function resolveBlockedHorizontalStepX(
+  ctx: IncomingStepContext,
+  blockingX: number
+): number | undefined {
+  const span: LinearSpan = { start: ctx.exitY, end: ctx.entryY };
+  const earlyCandidate = ctx.exitX + 20 + ctx.stepXOffset;
+  const maxSafeX = blockingX - 20;
+
+  if (
+    earlyCandidate > ctx.exitX &&
+    earlyCandidate <= maxSafeX &&
+    isVerticalCorridorClear(earlyCandidate, span, ctx.obstacles)
+  ) {
+    return earlyCandidate;
   }
-  const minY = Math.min(ctx.exitY, ctx.entryY);
-  const maxY = Math.max(ctx.exitY, ctx.entryY);
+
+  const lateCandidate = maxSafeX + ctx.stepXOffset;
+  if (
+    lateCandidate > ctx.exitX &&
+    lateCandidate < blockingX &&
+    isVerticalCorridorClear(lateCandidate, span, ctx.obstacles)
+  ) {
+    return lateCandidate;
+  }
+
+  const fallback =
+    earlyCandidate > ctx.exitX && earlyCandidate <= maxSafeX ? earlyCandidate : lateCandidate;
+  if (fallback > ctx.exitX && fallback < blockingX) {
+    return fallback;
+  }
+  return undefined;
+}
+
+function resolveBlockedVerticalStepX(stepX: number, ctx: IncomingStepContext): number {
+  const span: LinearSpan = { start: ctx.exitY, end: ctx.entryY };
+  if (isVerticalCorridorClear(stepX, span, ctx.obstacles)) {
+    return stepX;
+  }
+  const minY = Math.min(span.start, span.end);
+  const maxY = Math.max(span.start, span.end);
   let vBlockX = Infinity;
   for (const b of ctx.obstacles) {
     if (
@@ -394,13 +428,23 @@ function findClearIncomingStepX(initialStepX: number, ctx: IncomingStepContext):
       vBlockX = Math.min(vBlockX, b.x);
     }
   }
-  if (vBlockX < Infinity) {
-    const candidate = vBlockX - 20 + ctx.stepXOffset;
-    if (candidate > ctx.exitX) {
+  const candidate = vBlockX - 20 + ctx.stepXOffset;
+  if (candidate > ctx.exitX) {
+    return candidate;
+  }
+  return stepX;
+}
+
+export function findClearIncomingStepX(initialStepX: number, ctx: IncomingStepContext): number {
+  let stepX = initialStepX;
+  const blockingX = findHorizontalBlockingX(stepX, ctx);
+  if (blockingX < Infinity) {
+    const candidate = resolveBlockedHorizontalStepX(ctx, blockingX);
+    if (candidate !== undefined) {
       stepX = candidate;
     }
   }
-  return stepX;
+  return resolveBlockedVerticalStepX(stepX, ctx);
 }
 
 function routeDirectIncomingLeft(

@@ -6,6 +6,7 @@ import {
   routeGatewayOutgoingEdges,
   routeGatewayIncomingEdges,
   findClearStepX,
+  findClearIncomingStepX,
   type GatewayFlowInfo,
   type GatewayIncomingFlowInfo,
 } from '../src/graph/gateway-router';
@@ -1092,6 +1093,106 @@ describe('gateway-router', () => {
         [blocker, leftBlocker, rightBlocker]
       );
       expect(step).toBe(250);
+    });
+  });
+
+  describe('findClearIncomingStepX', () => {
+    it('returns initialStepX when neither departure nor vertical corridor is blocked', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 100,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [],
+      });
+      expect(step).toBe(470);
+    });
+
+    it('selects early candidate near source when departure is blocked and early corridor is clear', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [{ x: 300, y: 130, width: 50, height: 40 }],
+      });
+      expect(step).toBe(120);
+    });
+
+    it('falls back to late candidate before blocker when early corridor is vertically blocked', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [
+          { x: 400, y: 130, width: 50, height: 40 },
+          { x: 110, y: 180, width: 30, height: 40 },
+        ],
+      });
+      expect(step).toBe(380);
+    });
+
+    it('uses early candidate as fallback when both candidates are vertically blocked but early fits in corridor', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [
+          { x: 400, y: 130, width: 50, height: 40 },
+          { x: 110, y: 180, width: 30, height: 40 },
+          { x: 370, y: 180, width: 30, height: 40 },
+        ],
+      });
+      expect(step).toBe(120);
+    });
+
+    it('falls back to late candidate when early candidate exceeds maxSafeX and neither is vertically clear', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [
+          { x: 135, y: 130, width: 50, height: 40 },
+          { x: 105, y: 180, width: 20, height: 40 },
+        ],
+      });
+      expect(step).toBe(115);
+    });
+
+    it('returns initialStepX when blocking obstacle is too close to source', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [{ x: 115, y: 130, width: 30, height: 40 }],
+      });
+      expect(step).toBe(470);
+    });
+
+    it('shifts before vertical obstacle when horizontal departure is clear but initialStepX is vertically blocked', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 100,
+        entryY: 300,
+        stepXOffset: 0,
+        obstacles: [{ x: 450, y: 180, width: 40, height: 40 }],
+      });
+      expect(step).toBe(430);
+    });
+
+    it('preserves stepXOffset on candidate', () => {
+      const step = findClearIncomingStepX(470, {
+        exitX: 100,
+        exitY: 150,
+        entryY: 300,
+        stepXOffset: 10,
+        obstacles: [{ x: 300, y: 130, width: 50, height: 40 }],
+      });
+      expect(step).toBe(130);
     });
   });
 });
