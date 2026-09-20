@@ -158,12 +158,23 @@ describe('path-alignment unit tests', () => {
         id: 'Sub1',
         flowElements: [{ id: 'SubTask', $type: 'bpmn:Task' }],
       };
+      const emptySub = {
+        $type: 'bpmn:SubProcess',
+        id: 'SubEmpty',
+      };
+      const orphanBoundary = {
+        $type: 'bpmn:BoundaryEvent',
+        id: 'B_Orphan',
+        attachedToRef: null,
+      };
       const proc1 = {
         $type: 'bpmn:Process',
         id: 'Proc1',
         flowElements: [
           { id: 'T1', $type: 'bpmn:Task' },
           subProcess,
+          emptySub,
+          orphanBoundary,
           {
             $type: 'bpmn:SequenceFlow',
             id: 'F_Feedback',
@@ -257,6 +268,67 @@ describe('path-alignment unit tests', () => {
       expect(shapesMap.get('B2')?.x).toBe(450);
       // Edge FB re-routed
       expect(edgeB.waypoints[0].x).toBe(400);
+    });
+
+    it('shifts nested subprocess descendants when host subprocess shifts', () => {
+      const proc1 = {
+        $type: 'bpmn:Process',
+        id: 'Proc1',
+        flowElements: [{ id: 'A1', $type: 'bpmn:Task' }],
+      };
+      const proc2 = {
+        $type: 'bpmn:Process',
+        id: 'Proc2',
+        flowElements: [
+          {
+            id: 'Sub1',
+            $type: 'bpmn:SubProcess',
+            flowElements: [
+              {
+                id: 'Sub2',
+                $type: 'bpmn:SubProcess',
+                flowElements: [
+                  { id: 'T_Inner', $type: 'bpmn:Task' },
+                  {
+                    $type: 'bpmn:SequenceFlow',
+                    id: 'F_Inner',
+                    sourceRef: 'T_Inner',
+                    targetRef: 'T_Inner',
+                  },
+                ],
+              },
+            ],
+          },
+        ],
+      };
+
+      const shapesMap = new Map([
+        ['A1', { x: 400, y: 100, width: 100, height: 80 }],
+        ['Sub1', { x: 100, y: 300, width: 200, height: 160 }],
+        ['Sub2', { x: 130, y: 330, width: 140, height: 100 }],
+        ['T_Inner', { x: 150, y: 350, width: 100, height: 80 }],
+      ]);
+      const edgeInner = {
+        element: { id: 'F_Inner' },
+        waypoints: [{ x: 200, y: 390 }],
+      };
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [{ sourceRef: 'A1', targetRef: 'Sub1' }],
+        },
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [edgeInner],
+      };
+
+      alignCollaborationPaths(ctx);
+      // A1 center is 450, Sub1 center is 200 -> delta = 250
+      expect(shapesMap.get('Sub1')?.x).toBe(350);
+      expect(shapesMap.get('Sub2')?.x).toBe(380);
+      expect(shapesMap.get('T_Inner')?.x).toBe(400);
+      expect(edgeInner.waypoints[0].x).toBe(450);
     });
 
     it('shifts sender forward when tgtCenter > srcCenter', () => {

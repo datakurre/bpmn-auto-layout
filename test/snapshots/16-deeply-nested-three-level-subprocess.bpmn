@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_DeepNesting" isExecutable="false">
+    <bpmn:startEvent id="Start_Root" name="Start Root" />
+    <bpmn:task id="Task_L1_Pre" name="Root Setup" />
+    <bpmn:subProcess id="Sub_Level1" name="Level 1 Architecture">
+      <bpmn:startEvent id="Sub1_Start" name="L1 Ingest" />
+      <bpmn:task id="Task_L2_Pre" name="L1 Processing" />
+      <bpmn:subProcess id="Sub_Level2" name="Level 2 Module Engine">
+        <bpmn:startEvent id="Sub2_Start" name="L2 Ingest" />
+        <bpmn:task id="Task_L3_Pre" name="L2 Validate" />
+        <bpmn:subProcess id="Sub_Level3" name="Level 3 Micro-Kernel">
+          <bpmn:startEvent id="Sub3_Start" name="L3 Init" />
+          <bpmn:task id="Task_Core_1" name="Execute Kernel Task A" />
+          <bpmn:task id="Task_Core_2" name="Execute Kernel Task B" />
+          <bpmn:endEvent id="Sub3_End" name="L3 Complete" />
+          <bpmn:sequenceFlow id="F3_1" sourceRef="Sub3_Start" targetRef="Task_Core_1" />
+          <bpmn:sequenceFlow id="F3_2" sourceRef="Task_Core_1" targetRef="Task_Core_2" />
+          <bpmn:sequenceFlow id="F3_3" sourceRef="Task_Core_2" targetRef="Sub3_End" />
+        </bpmn:subProcess>
+        <bpmn:task id="Task_L3_Post" name="L2 Consolidate" />
+        <bpmn:endEvent id="Sub2_End" name="L2 Complete" />
+        <bpmn:sequenceFlow id="F2_1" sourceRef="Sub2_Start" targetRef="Task_L3_Pre" />
+        <bpmn:sequenceFlow id="F2_2" sourceRef="Task_L3_Pre" targetRef="Sub_Level3" />
+        <bpmn:sequenceFlow id="F2_3" sourceRef="Sub_Level3" targetRef="Task_L3_Post" />
+        <bpmn:sequenceFlow id="F2_4" sourceRef="Task_L3_Post" targetRef="Sub2_End" />
+      </bpmn:subProcess>
+      <bpmn:task id="Task_L2_Post" name="L1 Verify" />
+      <bpmn:endEvent id="Sub1_End" name="L1 Complete" />
+      <bpmn:sequenceFlow id="F1_1" sourceRef="Sub1_Start" targetRef="Task_L2_Pre" />
+      <bpmn:sequenceFlow id="F1_2" sourceRef="Task_L2_Pre" targetRef="Sub_Level2" />
+      <bpmn:sequenceFlow id="F1_3" sourceRef="Sub_Level2" targetRef="Task_L2_Post" />
+      <bpmn:sequenceFlow id="F1_4" sourceRef="Task_L2_Post" targetRef="Sub1_End" />
+    </bpmn:subProcess>
+    <bpmn:task id="Task_L1_Post" name="Root Teardown" />
+    <bpmn:endEvent id="End_Root" name="Finish Root" />
+    <bpmn:sequenceFlow id="FRoot_1" sourceRef="Start_Root" targetRef="Task_L1_Pre" />
+    <bpmn:sequenceFlow id="FRoot_2" sourceRef="Task_L1_Pre" targetRef="Sub_Level1" />
+    <bpmn:sequenceFlow id="FRoot_3" sourceRef="Sub_Level1" targetRef="Task_L1_Post" />
+    <bpmn:sequenceFlow id="FRoot_4" sourceRef="Task_L1_Post" targetRef="End_Root" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_DeepNesting">
+      <bpmndi:BPMNShape id="Start_Root_di" bpmnElement="Start_Root">
+        <dc:Bounds x="100" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="90" y="198" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L1_Pre_di" bpmnElement="Task_L1_Pre">
+        <dc:Bounds x="196" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Level1_di" bpmnElement="Sub_Level1" isExpanded="true">
+        <dc:Bounds x="356" y="20" width="1656" height="300" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub1_Start_di" bpmnElement="Sub1_Start">
+        <dc:Bounds x="386" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="379" y="198" width="50" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L2_Pre_di" bpmnElement="Task_L2_Pre">
+        <dc:Bounds x="482" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Level2_di" bpmnElement="Sub_Level2" isExpanded="true">
+        <dc:Bounds x="642" y="55" width="1084" height="230" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub2_Start_di" bpmnElement="Sub2_Start">
+        <dc:Bounds x="672" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="664" y="198" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L3_Pre_di" bpmnElement="Task_L3_Pre">
+        <dc:Bounds x="768" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Level3_di" bpmnElement="Sub_Level3" isExpanded="true">
+        <dc:Bounds x="928" y="90" width="512" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub3_Start_di" bpmnElement="Sub3_Start">
+        <dc:Bounds x="958" y="147" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="957" y="193" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Core_1_di" bpmnElement="Task_Core_1">
+        <dc:Bounds x="1054" y="125" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Core_2_di" bpmnElement="Task_Core_2">
+        <dc:Bounds x="1214" y="125" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub3_End_di" bpmnElement="Sub3_End">
+        <dc:Bounds x="1374" y="147" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1357" y="193" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L3_Post_di" bpmnElement="Task_L3_Post">
+        <dc:Bounds x="1500" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub2_End_di" bpmnElement="Sub2_End">
+        <dc:Bounds x="1660" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1643" y="198" width="70" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L2_Post_di" bpmnElement="Task_L2_Post">
+        <dc:Bounds x="1786" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub1_End_di" bpmnElement="Sub1_End">
+        <dc:Bounds x="1946" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1930" y="198" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_L1_Post_di" bpmnElement="Task_L1_Post">
+        <dc:Bounds x="2072" y="130" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Root_di" bpmnElement="End_Root">
+        <dc:Bounds x="2232" y="152" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2218" y="198" width="64" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="F3_1_di" bpmnElement="F3_1">
+        <di:waypoint x="994" y="165" />
+        <di:waypoint x="1054" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_2_di" bpmnElement="F3_2">
+        <di:waypoint x="1154" y="165" />
+        <di:waypoint x="1214" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_3_di" bpmnElement="F3_3">
+        <di:waypoint x="1314" y="165" />
+        <di:waypoint x="1374" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_1_di" bpmnElement="F2_1">
+        <di:waypoint x="708" y="170" />
+        <di:waypoint x="768" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_2_di" bpmnElement="F2_2">
+        <di:waypoint x="868" y="170" />
+        <di:waypoint x="928" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_3_di" bpmnElement="F2_3">
+        <di:waypoint x="1440" y="170" />
+        <di:waypoint x="1500" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F2_4_di" bpmnElement="F2_4">
+        <di:waypoint x="1600" y="170" />
+        <di:waypoint x="1660" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_1_di" bpmnElement="F1_1">
+        <di:waypoint x="422" y="170" />
+        <di:waypoint x="482" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_2_di" bpmnElement="F1_2">
+        <di:waypoint x="582" y="170" />
+        <di:waypoint x="642" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_3_di" bpmnElement="F1_3">
+        <di:waypoint x="1726" y="170" />
+        <di:waypoint x="1786" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F1_4_di" bpmnElement="F1_4">
+        <di:waypoint x="1886" y="170" />
+        <di:waypoint x="1946" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="FRoot_1_di" bpmnElement="FRoot_1">
+        <di:waypoint x="136" y="170" />
+        <di:waypoint x="196" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="FRoot_2_di" bpmnElement="FRoot_2">
+        <di:waypoint x="296" y="170" />
+        <di:waypoint x="356" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="FRoot_3_di" bpmnElement="FRoot_3">
+        <di:waypoint x="2012" y="170" />
+        <di:waypoint x="2072" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="FRoot_4_di" bpmnElement="FRoot_4">
+        <di:waypoint x="2172" y="170" />
+        <di:waypoint x="2232" y="170" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

@@ -35,3 +35,7 @@ scratchpad/
 .direnv/
 result
 result-*
+
+# Working/review artifacts
+review/
+samples/

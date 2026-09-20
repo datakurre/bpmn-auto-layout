@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_BackwardEdgeOverSubProcess" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Job Requested" />
+    <bpmn:task id="Task_InitBatch" name="Initialize Batch Run" />
+    <bpmn:exclusiveGateway id="Gate_LoopEntry" name="Batch Ready" />
+    <bpmn:subProcess id="Sub_BatchExecution" name="Batch Processing Pipeline">
+      <bpmn:startEvent id="Sub_Start" name="Begin Batch" />
+      <bpmn:task id="Sub_Fetch" name="Fetch Records" />
+      <bpmn:task id="Sub_Transform" name="Transform Data" />
+      <bpmn:task id="Sub_Load" name="Load to Warehouse" />
+      <bpmn:endEvent id="Sub_End" name="Batch Complete" />
+      <bpmn:sequenceFlow id="BF_1" sourceRef="Sub_Start" targetRef="Sub_Fetch" />
+      <bpmn:sequenceFlow id="BF_2" sourceRef="Sub_Fetch" targetRef="Sub_Transform" />
+      <bpmn:sequenceFlow id="BF_3" sourceRef="Sub_Transform" targetRef="Sub_Load" />
+      <bpmn:sequenceFlow id="BF_4" sourceRef="Sub_Load" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:task id="Task_VerifyQuality" name="Verify Output Quality" />
+    <bpmn:exclusiveGateway id="Gate_QualityCheck" name="Quality Passed?" />
+    <bpmn:endEvent id="End_Success" name="Batch Accepted" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_InitBatch" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_InitBatch" targetRef="Gate_LoopEntry" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Gate_LoopEntry" targetRef="Sub_BatchExecution" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Sub_BatchExecution" targetRef="Task_VerifyQuality" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_VerifyQuality" targetRef="Gate_QualityCheck" />
+    <bpmn:sequenceFlow id="Flow_Pass" name="Pass" sourceRef="Gate_QualityCheck" targetRef="End_Success" />
+    <bpmn:sequenceFlow id="Flow_RetryLoop" name="Retry Batch" sourceRef="Gate_QualityCheck" targetRef="Gate_LoopEntry" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_BackwardEdgeOverSubProcess">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="78" y="168" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_InitBatch_di" bpmnElement="Task_InitBatch">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_LoopEntry_di" bpmnElement="Gate_LoopEntry">
+        <dc:Bounds x="356" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="347" y="95" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_BatchExecution_di" bpmnElement="Sub_BatchExecution" isExpanded="true">
+        <dc:Bounds x="466" y="60" width="672" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="496" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="481" y="163" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Fetch_di" bpmnElement="Sub_Fetch">
+        <dc:Bounds x="592" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Transform_di" bpmnElement="Sub_Transform">
+        <dc:Bounds x="752" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Load_di" bpmnElement="Sub_Load">
+        <dc:Bounds x="912" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="1072" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1047" y="163" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_VerifyQuality_di" bpmnElement="Task_VerifyQuality">
+        <dc:Bounds x="1198" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_QualityCheck_di" bpmnElement="Gate_QualityCheck">
+        <dc:Bounds x="1358" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1339" y="95" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="1468" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1444" y="168" width="84" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="BF_1_di" bpmnElement="BF_1">
+        <di:waypoint x="532" y="135" />
+        <di:waypoint x="592" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_2_di" bpmnElement="BF_2">
+        <di:waypoint x="692" y="135" />
+        <di:waypoint x="752" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_3_di" bpmnElement="BF_3">
+        <di:waypoint x="852" y="135" />
+        <di:waypoint x="912" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="BF_4_di" bpmnElement="BF_4">
+        <di:waypoint x="1012" y="135" />
+        <di:waypoint x="1072" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="406" y="140" />
+        <di:waypoint x="466" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Pass_di" bpmnElement="Flow_Pass">
+        <di:waypoint x="1408" y="140" />
+        <di:waypoint x="1468" y="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1421" y="116" width="30" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RetryLoop_di" bpmnElement="Flow_RetryLoop">
+        <di:waypoint x="1383" y="165" />
+        <di:waypoint x="1383" y="260" />
+        <di:waypoint x="381" y="260" />
+        <di:waypoint x="381" y="165" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="850" y="236" width="64" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="1298" y="140" />
+        <di:waypoint x="1358" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="1138" y="140" />
+        <di:waypoint x="1198" y="140" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

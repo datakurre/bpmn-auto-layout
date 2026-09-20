@@ -115,8 +115,27 @@ export class BpmnBuilder {
     return this.addFlowNode('bpmn:InclusiveGateway', id, name);
   }
 
-  public addIntermediateCatchEvent(id: string, name?: string): this {
-    return this.addFlowNode('bpmn:IntermediateCatchEvent', id, name);
+  public addEventBasedGateway(id: string, name?: string): this {
+    return this.addFlowNode('bpmn:EventBasedGateway', id, name);
+  }
+
+  public addComplexGateway(id: string, name?: string): this {
+    return this.addFlowNode('bpmn:ComplexGateway', id, name);
+  }
+
+  public addIntermediateCatchEvent(id: string, name?: string, eventDefinitionType?: string): this {
+    if (!eventDefinitionType) {
+      return this.addFlowNode('bpmn:IntermediateCatchEvent', id, name);
+    }
+    const def = this.moddle.create(eventDefinitionType);
+    const element = this.moddle.create('bpmn:IntermediateCatchEvent', {
+      id,
+      name,
+      eventDefinitions: [def],
+    });
+    this.process.flowElements.push(element);
+    this.elementMap.set(id, element);
+    return this;
   }
 
   public addIntermediateThrowEvent(id: string, name?: string, eventDefinitionType?: string): this {

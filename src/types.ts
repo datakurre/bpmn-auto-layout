@@ -41,6 +41,12 @@ export interface AutoLayoutOptions {
    * Maximum width budget before wrapping flow nodes onto multiple rows.
    */
   widthBudget?: number;
+
+  /**
+   * Whether to align all terminal end events to the maximum rank in their scope.
+   * Defaults to false.
+   */
+  alignEndEvents?: boolean;
 }
 
 export interface HardViolations {

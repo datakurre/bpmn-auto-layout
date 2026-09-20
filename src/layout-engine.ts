@@ -11,7 +11,7 @@ import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
 import { alignVerticallyStackedPaths, alignIntraProcessBranches } from './hierarchy/path-alignment';
-import type { AutoLayoutOptions, Bounds } from './types';
+import type { AutoLayoutOptions, Bounds, Point } from './types';
 
 interface PoolEntry {
   element: any;
@@ -36,6 +36,7 @@ interface PoolAndLanesParams {
   result: any;
   currentY: number;
   hasLanes: boolean;
+  contentHeight?: number;
   allLanes?: Array<{ element: any; bounds: Bounds }>;
   allPools: PoolEntry[];
 }
@@ -184,6 +185,7 @@ export class LayoutEngine {
       shapes: allShapes,
       edges: allEdges,
       lanes: allLanes,
+      pools: allPools,
     });
 
     for (const pool of allPools) {
@@ -230,9 +232,14 @@ export class LayoutEngine {
 
     const result = layoutScope(process, this.options);
     const hasLanes = Boolean(process.laneSets && process.laneSets[0]?.lanes?.length > 0);
-
+    const { minContentY, maxContentY } = computeScopeContentYExtents(result);
+    const contentHeight = maxContentY - minContentY;
+    const POOL_PADDING_Y = 25;
     const deltaX = hasLanes ? 0 : 150 - result.minX;
-    const deltaY = hasLanes ? currentY - 80 : currentY + 20 - result.minY;
+    const padY = hasLanes
+      ? POOL_PADDING_Y
+      : Math.max(POOL_PADDING_Y, Math.round((120 - contentHeight) / 2));
+    const deltaY = currentY + padY - minContentY;
 
     for (const s of result.shapes) {
       s.bounds.x += deltaX;
@@ -251,6 +258,7 @@ export class LayoutEngine {
       result,
       currentY,
       hasLanes,
+      contentHeight,
       allLanes,
       allPools,
     });
@@ -272,7 +280,16 @@ export class LayoutEngine {
   }
 
   private createPoolAndLanes(params: PoolAndLanesParams): Bounds {
-    const { participant, process, result, currentY, hasLanes, allLanes, allPools } = params;
+    const {
+      participant,
+      process,
+      result,
+      currentY,
+      hasLanes,
+      contentHeight = 80,
+      allLanes,
+      allPools,
+    } = params;
     if (hasLanes) {
       const laneStartX = 130;
       const laneWidth = Math.max(400, result.width + 30);
@@ -299,7 +316,7 @@ export class LayoutEngine {
       x: 100,
       y: currentY,
       width: Math.max(400, result.width + 100),
-      height: Math.max(120, result.height + 40),
+      height: Math.max(120, contentHeight + 50),
     };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
@@ -355,6 +372,28 @@ export class LayoutEngine {
       }
     }
   }
+}
+
+export function computeScopeContentYExtents(result: {
+  shapes: Array<{ bounds: Bounds }>;
+  edges: Array<{ waypoints: Point[] }>;
+}): { minContentY: number; maxContentY: number } {
+  let minContentY = Infinity;
+  let maxContentY = -Infinity;
+  for (const s of result.shapes) {
+    minContentY = Math.min(minContentY, s.bounds.y);
+    maxContentY = Math.max(maxContentY, s.bounds.y + s.bounds.height);
+  }
+  for (const e of result.edges) {
+    for (const wp of e.waypoints) {
+      minContentY = Math.min(minContentY, wp.y);
+      maxContentY = Math.max(maxContentY, wp.y);
+    }
+  }
+  if (minContentY === Infinity) {
+    return { minContentY: 80, maxContentY: 160 };
+  }
+  return { minContentY, maxContentY };
 }
 
 export interface ApproachContext {

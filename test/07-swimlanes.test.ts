@@ -9,6 +9,7 @@ import {
   computeInterPoolChannelY,
   getEffectiveApproachX,
   computeTargetPortX,
+  computeScopeContentYExtents,
 } from '../src/layout-engine';
 import { expectImageSnapshotMatch } from './helpers/snapshot-helper';
 
@@ -292,5 +293,83 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
     });
     expect(result.lanes.length).toBe(1);
     expect(result.lanes[0].bounds.height).toBeGreaterThanOrEqual(120);
+  });
+
+  it('handles boundary events not explicitly listed in flowNodeRef in layoutProcessLanes', () => {
+    const process = {
+      laneSets: [
+        {
+          lanes: [{ id: 'Lane_1', flowNodeRef: [{ id: 'Task_1' }] }],
+        },
+      ],
+    };
+    const shapes = [
+      { element: { id: 'Task_1' }, bounds: { x: 100, y: 100, width: 100, height: 80 } },
+      {
+        element: { $type: 'bpmn:BoundaryEvent', id: 'Boundary_1', attachedToRef: { id: 'Task_1' } },
+        bounds: { x: 130, y: 162, width: 36, height: 36 },
+      },
+    ];
+    const result = layoutProcessLanes(process, shapes, {
+      startX: 100,
+      startY: 80,
+      totalWidth: 500,
+    });
+    expect(result.lanes.length).toBe(1);
+    expect(result.lanes[0].bounds.height).toBeGreaterThanOrEqual(120);
+  });
+
+  it('computes fallback content Y extents when shapes and edges are empty', () => {
+    const extents = computeScopeContentYExtents({ shapes: [], edges: [] });
+    expect(extents).toEqual({ minContentY: 80, maxContentY: 160 });
+  });
+
+  it('handles multi-lane processes with empty first and last lanes and boundary event ref variants', () => {
+    const process = {
+      laneSets: [
+        {
+          lanes: [
+            { id: 'Lane_Empty_First', flowNodeRef: [] },
+            { id: 'Lane_Content', flowNodeRef: [{ id: 'Task_In_Lane' }] },
+            { id: 'Lane_Empty_Last', flowNodeRef: [] },
+          ],
+        },
+      ],
+    };
+    const shapes = [
+      { element: { id: 'Task_In_Lane' }, bounds: { x: 100, y: 220, width: 100, height: 80 } },
+      {
+        element: {
+          $type: 'bpmn:BoundaryEvent',
+          id: 'Boundary_String_Ref',
+          attachedToRef: 'Task_In_Lane',
+        },
+        bounds: { x: 130, y: 282, width: 36, height: 36 },
+      },
+      {
+        element: {
+          $type: 'bpmn:BoundaryEvent',
+          id: 'Boundary_Orphan',
+          attachedToRef: 'NonExistentTask',
+        },
+        bounds: { x: 200, y: 200, width: 36, height: 36 },
+      },
+      {
+        element: {
+          $type: 'bpmn:BoundaryEvent',
+          id: 'Boundary_No_Ref',
+        },
+        bounds: { x: 250, y: 200, width: 36, height: 36 },
+      },
+    ];
+    const result = layoutProcessLanes(process, shapes, {
+      startX: 100,
+      startY: 80,
+      totalWidth: 500,
+    });
+    expect(result.lanes.length).toBe(3);
+    expect(result.lanes[0].bounds.height).toBe(120);
+    expect(result.lanes[1].bounds.height).toBeGreaterThanOrEqual(120);
+    expect(result.lanes[2].bounds.height).toBe(120);
   });
 });

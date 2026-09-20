@@ -14,6 +14,8 @@ describe('BpmnBuilder', () => {
       .addExclusiveGateway('Gate_1', 'Choice')
       .addParallelGateway('Gate_2', 'Fork')
       .addInclusiveGateway('Gate_3', 'Multi')
+      .addEventBasedGateway('Gate_4', 'Events')
+      .addComplexGateway('Gate_5', 'Complex')
       .addIntermediateCatchEvent('Catch_1', 'Wait')
       .addIntermediateThrowEvent('Throw_1', 'Signal')
       .addBoundaryEvent('Bound_1', 'Task_1', 'Error')
@@ -25,6 +27,8 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('Gate_1');
     expect(xml).toContain('Gate_2');
     expect(xml).toContain('Gate_3');
+    expect(xml).toContain('Gate_4');
+    expect(xml).toContain('Gate_5');
     expect(xml).toContain('Catch_1');
     expect(xml).toContain('Throw_1');
     expect(xml).toContain('Bound_1');
@@ -105,14 +109,16 @@ describe('BpmnBuilder', () => {
     expect(xml).toContain('Msg_2');
   });
 
-  it('supports event definitions on start and end events', async () => {
+  it('supports event definitions on start, intermediate catch, and end events', async () => {
     const builder = new BpmnBuilder();
     builder
       .addStartEvent('Start_Err', 'Error Start', 'bpmn:ErrorEventDefinition')
+      .addIntermediateCatchEvent('Catch_Timer', 'Timer Catch', 'bpmn:TimerEventDefinition')
       .addEndEvent('End_Term', 'Terminate End', 'bpmn:TerminateEventDefinition');
 
     const xml = await builder.toXml();
     expect(xml).toContain('errorEventDefinition');
+    expect(xml).toContain('timerEventDefinition');
     expect(xml).toContain('terminateEventDefinition');
   });
 

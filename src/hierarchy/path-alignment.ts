@@ -37,15 +37,19 @@ interface ProcessForwardInfo {
   process: any;
   feedbackEdges: Set<string>;
   forwardSuccessors: Map<string, string[]>;
+  subProcessDescendants: Map<string, { shapes: string[]; edges: string[] }>;
 }
 
 interface ShiftSubtreeContext {
   allShapesMap: Map<string, Bounds>;
+  allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   forwardSuccessors: Map<string, string[]>;
+  subProcessDescendants: Map<string, { shapes: string[]; edges: string[] }>;
 }
 
 interface PairShiftContext {
   allShapesMap: Map<string, Bounds>;
+  allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   procInfos: Map<string, ProcessForwardInfo>;
   modifiedProcesses: Set<string>;
 }
@@ -72,11 +76,30 @@ function buildNodeProcessMap(definitions: any): Map<string, any> {
   return map;
 }
 
+function collectSubProcessDescendants(
+  element: any,
+  descendants: { shapes: string[]; edges: string[] }
+): void {
+  for (const child of element.flowElements || []) {
+    if (child.$type === 'bpmn:SequenceFlow') {
+      descendants.edges.push(child.id);
+    } else {
+      descendants.shapes.push(child.id);
+      if (child.$type === 'bpmn:SubProcess') {
+        collectSubProcessDescendants(child, descendants);
+      }
+    }
+  }
+}
+
 function buildProcessForwardInfo(process: any): ProcessForwardInfo {
   const { regularNodes, boundaryEvents, sequenceFlows } = partitionScopeElements(process);
   const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
   const feedbackEdges = findFeedbackEdges(graph);
   const forwardSuccessors = new Map<string, string[]>();
+  for (const node of regularNodes) {
+    forwardSuccessors.set(node.id, []);
+  }
 
   for (const flow of sequenceFlows) {
     if (feedbackEdges.has(flow.id)) {
@@ -87,12 +110,26 @@ function buildProcessForwardInfo(process: any): ProcessForwardInfo {
     if (!srcId || !tgtId) {
       continue;
     }
-    const succs = forwardSuccessors.get(srcId) || [];
-    succs.push(tgtId);
-    forwardSuccessors.set(srcId, succs);
+    forwardSuccessors.get(srcId)?.push(tgtId);
   }
 
-  return { process, feedbackEdges, forwardSuccessors };
+  for (const be of boundaryEvents) {
+    const hostId = getRefId(be.attachedToRef);
+    if (hostId) {
+      forwardSuccessors.get(hostId)?.push(be.id);
+    }
+  }
+
+  const subProcessDescendants = new Map<string, { shapes: string[]; edges: string[] }>();
+  for (const node of regularNodes) {
+    if (node.$type === 'bpmn:SubProcess') {
+      const descendants = { shapes: [], edges: [] };
+      collectSubProcessDescendants(node, descendants);
+      subProcessDescendants.set(node.id, descendants);
+    }
+  }
+
+  return { process, feedbackEdges, forwardSuccessors, subProcessDescendants };
 }
 
 function collectReachableNodes(
@@ -117,10 +154,34 @@ function collectReachableNodes(
 
 function shiftSubtreeNodes(startId: string, deltaX: number, ctx: ShiftSubtreeContext): void {
   const reachable = collectReachableNodes(startId, ctx.forwardSuccessors);
+  const shiftedShapeIds = new Set<string>();
+  const shiftedEdgeIds = new Set<string>();
+
   for (const id of reachable) {
+    shiftedShapeIds.add(id);
+    const desc = ctx.subProcessDescendants.get(id);
+    if (desc) {
+      for (const sId of desc.shapes) {
+        shiftedShapeIds.add(sId);
+      }
+      for (const eId of desc.edges) {
+        shiftedEdgeIds.add(eId);
+      }
+    }
+  }
+
+  for (const id of shiftedShapeIds) {
     const b = ctx.allShapesMap.get(id);
     if (b) {
       b.x += deltaX;
+    }
+  }
+
+  for (const edge of ctx.allEdges) {
+    if (shiftedEdgeIds.has(edge.element.id)) {
+      for (const wp of edge.waypoints) {
+        wp.x += deltaX;
+      }
     }
   }
 }
@@ -162,7 +223,9 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
     const tgtInfo = ctx.procInfos.get(pair.tgtProc.id)!;
     shiftSubtreeNodes(pair.tgtId, delta, {
       allShapesMap: ctx.allShapesMap,
+      allEdges: ctx.allEdges,
       forwardSuccessors: tgtInfo.forwardSuccessors,
+      subProcessDescendants: tgtInfo.subProcessDescendants,
     });
     ctx.modifiedProcesses.add(pair.tgtProc.id);
     return true;
@@ -172,7 +235,9 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
   const srcInfo = ctx.procInfos.get(pair.srcProc.id)!;
   shiftSubtreeNodes(pair.srcId, delta, {
     allShapesMap: ctx.allShapesMap,
+    allEdges: ctx.allEdges,
     forwardSuccessors: srcInfo.forwardSuccessors,
+    subProcessDescendants: srcInfo.subProcessDescendants,
   });
   ctx.modifiedProcesses.add(pair.srcProc.id);
   return true;
@@ -226,6 +291,7 @@ export function alignCollaborationPaths(opts: CollaborationAlignmentContext): vo
   const modifiedProcesses = new Set<string>();
   const pairCtx: PairShiftContext = {
     allShapesMap: opts.allShapesMap,
+    allEdges: opts.allEdges,
     procInfos,
     modifiedProcesses,
   };

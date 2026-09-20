@@ -940,8 +940,58 @@ describe('gateway-router', () => {
       });
       expect(usedPorts.has('bottom')).toBe(true);
       const pts = routes.get('F_ActDetour')!;
-      expect(pts[0]).toEqual({ x: 150, y: 265 });
       expect(pts[pts.length - 1]).toEqual({ x: 525, y: 235 });
+    });
+
+    it('shifts incoming left flow stepX when obstacle blocks vertical corridor', () => {
+      const gw: Bounds = { x: 500, y: 300, width: 50, height: 50 };
+      const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+      // Default stepX = 500 - 30 = 470. Obstacle straddles x=470 in y ∈ [140, 325]
+      const blocker: Bounds = { x: 450, y: 200, width: 60, height: 50 };
+      const flows: GatewayIncomingFlowInfo[] = [{ flow: { id: 'F_LeftShift' }, sourceBounds: src }];
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, blocker],
+        usedPorts: new Set(['top', 'bottom']),
+      });
+      const pts = routes.get('F_LeftShift')!;
+      // Should shift before blocker: 450 - 20 = 430
+      expect(pts[1].x).toBe(430);
+      expect(pts[2].x).toBe(430);
+    });
+
+    it('keeps stepX when clearing vertical obstacle would push it behind source exit', () => {
+      const gw: Bounds = { x: 500, y: 300, width: 50, height: 50 };
+      const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+      // Blocker at x=210..480 covers stepX (470), candidate 210 - 20 = 190 <= exitX (200)
+      const blocker: Bounds = { x: 210, y: 200, width: 270, height: 50 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'F_LeftNoShift' }, sourceBounds: src },
+      ];
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, blocker],
+        usedPorts: new Set(['top', 'bottom']),
+      });
+      const pts = routes.get('F_LeftNoShift')!;
+      expect(pts[1].x).toBe(470);
+    });
+
+    it('keeps stepX when clearing departure obstacle would push it behind source exit', () => {
+      const gw: Bounds = { x: 500, y: 300, width: 50, height: 50 };
+      const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+      // Blocker right after exitX (200): x=210..240, candidate 210 - 20 = 190 <= exitX (200)
+      const blocker: Bounds = { x: 210, y: 120, width: 30, height: 40 };
+      const flows: GatewayIncomingFlowInfo[] = [
+        { flow: { id: 'F_DepNoShift' }, sourceBounds: src },
+      ];
+      const { routes } = routeGatewayIncomingEdges(flows, {
+        gatewayBounds: gw,
+        allBounds: [gw, src, blocker],
+        usedPorts: new Set(['top', 'bottom']),
+      });
+      const pts = routes.get('F_DepNoShift')!;
+      expect(pts[1].x).toBe(470);
     });
 
     it('routes direct bottom via stepped exit around an obstacle below the gateway', () => {

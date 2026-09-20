@@ -179,4 +179,32 @@ describe('orthogonal-router', () => {
     expect(waypoints[waypoints.length - 1]).toEqual({ x: 100, y: 140 });
     expect(waypoints[waypoints.length - 2]).toEqual({ x: 45, y: 140 });
   });
+
+  it('shifts forward S-bend stepX earlier when obstacle blocks horizontal departure corridor', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 300, width: 100, height: 80 };
+    // Obstacle at x=250..350 straddles srcExit.y (140)
+    const obstacle: Bounds = { x: 250, y: 120, width: 100, height: 40 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, obstacle]);
+
+    // Shifts stepX before obstacle: 250 - 20 = 230
+    expect(waypoints).toEqual([
+      { x: 200, y: 140 },
+      { x: 230, y: 140 },
+      { x: 230, y: 340 },
+      { x: 500, y: 340 },
+    ]);
+  });
+
+  it('keeps stepX when clearing departure obstacle would push it behind source exit', () => {
+    const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 500, y: 300, width: 100, height: 80 };
+    // Obstacle at x=210..250 straddles srcExit.y (140), so 210 - 20 = 190 <= 200
+    const obstacle: Bounds = { x: 210, y: 120, width: 40, height: 40 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [src, tgt, obstacle]);
+
+    expect(waypoints[0]).toEqual({ x: 200, y: 140 });
+  });
 });

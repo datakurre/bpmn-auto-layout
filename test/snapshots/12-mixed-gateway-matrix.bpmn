@@ -135,7 +135,7 @@
         <di:waypoint x="761" y="260" />
         <di:waypoint x="846" y="260" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="771" y="206" width="20" height="14" />
+          <dc:Bounds x="769" y="206" width="20" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ToConverge_di" bpmnElement="Flow_ToConverge">

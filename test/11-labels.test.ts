@@ -232,6 +232,21 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       expect(doesBoxCollide({ x: 310, y: 310, width: 20, height: 20 }, cctx)).toBe(true);
       // Free location
       expect(doesBoxCollide({ x: 220, y: 10, width: 20, height: 20 }, cctx)).toBe(false);
+      // Collides with pool border
+      const poolCtx = {
+        ...cctx,
+        pools: [{ element: { id: 'Pool_1' }, bounds: { x: 0, y: 0, width: 400, height: 200 } }],
+      };
+      expect(doesBoxCollide({ x: 50, y: 195, width: 30, height: 10 }, poolCtx)).toBe(true);
+
+      const poolOnlyCtx = {
+        shapes: [],
+        edges: [],
+        placedLabels: [],
+        pools: [{ element: { id: 'Pool_1' }, bounds: { x: 0, y: 0, width: 400, height: 200 } }],
+      };
+      expect(doesBoxCollide({ x: 50, y: 195, width: 30, height: 10 }, poolOnlyCtx)).toBe(true);
+      expect(doesBoxCollide({ x: 50, y: 50, width: 30, height: 10 }, poolOnlyCtx)).toBe(false);
     });
 
     it('computes path segment label bounds for horizontal and vertical segments across sides', () => {

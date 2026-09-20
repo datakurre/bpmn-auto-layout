@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_UnequalParallelBranches" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Trigger CI/CD" />
+    <bpmn:parallelGateway id="Fork_Parallel" name="Fork&#10;Pipelines" />
+    <bpmn:task id="Task_QuickCheck" name="Quick Smoke Test" />
+    <bpmn:task id="Task_Deep_1" name="Security Scan" />
+    <bpmn:task id="Task_Deep_2" name="Static Analysis" />
+    <bpmn:task id="Task_Deep_3" name="Performance Profiling" />
+    <bpmn:task id="Task_Deep_4" name="Compliance Audit" />
+    <bpmn:task id="Task_PrepData" name="Prepare Test Data" />
+    <bpmn:subProcess id="Sub_IntegrationTests" name="Integration Test Suite">
+      <bpmn:startEvent id="Sub_Start" name="Suite Start" />
+      <bpmn:task id="Sub_Auth" name="Test Authentication" />
+      <bpmn:task id="Sub_Api" name="Test API Endpoints" />
+      <bpmn:task id="Sub_Db" name="Test Database Migrations" />
+      <bpmn:endEvent id="Sub_End" name="Suite Done" />
+      <bpmn:sequenceFlow id="SF_1" sourceRef="Sub_Start" targetRef="Sub_Auth" />
+      <bpmn:sequenceFlow id="SF_2" sourceRef="Sub_Auth" targetRef="Sub_Api" />
+      <bpmn:sequenceFlow id="SF_3" sourceRef="Sub_Api" targetRef="Sub_Db" />
+      <bpmn:sequenceFlow id="SF_4" sourceRef="Sub_Db" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:task id="Task_Teardown" name="Clean Up Resources" />
+    <bpmn:parallelGateway id="Join_Parallel" name="Sync Verification" />
+    <bpmn:endEvent id="End_AllDone" name="Deployment Approved" />
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="Start_1" targetRef="Fork_Parallel" />
+    <bpmn:sequenceFlow id="Flow_B1_In" sourceRef="Fork_Parallel" targetRef="Task_QuickCheck" />
+    <bpmn:sequenceFlow id="Flow_B1_Out" sourceRef="Task_QuickCheck" targetRef="Join_Parallel" />
+    <bpmn:sequenceFlow id="Flow_B2_1" sourceRef="Fork_Parallel" targetRef="Task_Deep_1" />
+    <bpmn:sequenceFlow id="Flow_B2_2" sourceRef="Task_Deep_1" targetRef="Task_Deep_2" />
+    <bpmn:sequenceFlow id="Flow_B2_3" sourceRef="Task_Deep_2" targetRef="Task_Deep_3" />
+    <bpmn:sequenceFlow id="Flow_B2_4" sourceRef="Task_Deep_3" targetRef="Task_Deep_4" />
+    <bpmn:sequenceFlow id="Flow_B2_Out" sourceRef="Task_Deep_4" targetRef="Join_Parallel" />
+    <bpmn:sequenceFlow id="Flow_B3_1" sourceRef="Fork_Parallel" targetRef="Task_PrepData" />
+    <bpmn:sequenceFlow id="Flow_B3_2" sourceRef="Task_PrepData" targetRef="Sub_IntegrationTests" />
+    <bpmn:sequenceFlow id="Flow_B3_3" sourceRef="Sub_IntegrationTests" targetRef="Task_Teardown" />
+    <bpmn:sequenceFlow id="Flow_B3_Out" sourceRef="Task_Teardown" targetRef="Join_Parallel" />
+    <bpmn:sequenceFlow id="Flow_Done" sourceRef="Join_Parallel" targetRef="End_AllDone" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_UnequalParallelBranches">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="80" y="208" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Fork_Parallel_di" bpmnElement="Fork_Parallel">
+        <dc:Bounds x="196" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="235" y="138" width="52" height="28" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_QuickCheck_di" bpmnElement="Task_QuickCheck">
+        <dc:Bounds x="306" y="20" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Deep_1_di" bpmnElement="Task_Deep_1">
+        <dc:Bounds x="306" y="140" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Deep_2_di" bpmnElement="Task_Deep_2">
+        <dc:Bounds x="752" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Deep_3_di" bpmnElement="Task_Deep_3">
+        <dc:Bounds x="1198" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Deep_4_di" bpmnElement="Task_Deep_4">
+        <dc:Bounds x="1358" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_PrepData_di" bpmnElement="Task_PrepData">
+        <dc:Bounds x="306" y="260" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_IntegrationTests_di" bpmnElement="Sub_IntegrationTests" isExpanded="true">
+        <dc:Bounds x="466" y="380" width="672" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="496" y="437" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="485" y="483" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Auth_di" bpmnElement="Sub_Auth">
+        <dc:Bounds x="592" y="415" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Api_di" bpmnElement="Sub_Api">
+        <dc:Bounds x="752" y="415" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Db_di" bpmnElement="Sub_Db">
+        <dc:Bounds x="912" y="415" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="1072" y="437" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1060" y="483" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Teardown_di" bpmnElement="Task_Teardown">
+        <dc:Bounds x="1198" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Join_Parallel_di" bpmnElement="Join_Parallel">
+        <dc:Bounds x="1518" y="155" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1437" y="152" width="92" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_AllDone_di" bpmnElement="End_AllDone">
+        <dc:Bounds x="1628" y="162" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1588" y="208" width="116" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="532" y="455" />
+        <di:waypoint x="592" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="692" y="455" />
+        <di:waypoint x="752" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="852" y="455" />
+        <di:waypoint x="912" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_4_di" bpmnElement="SF_4">
+        <di:waypoint x="1012" y="455" />
+        <di:waypoint x="1072" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B1_In_di" bpmnElement="Flow_B1_In">
+        <di:waypoint x="221" y="155" />
+        <di:waypoint x="221" y="60" />
+        <di:waypoint x="306" y="60" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_1_di" bpmnElement="Flow_B2_1">
+        <di:waypoint x="246" y="180" />
+        <di:waypoint x="306" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B3_1_di" bpmnElement="Flow_B3_1">
+        <di:waypoint x="221" y="205" />
+        <di:waypoint x="221" y="300" />
+        <di:waypoint x="306" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Done_di" bpmnElement="Flow_Done">
+        <di:waypoint x="1568" y="180" />
+        <di:waypoint x="1628" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Start_di" bpmnElement="Flow_Start">
+        <di:waypoint x="136" y="180" />
+        <di:waypoint x="196" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B1_Out_di" bpmnElement="Flow_B1_Out">
+        <di:waypoint x="406" y="60" />
+        <di:waypoint x="1543" y="60" />
+        <di:waypoint x="1543" y="155" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_Out_di" bpmnElement="Flow_B2_Out">
+        <di:waypoint x="1458" y="460" />
+        <di:waypoint x="1543" y="460" />
+        <di:waypoint x="1543" y="205" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B3_Out_di" bpmnElement="Flow_B3_Out">
+        <di:waypoint x="1298" y="460" />
+        <di:waypoint x="1338" y="460" />
+        <di:waypoint x="1338" y="180" />
+        <di:waypoint x="1518" y="180" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_2_di" bpmnElement="Flow_B2_2">
+        <di:waypoint x="406" y="180" />
+        <di:waypoint x="722" y="180" />
+        <di:waypoint x="722" y="300" />
+        <di:waypoint x="752" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_3_di" bpmnElement="Flow_B2_3">
+        <di:waypoint x="852" y="300" />
+        <di:waypoint x="1198" y="300" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B2_4_di" bpmnElement="Flow_B2_4">
+        <di:waypoint x="1298" y="300" />
+        <di:waypoint x="1328" y="300" />
+        <di:waypoint x="1328" y="460" />
+        <di:waypoint x="1358" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B3_2_di" bpmnElement="Flow_B3_2">
+        <di:waypoint x="406" y="300" />
+        <di:waypoint x="436" y="300" />
+        <di:waypoint x="436" y="460" />
+        <di:waypoint x="466" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_B3_3_di" bpmnElement="Flow_B3_3">
+        <di:waypoint x="1138" y="460" />
+        <di:waypoint x="1198" y="460" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

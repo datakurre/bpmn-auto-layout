@@ -50,6 +50,31 @@ function hasObstaclesAboveInSpan(
   );
 }
 
+function hasBlockedDownwardFeedbackExit(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  allBounds: Bounds[]
+): boolean {
+  const srcBottom: Point = {
+    x: Math.round(sourceBounds.x + sourceBounds.width / 2),
+    y: sourceBounds.y + sourceBounds.height,
+  };
+  const channelY = computeChannelY(sourceBounds, targetBounds, allBounds);
+  if (!hasObstacleBelow(srcBottom, channelY, { ignore: sourceBounds, obstacles: allBounds })) {
+    return false;
+  }
+  const srcRight: Point = {
+    x: sourceBounds.x + sourceBounds.width,
+    y: Math.round(sourceBounds.y + sourceBounds.height / 2),
+  };
+  const srcStepX = getClearSourceStepX(sourceBounds, channelY, allBounds);
+  return isCollinearPathBlocked(
+    srcRight.y,
+    { xStart: srcRight.x, xEnd: srcStepX, ignore: [sourceBounds] },
+    allBounds
+  );
+}
+
 function shouldUseUpwardFeedbackRoute(
   sourceBounds: Bounds,
   targetBounds: Bounds,
@@ -66,7 +91,8 @@ function shouldUseUpwardFeedbackRoute(
   }
   if (
     Math.abs(sourceBounds.y - targetBounds.y) <= 20 &&
-    hasBoundaryEventBelowInSpan({ minX, maxX }, allBounds)
+    (hasBoundaryEventBelowInSpan({ minX, maxX }, allBounds) ||
+      hasBlockedDownwardFeedbackExit(sourceBounds, targetBounds, allBounds))
   ) {
     return true;
   }
@@ -304,6 +330,31 @@ function findForwardStepBlockerX(stepX: number, ctx: ForwardStepBlockerContext):
   return blockingX;
 }
 
+interface DepartureBlockerContext {
+  srcExit: Point;
+  stepX: number;
+  obstacles: Bounds[];
+  ignore: Bounds[];
+}
+
+function findHorizontalDepartureBlockerX(ctx: DepartureBlockerContext): number {
+  let blockingX = Infinity;
+  for (const b of ctx.obstacles) {
+    if (ctx.ignore.includes(b)) {
+      continue;
+    }
+    if (
+      b.x > ctx.srcExit.x &&
+      b.x < ctx.stepX &&
+      ctx.srcExit.y > b.y &&
+      ctx.srcExit.y < b.y + b.height
+    ) {
+      blockingX = Math.min(blockingX, b.x);
+    }
+  }
+  return blockingX;
+}
+
 interface ClearForwardStepContext {
   srcExit: Point;
   tgtEntry: Point;
@@ -311,9 +362,22 @@ interface ClearForwardStepContext {
   ignore: Bounds[];
 }
 
-function findClearForwardStepX(stepX: number, ctx: ClearForwardStepContext): number {
+function findClearForwardStepX(initialStepX: number, ctx: ClearForwardStepContext): number {
   if (!ctx.obstacles || ctx.obstacles.length === 0) {
-    return stepX;
+    return initialStepX;
+  }
+  let stepX = initialStepX;
+  const depBlockerX = findHorizontalDepartureBlockerX({
+    srcExit: ctx.srcExit,
+    stepX,
+    obstacles: ctx.obstacles,
+    ignore: ctx.ignore,
+  });
+  if (depBlockerX < Infinity) {
+    const depCandidate = depBlockerX - 20;
+    if (depCandidate > ctx.srcExit.x) {
+      stepX = depCandidate;
+    }
   }
   const blockingX = findForwardStepBlockerX(stepX, {
     yStart: ctx.srcExit.y,

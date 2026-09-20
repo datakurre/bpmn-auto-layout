@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_SharedPrefixMultipleEnds" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Onboarding Started" />
+    <bpmn:exclusiveGateway id="Gate_Intake" name="Quick Screen" />
+    <bpmn:endEvent id="End_ImmediateAbort" name="Immediate Abort">
+      <bpmn:terminateEventDefinition />
+    </bpmn:endEvent>
+    <bpmn:task id="Task_ValidateId" name="Validate Identity" />
+    <bpmn:task id="Task_AssessRisk" name="Assess Risk Score" />
+    <bpmn:exclusiveGateway id="Gate_RiskOutcome" name="Risk Level?" />
+    <bpmn:task id="Task_Activate" name="Activate Account" />
+    <bpmn:endEvent id="End_Success" name="Onboarding Complete" />
+    <bpmn:task id="Task_FlagFraud" name="Flag For Financial Crimes" />
+    <bpmn:endEvent id="End_FraudError" name="Suspicious Activity Terminated">
+      <bpmn:errorEventDefinition />
+    </bpmn:endEvent>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Gate_Intake" />
+    <bpmn:sequenceFlow id="Flow_Abort" name="Sanction Hit" sourceRef="Gate_Intake" targetRef="End_ImmediateAbort" />
+    <bpmn:sequenceFlow id="Flow_Proceed" name="Clear" sourceRef="Gate_Intake" targetRef="Task_ValidateId" />
+    <bpmn:sequenceFlow id="Flow_Prefix_1" sourceRef="Task_ValidateId" targetRef="Task_AssessRisk" />
+    <bpmn:sequenceFlow id="Flow_Prefix_2" sourceRef="Task_AssessRisk" targetRef="Gate_RiskOutcome" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Acceptable" sourceRef="Gate_RiskOutcome" targetRef="Task_Activate" />
+    <bpmn:sequenceFlow id="Flow_Rejected" name="High Risk" sourceRef="Gate_RiskOutcome" targetRef="Task_FlagFraud" />
+    <bpmn:sequenceFlow id="Flow_Act_End" sourceRef="Task_Activate" targetRef="End_Success" />
+    <bpmn:sequenceFlow id="Flow_Fraud_End" sourceRef="Task_FlagFraud" targetRef="End_FraudError" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_SharedPrefixMultipleEnds">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="68" y="168" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Intake_di" bpmnElement="Gate_Intake">
+        <dc:Bounds x="196" y="115" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="185" y="95" width="72" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ImmediateAbort_di" bpmnElement="End_ImmediateAbort">
+        <dc:Bounds x="338" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="312" y="168" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ValidateId_di" bpmnElement="Task_ValidateId">
+        <dc:Bounds x="306" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AssessRisk_di" bpmnElement="Task_AssessRisk">
+        <dc:Bounds x="466" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_RiskOutcome_di" bpmnElement="Gate_RiskOutcome">
+        <dc:Bounds x="626" y="235" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="618" y="215" width="66" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Activate_di" bpmnElement="Task_Activate">
+        <dc:Bounds x="736" y="220" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="896" y="242" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="858" y="288" width="112" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_FlagFraud_di" bpmnElement="Task_FlagFraud">
+        <dc:Bounds x="736" y="340" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_FraudError_di" bpmnElement="End_FraudError">
+        <dc:Bounds x="896" y="362" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="942" y="373" width="166" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Abort_di" bpmnElement="Flow_Abort">
+        <di:waypoint x="246" y="140" />
+        <di:waypoint x="338" y="140" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="258" y="116" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Proceed_di" bpmnElement="Flow_Proceed">
+        <di:waypoint x="221" y="165" />
+        <di:waypoint x="221" y="260" />
+        <di:waypoint x="306" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="229" y="206" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
+        <di:waypoint x="676" y="260" />
+        <di:waypoint x="736" y="260" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="673" y="236" width="62" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Rejected_di" bpmnElement="Flow_Rejected">
+        <di:waypoint x="651" y="285" />
+        <di:waypoint x="651" y="380" />
+        <di:waypoint x="736" y="380" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="661" y="326" width="54" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Prefix_2_di" bpmnElement="Flow_Prefix_2">
+        <di:waypoint x="566" y="260" />
+        <di:waypoint x="626" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Prefix_1_di" bpmnElement="Flow_Prefix_1">
+        <di:waypoint x="406" y="260" />
+        <di:waypoint x="466" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Act_End_di" bpmnElement="Flow_Act_End">
+        <di:waypoint x="836" y="260" />
+        <di:waypoint x="896" y="260" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fraud_End_di" bpmnElement="Flow_Fraud_End">
+        <di:waypoint x="836" y="380" />
+        <di:waypoint x="896" y="380" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

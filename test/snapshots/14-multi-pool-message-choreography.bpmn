@@ -1,0 +1,300 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Customer" name="Customer" processRef="Proc_Customer" />
+    <bpmn:participant id="Pool_Order" name="Order Fulfillment" processRef="Proc_Order" />
+    <bpmn:participant id="Pool_Payment" name="Payment Gateway" processRef="Proc_Payment" />
+    <bpmn:messageFlow id="MF_Order_Req" name="Purchase Order" sourceRef="Cust_Order" targetRef="Order_Start" />
+    <bpmn:messageFlow id="MF_Invoice" name="Invoice Details" sourceRef="Order_Invoice" targetRef="Cust_Wait" />
+    <bpmn:messageFlow id="MF_Pay_Auth" name="Payment Authorization" sourceRef="Cust_Pay" targetRef="Pay_Start" />
+    <bpmn:messageFlow id="MF_Receipt" name="Payment Notification" sourceRef="Pay_Receipt" targetRef="Order_Ship" />
+    <bpmn:messageFlow id="MF_Shipment" name="Shipping Notice" sourceRef="Order_Ship" targetRef="Cust_Done" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Customer" isExecutable="false">
+    <bpmn:startEvent id="Cust_Start" name="Browse Catalog" />
+    <bpmn:task id="Cust_Order" name="Place Order" />
+    <bpmn:intermediateCatchEvent id="Cust_Wait" name="Order Confirmation" />
+    <bpmn:task id="Cust_Pay" name="Authorize Payment" />
+    <bpmn:endEvent id="Cust_Done" name="Order Complete" />
+    <bpmn:sequenceFlow id="CF_1" sourceRef="Cust_Start" targetRef="Cust_Order" />
+    <bpmn:sequenceFlow id="CF_2" sourceRef="Cust_Order" targetRef="Cust_Wait" />
+    <bpmn:sequenceFlow id="CF_3" sourceRef="Cust_Wait" targetRef="Cust_Pay" />
+    <bpmn:sequenceFlow id="CF_4" sourceRef="Cust_Pay" targetRef="Cust_Done" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Order" name="Order Fulfillment" isExecutable="false">
+    <bpmn:startEvent id="Order_Start" name="Receive Request" />
+    <bpmn:task id="Order_Verify" name="Check Inventory" />
+    <bpmn:exclusiveGateway id="Order_Split" name="In Stock?" />
+    <bpmn:task id="Order_Reserve" name="Reserve Stock" />
+    <bpmn:task id="Order_Procure" name="Trigger Backorder" />
+    <bpmn:exclusiveGateway id="Order_Join" name="Stock Ready" />
+    <bpmn:task id="Order_Invoice" name="Issue Invoice" />
+    <bpmn:task id="Order_Ship" name="Dispatch Goods" />
+    <bpmn:endEvent id="Order_End" name="Fulfillment Complete" />
+    <bpmn:sequenceFlow id="OF_1" sourceRef="Order_Start" targetRef="Order_Verify" />
+    <bpmn:sequenceFlow id="OF_2" sourceRef="Order_Verify" targetRef="Order_Split" />
+    <bpmn:sequenceFlow id="OF_3" name="Yes" sourceRef="Order_Split" targetRef="Order_Reserve" />
+    <bpmn:sequenceFlow id="OF_4" name="No" sourceRef="Order_Split" targetRef="Order_Procure" />
+    <bpmn:sequenceFlow id="OF_5" sourceRef="Order_Reserve" targetRef="Order_Join" />
+    <bpmn:sequenceFlow id="OF_6" sourceRef="Order_Procure" targetRef="Order_Join" />
+    <bpmn:sequenceFlow id="OF_7" sourceRef="Order_Join" targetRef="Order_Invoice" />
+    <bpmn:sequenceFlow id="OF_8" sourceRef="Order_Invoice" targetRef="Order_Ship" />
+    <bpmn:sequenceFlow id="OF_9" sourceRef="Order_Ship" targetRef="Order_End" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Payment" name="Payment Gateway" isExecutable="false">
+    <bpmn:startEvent id="Pay_Start" name="Payment Request" />
+    <bpmn:task id="Pay_Process" name="Charge Account" />
+    <bpmn:exclusiveGateway id="Pay_Gate" name="Authorized?" />
+    <bpmn:task id="Pay_Receipt" name="Generate Receipt" />
+    <bpmn:task id="Pay_Decline" name="Record Decline" />
+    <bpmn:exclusiveGateway id="Pay_Merge" name="Outcome Logged" />
+    <bpmn:endEvent id="Pay_End" name="Payment Finalized" />
+    <bpmn:sequenceFlow id="PF_1" sourceRef="Pay_Start" targetRef="Pay_Process" />
+    <bpmn:sequenceFlow id="PF_2" sourceRef="Pay_Process" targetRef="Pay_Gate" />
+    <bpmn:sequenceFlow id="PF_3" name="Approved" sourceRef="Pay_Gate" targetRef="Pay_Receipt" />
+    <bpmn:sequenceFlow id="PF_4" name="Declined" sourceRef="Pay_Gate" targetRef="Pay_Decline" />
+    <bpmn:sequenceFlow id="PF_5" sourceRef="Pay_Receipt" targetRef="Pay_Merge" />
+    <bpmn:sequenceFlow id="PF_6" sourceRef="Pay_Decline" targetRef="Pay_Merge" />
+    <bpmn:sequenceFlow id="PF_7" sourceRef="Pay_Merge" targetRef="Pay_End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Customer_di" bpmnElement="Pool_Customer">
+        <dc:Bounds x="100" y="80" width="1706" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Order_di" bpmnElement="Pool_Order">
+        <dc:Bounds x="100" y="270" width="1706" height="250" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Payment_di" bpmnElement="Pool_Payment">
+        <dc:Bounds x="100" y="580" width="1706" height="250" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
+        <dc:Bounds x="150" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="125" y="173" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Order_di" bpmnElement="Cust_Order">
+        <dc:Bounds x="246" y="105" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Wait_di" bpmnElement="Cust_Wait">
+        <dc:Bounds x="946" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="914" y="103" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Pay_di" bpmnElement="Cust_Pay">
+        <dc:Bounds x="1042" y="105" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Done_di" bpmnElement="Cust_Done">
+        <dc:Bounds x="1472" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1449" y="103" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Start_di" bpmnElement="Order_Start">
+        <dc:Bounds x="278" y="317" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="251" y="363" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Verify_di" bpmnElement="Order_Verify">
+        <dc:Bounds x="374" y="295" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Split_di" bpmnElement="Order_Split">
+        <dc:Bounds x="534" y="310" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="533" y="290" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Reserve_di" bpmnElement="Order_Reserve">
+        <dc:Bounds x="644" y="295" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Procure_di" bpmnElement="Order_Procure">
+        <dc:Bounds x="644" y="415" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Join_di" bpmnElement="Order_Join">
+        <dc:Bounds x="804" y="310" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="795" y="290" width="68" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Invoice_di" bpmnElement="Order_Invoice">
+        <dc:Bounds x="914" y="295" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_Ship_di" bpmnElement="Order_Ship">
+        <dc:Bounds x="1440" y="295" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Order_End_di" bpmnElement="Order_End">
+        <dc:Bounds x="1600" y="317" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1562" y="363" width="112" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Start_di" bpmnElement="Pay_Start">
+        <dc:Bounds x="1074" y="627" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1045" y="673" width="94" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Process_di" bpmnElement="Pay_Process">
+        <dc:Bounds x="1170" y="605" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Gate_di" bpmnElement="Pay_Gate">
+        <dc:Bounds x="1330" y="620" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1321" y="600" width="64" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Receipt_di" bpmnElement="Pay_Receipt">
+        <dc:Bounds x="1440" y="605" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Decline_di" bpmnElement="Pay_Decline">
+        <dc:Bounds x="1440" y="725" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_Merge_di" bpmnElement="Pay_Merge">
+        <dc:Bounds x="1600" y="620" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1580" y="600" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pay_End_di" bpmnElement="Pay_End">
+        <dc:Bounds x="1710" y="627" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1678" y="673" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="CF_1_di" bpmnElement="CF_1">
+        <di:waypoint x="186" y="145" />
+        <di:waypoint x="246" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_2_di" bpmnElement="CF_2">
+        <di:waypoint x="346" y="145" />
+        <di:waypoint x="946" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_3_di" bpmnElement="CF_3">
+        <di:waypoint x="982" y="145" />
+        <di:waypoint x="1042" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_4_di" bpmnElement="CF_4">
+        <di:waypoint x="1142" y="145" />
+        <di:waypoint x="1472" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_3_di" bpmnElement="OF_3">
+        <di:waypoint x="584" y="335" />
+        <di:waypoint x="644" y="335" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="600" y="311" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_4_di" bpmnElement="OF_4">
+        <di:waypoint x="559" y="360" />
+        <di:waypoint x="559" y="455" />
+        <di:waypoint x="644" y="455" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="567" y="401" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_7_di" bpmnElement="OF_7">
+        <di:waypoint x="854" y="335" />
+        <di:waypoint x="914" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_2_di" bpmnElement="OF_2">
+        <di:waypoint x="474" y="335" />
+        <di:waypoint x="534" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_5_di" bpmnElement="OF_5">
+        <di:waypoint x="744" y="335" />
+        <di:waypoint x="804" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_6_di" bpmnElement="OF_6">
+        <di:waypoint x="744" y="455" />
+        <di:waypoint x="829" y="455" />
+        <di:waypoint x="829" y="360" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_1_di" bpmnElement="OF_1">
+        <di:waypoint x="314" y="335" />
+        <di:waypoint x="374" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_8_di" bpmnElement="OF_8">
+        <di:waypoint x="1014" y="335" />
+        <di:waypoint x="1440" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="OF_9_di" bpmnElement="OF_9">
+        <di:waypoint x="1540" y="335" />
+        <di:waypoint x="1600" y="335" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_3_di" bpmnElement="PF_3">
+        <di:waypoint x="1380" y="645" />
+        <di:waypoint x="1440" y="645" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1382" y="621" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_4_di" bpmnElement="PF_4">
+        <di:waypoint x="1355" y="670" />
+        <di:waypoint x="1355" y="765" />
+        <di:waypoint x="1440" y="765" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1363" y="711" width="50" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_7_di" bpmnElement="PF_7">
+        <di:waypoint x="1650" y="645" />
+        <di:waypoint x="1710" y="645" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_2_di" bpmnElement="PF_2">
+        <di:waypoint x="1270" y="645" />
+        <di:waypoint x="1330" y="645" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_5_di" bpmnElement="PF_5">
+        <di:waypoint x="1540" y="645" />
+        <di:waypoint x="1600" y="645" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_6_di" bpmnElement="PF_6">
+        <di:waypoint x="1540" y="765" />
+        <di:waypoint x="1625" y="765" />
+        <di:waypoint x="1625" y="670" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="PF_1_di" bpmnElement="PF_1">
+        <di:waypoint x="1110" y="645" />
+        <di:waypoint x="1170" y="645" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Order_Req_di" bpmnElement="MF_Order_Req">
+        <di:waypoint x="296" y="185" />
+        <di:waypoint x="296" y="317" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="306" y="244" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Invoice_di" bpmnElement="MF_Invoice">
+        <di:waypoint x="964" y="295" />
+        <di:waypoint x="964" y="163" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="974" y="222" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Pay_Auth_di" bpmnElement="MF_Pay_Auth">
+        <di:waypoint x="1092" y="185" />
+        <di:waypoint x="1092" y="627" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1102" y="399" width="120" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Receipt_di" bpmnElement="MF_Receipt">
+        <di:waypoint x="1490" y="605" />
+        <di:waypoint x="1490" y="375" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1500" y="483" width="112" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Shipment_di" bpmnElement="MF_Shipment">
+        <di:waypoint x="1490" y="295" />
+        <di:waypoint x="1490" y="163" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1500" y="222" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

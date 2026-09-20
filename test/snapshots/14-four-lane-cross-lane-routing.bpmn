@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Procurement" name="Enterprise Procurement" processRef="Process_Procurement" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Procurement" isExecutable="false">
+    <bpmn:laneSet id="Process_Procurement_LaneSet">
+      <bpmn:lane id="Lane_Requester" name="Requester">
+        <bpmn:flowNodeRef>Start_Req</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CreateReq</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gate_Revise</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Cancel</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Success</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Approver" name="Approver">
+        <bpmn:flowNodeRef>Task_ManagerReview</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gate_Approve</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Finance" name="Finance">
+        <bpmn:flowNodeRef>Task_BudgetCheck</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gate_BudgetOk</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_IT" name="IT Operations">
+        <bpmn:flowNodeRef>Task_ProvisionHardware</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_AssignLicenses</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Req" name="Request Needed" />
+    <bpmn:task id="Task_CreateReq" name="Draft Purchase Request" />
+    <bpmn:exclusiveGateway id="Gate_Revise" name="Revise?" />
+    <bpmn:endEvent id="End_Cancel" name="Request Cancelled" />
+    <bpmn:endEvent id="End_Success" name="Order Fulfilled" />
+    <bpmn:task id="Task_ManagerReview" name="Manager Review" />
+    <bpmn:exclusiveGateway id="Gate_Approve" name="Approved?" />
+    <bpmn:task id="Task_BudgetCheck" name="Verify Budget" />
+    <bpmn:exclusiveGateway id="Gate_BudgetOk" name="Funds Available?" />
+    <bpmn:task id="Task_ProvisionHardware" name="Procure Hardware" />
+    <bpmn:task id="Task_AssignLicenses" name="Configure Licenses" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_Req" targetRef="Task_CreateReq" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_CreateReq" targetRef="Task_ManagerReview" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Task_ManagerReview" targetRef="Gate_Approve" />
+    <bpmn:sequenceFlow id="Flow_Reject_Mgr" name="Rejected" sourceRef="Gate_Approve" targetRef="Gate_Revise" />
+    <bpmn:sequenceFlow id="Flow_Mgr_Appr" name="Approved" sourceRef="Gate_Approve" targetRef="Task_BudgetCheck" />
+    <bpmn:sequenceFlow id="Flow_Resubmit" name="Resubmit" sourceRef="Gate_Revise" targetRef="Task_CreateReq" />
+    <bpmn:sequenceFlow id="Flow_Abort" name="Abort" sourceRef="Gate_Revise" targetRef="End_Cancel" />
+    <bpmn:sequenceFlow id="Flow_Fin_1" sourceRef="Task_BudgetCheck" targetRef="Gate_BudgetOk" />
+    <bpmn:sequenceFlow id="Flow_Fin_Ok" name="Yes" sourceRef="Gate_BudgetOk" targetRef="Task_ProvisionHardware" />
+    <bpmn:sequenceFlow id="Flow_Fin_No" name="No Budget" sourceRef="Gate_BudgetOk" targetRef="Gate_Revise" />
+    <bpmn:sequenceFlow id="Flow_IT_1" sourceRef="Task_ProvisionHardware" targetRef="Task_AssignLicenses" />
+    <bpmn:sequenceFlow id="Flow_IT_Done" sourceRef="Task_AssignLicenses" targetRef="End_Success" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Procurement_di" bpmnElement="Pool_Procurement">
+        <dc:Bounds x="100" y="80" width="1272" height="650" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Requester_di" bpmnElement="Lane_Requester">
+        <dc:Bounds x="130" y="80" width="1242" height="225" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Approver_di" bpmnElement="Lane_Approver">
+        <dc:Bounds x="130" y="305" width="1242" height="180" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Finance_di" bpmnElement="Lane_Finance">
+        <dc:Bounds x="130" y="485" width="1242" height="120" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_IT_di" bpmnElement="Lane_IT">
+        <dc:Bounds x="130" y="605" width="1242" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Req_di" bpmnElement="Start_Req">
+        <dc:Bounds x="180" y="167" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="155" y="213" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateReq_di" bpmnElement="Task_CreateReq">
+        <dc:Bounds x="276" y="145" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Revise_di" bpmnElement="Gate_Revise">
+        <dc:Bounds x="1001" y="160" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1040" y="157" width="46" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Cancel_di" bpmnElement="End_Cancel">
+        <dc:Bounds x="1168" y="167" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1136" y="213" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="1296" y="167" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1275" y="213" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ManagerReview_di" bpmnElement="Task_ManagerReview">
+        <dc:Bounds x="436" y="385" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Approve_di" bpmnElement="Gate_Approve">
+        <dc:Bounds x="596" y="400" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="652" y="418" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_BudgetCheck_di" bpmnElement="Task_BudgetCheck">
+        <dc:Bounds x="706" y="505" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_BudgetOk_di" bpmnElement="Gate_BudgetOk">
+        <dc:Bounds x="866" y="520" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="922" y="538" width="94" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ProvisionHardware_di" bpmnElement="Task_ProvisionHardware">
+        <dc:Bounds x="976" y="625" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AssignLicenses_di" bpmnElement="Task_AssignLicenses">
+        <dc:Bounds x="1136" y="625" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Reject_Mgr_di" bpmnElement="Flow_Reject_Mgr">
+        <di:waypoint x="621" y="400" />
+        <di:waypoint x="621" y="185" />
+        <di:waypoint x="1001" y="185" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="784" y="161" width="50" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Mgr_Appr_di" bpmnElement="Flow_Mgr_Appr">
+        <di:waypoint x="621" y="450" />
+        <di:waypoint x="621" y="545" />
+        <di:waypoint x="706" y="545" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="629" y="491" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Resubmit_di" bpmnElement="Flow_Resubmit">
+        <di:waypoint x="1026" y="160" />
+        <di:waypoint x="1026" y="105" />
+        <di:waypoint x="326" y="105" />
+        <di:waypoint x="326" y="145" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="648" y="81" width="52" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Abort_di" bpmnElement="Flow_Abort">
+        <di:waypoint x="1051" y="185" />
+        <di:waypoint x="1168" y="185" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1092" y="161" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fin_Ok_di" bpmnElement="Flow_Fin_Ok">
+        <di:waypoint x="891" y="570" />
+        <di:waypoint x="891" y="665" />
+        <di:waypoint x="976" y="665" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="899" y="611" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fin_No_di" bpmnElement="Flow_Fin_No">
+        <di:waypoint x="891" y="520" />
+        <di:waypoint x="891" y="365" />
+        <di:waypoint x="1026" y="365" />
+        <di:waypoint x="1026" y="210" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="901" y="436" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="536" y="425" />
+        <di:waypoint x="596" y="425" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Fin_1_di" bpmnElement="Flow_Fin_1">
+        <di:waypoint x="806" y="545" />
+        <di:waypoint x="866" y="545" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="216" y="185" />
+        <di:waypoint x="276" y="185" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="376" y="185" />
+        <di:waypoint x="406" y="185" />
+        <di:waypoint x="406" y="425" />
+        <di:waypoint x="436" y="425" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_IT_1_di" bpmnElement="Flow_IT_1">
+        <di:waypoint x="1076" y="665" />
+        <di:waypoint x="1136" y="665" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_IT_Done_di" bpmnElement="Flow_IT_Done">
+        <di:waypoint x="1236" y="665" />
+        <di:waypoint x="1266" y="665" />
+        <di:waypoint x="1266" y="185" />
+        <di:waypoint x="1296" y="185" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

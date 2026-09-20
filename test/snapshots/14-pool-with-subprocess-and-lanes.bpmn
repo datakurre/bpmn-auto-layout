@@ -1,0 +1,202 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Client" name="Client" processRef="Proc_Client" />
+    <bpmn:participant id="Pool_Vendor" name="Vendor Delivery" processRef="Proc_Vendor" />
+    <bpmn:messageFlow id="MF_Inquiry" name="RFP Submission" sourceRef="Client_Inquire" targetRef="V_Start" />
+    <bpmn:messageFlow id="MF_Proposal" name="Commercial Proposal" sourceRef="V_DeliverQuote" targetRef="Client_WaitQuote" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Client" isExecutable="false">
+    <bpmn:startEvent id="Client_Start" name="Project Needed" />
+    <bpmn:task id="Client_Inquire" name="Send Request for Quote" />
+    <bpmn:intermediateCatchEvent id="Client_WaitQuote" name="Receive Proposal" />
+    <bpmn:endEvent id="Client_End" name="Decision Made" />
+    <bpmn:sequenceFlow id="CF_1" sourceRef="Client_Start" targetRef="Client_Inquire" />
+    <bpmn:sequenceFlow id="CF_2" sourceRef="Client_Inquire" targetRef="Client_WaitQuote" />
+    <bpmn:sequenceFlow id="CF_3" sourceRef="Client_WaitQuote" targetRef="Client_End" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Vendor" name="Vendor Solution" isExecutable="false">
+    <bpmn:laneSet id="Proc_Vendor_LaneSet">
+      <bpmn:lane id="Lane_Sales" name="Commercial Sales">
+        <bpmn:flowNodeRef>V_Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>V_Intake</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>V_SubQuote</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>V_DeliverQuote</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>V_End</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Ops" name="Technical Operations">
+        <bpmn:flowNodeRef>V_EstimateLabor</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>V_CheckParts</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="V_Start" name="Quote Request Ingested" />
+    <bpmn:task id="V_Intake" name="Validate Scope" />
+    <bpmn:subProcess id="V_SubQuote" name="Estimation &#38; Costing">
+      <bpmn:startEvent id="Sub_Start" name="Begin Calc" />
+      <bpmn:task id="Sub_Gather" name="Compile Bill of Materials" />
+      <bpmn:task id="Sub_Margin" name="Apply Pricing Margin" />
+      <bpmn:endEvent id="Sub_End" name="Pricing Ready" />
+      <bpmn:sequenceFlow id="SF_1" sourceRef="Sub_Start" targetRef="Sub_Gather" />
+      <bpmn:sequenceFlow id="SF_2" sourceRef="Sub_Gather" targetRef="Sub_Margin" />
+      <bpmn:sequenceFlow id="SF_3" sourceRef="Sub_Margin" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:task id="V_DeliverQuote" name="Publish Formal Proposal" />
+    <bpmn:endEvent id="V_End" name="Proposal Archived" />
+    <bpmn:task id="V_EstimateLabor" name="Engineering Effort Review" />
+    <bpmn:task id="V_CheckParts" name="Supply Chain Check" />
+    <bpmn:sequenceFlow id="VF_1" sourceRef="V_Start" targetRef="V_Intake" />
+    <bpmn:sequenceFlow id="VF_2" sourceRef="V_Intake" targetRef="V_EstimateLabor" />
+    <bpmn:sequenceFlow id="VF_3" sourceRef="V_EstimateLabor" targetRef="V_CheckParts" />
+    <bpmn:sequenceFlow id="VF_4" sourceRef="V_CheckParts" targetRef="V_SubQuote" />
+    <bpmn:sequenceFlow id="VF_5" sourceRef="V_SubQuote" targetRef="V_DeliverQuote" />
+    <bpmn:sequenceFlow id="VF_6" sourceRef="V_DeliverQuote" targetRef="V_End" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Client_di" bpmnElement="Pool_Client">
+        <dc:Bounds x="100" y="80" width="1582" height="130" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Vendor_di" bpmnElement="Pool_Vendor">
+        <dc:Bounds x="100" y="270" width="1582" height="330" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Sales_di" bpmnElement="Lane_Sales">
+        <dc:Bounds x="130" y="270" width="1552" height="205" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Ops_di" bpmnElement="Lane_Ops">
+        <dc:Bounds x="130" y="475" width="1552" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Client_Start_di" bpmnElement="Client_Start">
+        <dc:Bounds x="150" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="127" y="173" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Client_Inquire_di" bpmnElement="Client_Inquire">
+        <dc:Bounds x="246" y="105" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Client_WaitQuote_di" bpmnElement="Client_WaitQuote">
+        <dc:Bounds x="1458" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1429" y="103" width="94" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Client_End_di" bpmnElement="Client_End">
+        <dc:Bounds x="1554" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1532" y="173" width="80" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_Start_di" bpmnElement="V_Start">
+        <dc:Bounds x="278" y="357" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="234" y="403" width="124" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_Intake_di" bpmnElement="V_Intake">
+        <dc:Bounds x="374" y="335" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_SubQuote_di" bpmnElement="V_SubQuote" isExpanded="true">
+        <dc:Bounds x="854" y="295" width="512" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="884" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="872" y="398" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Gather_di" bpmnElement="Sub_Gather">
+        <dc:Bounds x="980" y="330" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Margin_di" bpmnElement="Sub_Margin">
+        <dc:Bounds x="1140" y="330" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="1300" y="352" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1280" y="398" width="76" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_DeliverQuote_di" bpmnElement="V_DeliverQuote">
+        <dc:Bounds x="1426" y="335" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_End_di" bpmnElement="V_End">
+        <dc:Bounds x="1586" y="357" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1555" y="403" width="98" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_EstimateLabor_di" bpmnElement="V_EstimateLabor">
+        <dc:Bounds x="534" y="495" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="V_CheckParts_di" bpmnElement="V_CheckParts">
+        <dc:Bounds x="694" y="495" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="CF_1_di" bpmnElement="CF_1">
+        <di:waypoint x="186" y="145" />
+        <di:waypoint x="246" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_2_di" bpmnElement="CF_2">
+        <di:waypoint x="346" y="145" />
+        <di:waypoint x="1458" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_3_di" bpmnElement="CF_3">
+        <di:waypoint x="1494" y="145" />
+        <di:waypoint x="1554" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="920" y="370" />
+        <di:waypoint x="980" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="1080" y="370" />
+        <di:waypoint x="1140" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="1240" y="370" />
+        <di:waypoint x="1300" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_1_di" bpmnElement="VF_1">
+        <di:waypoint x="314" y="375" />
+        <di:waypoint x="374" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_2_di" bpmnElement="VF_2">
+        <di:waypoint x="474" y="375" />
+        <di:waypoint x="504" y="375" />
+        <di:waypoint x="504" y="535" />
+        <di:waypoint x="534" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_3_di" bpmnElement="VF_3">
+        <di:waypoint x="634" y="535" />
+        <di:waypoint x="694" y="535" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_4_di" bpmnElement="VF_4">
+        <di:waypoint x="794" y="535" />
+        <di:waypoint x="824" y="535" />
+        <di:waypoint x="824" y="375" />
+        <di:waypoint x="854" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_5_di" bpmnElement="VF_5">
+        <di:waypoint x="1366" y="375" />
+        <di:waypoint x="1426" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="VF_6_di" bpmnElement="VF_6">
+        <di:waypoint x="1526" y="375" />
+        <di:waypoint x="1586" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Inquiry_di" bpmnElement="MF_Inquiry">
+        <di:waypoint x="296" y="185" />
+        <di:waypoint x="296" y="357" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="306" y="247" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Proposal_di" bpmnElement="MF_Proposal">
+        <di:waypoint x="1476" y="335" />
+        <di:waypoint x="1476" y="163" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1486" y="242" width="114" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

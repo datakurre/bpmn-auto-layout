@@ -331,7 +331,6 @@ function sweepRankDummyBarycenter(
     const barycenter = neighborTracks.reduce((a, b) => a + b, 0) / neighborTracks.length;
     ctx.tracks.set(node.id, barycenter);
   }
-
   resolveRankCollisions(nodesInRank, ctx.tracks, graph);
 }
 
@@ -526,7 +525,9 @@ function resolveRankCollisions(
     if (oA !== oB) {
       return oA - oB;
     }
-    return a.id.localeCompare(b.id);
+    // Real BPMN nodes take priority over virtual dummy routing nodes: when tracks
+    // and orders tie, dummies sort last so they are pushed up, not the real node.
+    return Number(b.data?.isDummy) - Number(a.data?.isDummy);
   });
 
   for (let i = 1; i < regularNodes.length; i++) {

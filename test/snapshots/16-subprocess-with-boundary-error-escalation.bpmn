@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_BoundaryEscalation" isExecutable="false">
+    <bpmn:startEvent id="Start_1" name="Order Ingested" />
+    <bpmn:task id="Task_Init" name="Validate Cart" />
+    <bpmn:subProcess id="Sub_PaymentProcessing" name="Payment Processing Pipeline">
+      <bpmn:startEvent id="Sub_Start" name="Begin Charge" />
+      <bpmn:task id="Sub_Auth" name="Authorize Card" />
+      <bpmn:task id="Sub_Capture" name="Capture Funds" />
+      <bpmn:endEvent id="Sub_End" name="Charge Success" />
+      <bpmn:sequenceFlow id="SF_1" sourceRef="Sub_Start" targetRef="Sub_Auth" />
+      <bpmn:sequenceFlow id="SF_2" sourceRef="Sub_Auth" targetRef="Sub_Capture" />
+      <bpmn:sequenceFlow id="SF_3" sourceRef="Sub_Capture" targetRef="Sub_End" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="Boundary_PaymentError" name="Payment Failed" attachedToRef="Sub_PaymentProcessing">
+      <bpmn:errorEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_Rollback" name="Rollback Reserved Stock" />
+    <bpmn:endEvent id="End_Failed" name="Order Terminated">
+      <bpmn:errorEventDefinition />
+    </bpmn:endEvent>
+    <bpmn:boundaryEvent id="Boundary_SlowTimer" name="Gateway Latency SLA" cancelActivity="false" attachedToRef="Sub_PaymentProcessing">
+      <bpmn:timerEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_NotifyOps" name="Alert Operations Team" />
+    <bpmn:exclusiveGateway id="Gate_MergeDownstream" name="Sync Point" />
+    <bpmn:task id="Task_Confirm" name="Send Order Confirmation" />
+    <bpmn:endEvent id="End_Success" name="Order Fulfilled" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_1" targetRef="Task_Init" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Init" targetRef="Sub_PaymentProcessing" />
+    <bpmn:sequenceFlow id="Flow_Normal" sourceRef="Sub_PaymentProcessing" targetRef="Gate_MergeDownstream" />
+    <bpmn:sequenceFlow id="Flow_Merge" sourceRef="Gate_MergeDownstream" targetRef="Task_Confirm" />
+    <bpmn:sequenceFlow id="Flow_Done" sourceRef="Task_Confirm" targetRef="End_Success" />
+    <bpmn:sequenceFlow id="Flow_Err" sourceRef="Boundary_PaymentError" targetRef="Task_Rollback" />
+    <bpmn:sequenceFlow id="Flow_Err_End" sourceRef="Task_Rollback" targetRef="End_Failed" />
+    <bpmn:sequenceFlow id="Flow_Slow" sourceRef="Boundary_SlowTimer" targetRef="Task_NotifyOps" />
+    <bpmn:sequenceFlow id="Flow_Slow_Rejoin" sourceRef="Task_NotifyOps" targetRef="Gate_MergeDownstream" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Process_BoundaryEscalation">
+      <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
+        <dc:Bounds x="100" y="122" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="79" y="168" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Init_di" bpmnElement="Task_Init">
+        <dc:Bounds x="196" y="100" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_PaymentProcessing_di" bpmnElement="Sub_PaymentProcessing" isExpanded="true">
+        <dc:Bounds x="356" y="60" width="512" height="160" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
+        <dc:Bounds x="386" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="368" y="163" width="72" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Auth_di" bpmnElement="Sub_Auth">
+        <dc:Bounds x="482" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Capture_di" bpmnElement="Sub_Capture">
+        <dc:Bounds x="642" y="95" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
+        <dc:Bounds x="802" y="117" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="777" y="163" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Rollback_di" bpmnElement="Task_Rollback">
+        <dc:Bounds x="1024" y="280" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Failed_di" bpmnElement="End_Failed">
+        <dc:Bounds x="1326" y="302" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1298" y="348" width="92" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_NotifyOps_di" bpmnElement="Task_NotifyOps">
+        <dc:Bounds x="1024" y="520" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_MergeDownstream_di" bpmnElement="Gate_MergeDownstream">
+        <dc:Bounds x="1184" y="415" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1118" y="433" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Confirm_di" bpmnElement="Task_Confirm">
+        <dc:Bounds x="1294" y="400" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Success_di" bpmnElement="End_Success">
+        <dc:Bounds x="1454" y="422" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1433" y="468" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_PaymentError_di" bpmnElement="Boundary_PaymentError">
+        <dc:Bounds x="822" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="855" y="235" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_SlowTimer_di" bpmnElement="Boundary_SlowTimer">
+        <dc:Bounds x="366" y="202" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="399" y="235" width="120" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="422" y="135" />
+        <di:waypoint x="482" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="582" y="135" />
+        <di:waypoint x="642" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="742" y="135" />
+        <di:waypoint x="802" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Merge_di" bpmnElement="Flow_Merge">
+        <di:waypoint x="1234" y="440" />
+        <di:waypoint x="1294" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Normal_di" bpmnElement="Flow_Normal">
+        <di:waypoint x="868" y="140" />
+        <di:waypoint x="1209" y="140" />
+        <di:waypoint x="1209" y="415" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Slow_Rejoin_di" bpmnElement="Flow_Slow_Rejoin">
+        <di:waypoint x="1124" y="560" />
+        <di:waypoint x="1209" y="560" />
+        <di:waypoint x="1209" y="465" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="296" y="140" />
+        <di:waypoint x="356" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Done_di" bpmnElement="Flow_Done">
+        <di:waypoint x="1394" y="440" />
+        <di:waypoint x="1454" y="440" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Err_di" bpmnElement="Flow_Err">
+        <di:waypoint x="840" y="238" />
+        <di:waypoint x="840" y="320" />
+        <di:waypoint x="1024" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Err_End_di" bpmnElement="Flow_Err_End">
+        <di:waypoint x="1124" y="320" />
+        <di:waypoint x="1326" y="320" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Slow_di" bpmnElement="Flow_Slow">
+        <di:waypoint x="384" y="238" />
+        <di:waypoint x="384" y="560" />
+        <di:waypoint x="1024" y="560" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

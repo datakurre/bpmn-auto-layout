@@ -723,6 +723,45 @@ function alignTerminalBoundaryRanks(
   }
 }
 
+function clearMergeCorridorObstacles(graph: DirectedGraph, ranks: Map<string, number>): void {
+  for (const node of graph.getNodes()) {
+    const inEdges = graph.inEdges(node.id).filter((e) => !e.id.startsWith('_attach_'));
+    if (inEdges.length < 2) {
+      continue;
+    }
+    const nodeRank = ranks.get(node.id)!;
+
+    const hasLongIncoming = inEdges.some((e) => {
+      const srcRank = ranks.get(e.source);
+      return srcRank !== undefined && nodeRank - srcRank >= 2;
+    });
+    if (!hasLongIncoming) {
+      continue;
+    }
+
+    for (const other of graph.getNodes()) {
+      if (other.id === node.id) {
+        continue;
+      }
+      if (other.data?.$type === 'bpmn:EndEvent' && graph.outEdges(other.id).length === 0) {
+        const otherRank = ranks.get(other.id);
+        if (otherRank === nodeRank) {
+          ranks.set(other.id, nodeRank + 1);
+        }
+      }
+    }
+  }
+}
+
+function alignScopeEndEvents(graph: DirectedGraph, ranks: Map<string, number>): void {
+  const maxRank = Math.max(0, ...ranks.values());
+  for (const node of graph.getNodes()) {
+    if (node.data?.$type === 'bpmn:EndEvent' && graph.outEdges(node.id).length === 0) {
+      ranks.set(node.id, maxRank);
+    }
+  }
+}
+
 function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const {
     scopeElement,
@@ -741,6 +780,10 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const feedbackEdges = findFeedbackEdges(graph);
   const ranks = assignLayers(graph, feedbackEdges);
   alignTerminalBoundaryRanks(boundaryEvents, graph, ranks);
+  clearMergeCorridorObstacles(graph, ranks);
+  if (options?.alignEndEvents) {
+    alignScopeEndEvents(graph, ranks);
+  }
   const nodeToLane = extractNodeToLaneMap(scopeElement);
 
   const { augmentedGraph, augmentedRanks } = insertDummyNodes(graph, ranks, {

@@ -25,47 +25,47 @@
   <bpmndi:BPMNDiagram id="BPMNDiagram_1">
     <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
       <bpmndi:BPMNShape id="Pool_Order_di" bpmnElement="Pool_Order">
-        <dc:Bounds x="100" y="80" width="572" height="240" />
+        <dc:Bounds x="100" y="80" width="572" height="250" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Buyer_di" bpmnElement="Lane_Buyer">
-        <dc:Bounds x="130" y="80" width="542" height="120" />
+        <dc:Bounds x="130" y="80" width="542" height="125" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Lane_Approver_di" bpmnElement="Lane_Approver">
-        <dc:Bounds x="130" y="200" width="542" height="120" />
+        <dc:Bounds x="130" y="205" width="542" height="125" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
-        <dc:Bounds x="180" y="122" width="36" height="36" />
+        <dc:Bounds x="180" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="162" y="168" width="72" height="14" />
+          <dc:Bounds x="162" y="173" width="72" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Submit_di" bpmnElement="Task_Submit">
-        <dc:Bounds x="276" y="100" width="100" height="80" />
+        <dc:Bounds x="276" y="105" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Approve_di" bpmnElement="Task_Approve">
-        <dc:Bounds x="436" y="220" width="100" height="80" />
+        <dc:Bounds x="436" y="225" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
-        <dc:Bounds x="596" y="122" width="36" height="36" />
+        <dc:Bounds x="596" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="570" y="168" width="88" height="14" />
+          <dc:Bounds x="570" y="173" width="88" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
-        <di:waypoint x="216" y="140" />
-        <di:waypoint x="276" y="140" />
+        <di:waypoint x="216" y="145" />
+        <di:waypoint x="276" y="145" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Cross_1_di" bpmnElement="Flow_Cross_1">
-        <di:waypoint x="376" y="140" />
-        <di:waypoint x="406" y="140" />
-        <di:waypoint x="406" y="260" />
-        <di:waypoint x="436" y="260" />
+        <di:waypoint x="376" y="145" />
+        <di:waypoint x="406" y="145" />
+        <di:waypoint x="406" y="265" />
+        <di:waypoint x="436" y="265" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Cross_2_di" bpmnElement="Flow_Cross_2">
-        <di:waypoint x="536" y="260" />
-        <di:waypoint x="566" y="260" />
-        <di:waypoint x="566" y="140" />
-        <di:waypoint x="596" y="140" />
+        <di:waypoint x="536" y="265" />
+        <di:waypoint x="566" y="265" />
+        <di:waypoint x="566" y="145" />
+        <di:waypoint x="596" y="145" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

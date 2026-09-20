@@ -360,6 +360,49 @@ interface DirectIncomingLeftOptions {
   allBounds?: Bounds[];
 }
 
+interface IncomingStepContext {
+  exitX: number;
+  exitY: number;
+  entryY: number;
+  stepXOffset: number;
+  obstacles: Bounds[];
+}
+
+function findClearIncomingStepX(initialStepX: number, ctx: IncomingStepContext): number {
+  let stepX = initialStepX;
+  let blockingX = Infinity;
+  for (const b of ctx.obstacles) {
+    if (b.x > ctx.exitX && b.x < stepX && ctx.exitY > b.y && ctx.exitY < b.y + b.height) {
+      blockingX = Math.min(blockingX, b.x);
+    }
+  }
+  if (blockingX < Infinity) {
+    const candidate = blockingX - 20 + ctx.stepXOffset;
+    if (candidate > ctx.exitX) {
+      stepX = candidate;
+    }
+  }
+  const minY = Math.min(ctx.exitY, ctx.entryY);
+  const maxY = Math.max(ctx.exitY, ctx.entryY);
+  let vBlockX = Infinity;
+  for (const b of ctx.obstacles) {
+    if (
+      stepX > b.x &&
+      stepX < b.x + b.width &&
+      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
+    ) {
+      vBlockX = Math.min(vBlockX, b.x);
+    }
+  }
+  if (vBlockX < Infinity) {
+    const candidate = vBlockX - 20 + ctx.stepXOffset;
+    if (candidate > ctx.exitX) {
+      stepX = candidate;
+    }
+  }
+  return stepX;
+}
+
 function routeDirectIncomingLeft(
   src: Bounds,
   gw: Bounds,
@@ -376,7 +419,16 @@ function routeDirectIncomingLeft(
   }
 
   const baseStepX = entryX - exitX > 100 ? entryX - 30 : Math.round((exitX + entryX) / 2);
-  const stepX = baseStepX + opts.stepXOffset;
+  const rawStepX = baseStepX + opts.stepXOffset;
+  const obstacles = opts.allBounds ? getOtherObstacles({ allBounds: opts.allBounds, gw }, src) : [];
+  const stepX = findClearIncomingStepX(rawStepX, {
+    exitX,
+    exitY,
+    entryY,
+    stepXOffset: opts.stepXOffset,
+    obstacles,
+  });
+
   return [
     { x: exitX, y: exitY },
     { x: stepX, y: exitY },

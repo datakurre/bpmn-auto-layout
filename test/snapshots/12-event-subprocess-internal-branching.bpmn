@@ -106,7 +106,7 @@
         <di:waypoint x="251" y="435" />
         <di:waypoint x="336" y="435" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="261" y="381" width="28" height="14" />
+          <dc:Bounds x="259" y="381" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SubFlow_4_di" bpmnElement="SubFlow_4">

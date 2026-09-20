@@ -1,0 +1,372 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Policyholder" name="Policyholder" processRef="Proc_Policyholder" />
+    <bpmn:participant id="Pool_Insurer" name="Insurance Corporation" processRef="Proc_Insurer" />
+    <bpmn:messageFlow id="MF_ClaimDoc" name="Loss Notice &#38; Proof" sourceRef="Cust_Submit" targetRef="Ins_Start" />
+    <bpmn:messageFlow id="MF_Rejection" name="Coverage Denial" sourceRef="Task_RejectClaim" targetRef="Cust_WaitNotice" />
+    <bpmn:messageFlow id="MF_Wire" name="Direct Deposit Receipt" sourceRef="Task_Disburse" targetRef="Cust_ReceiveFunds" />
+  </bpmn:collaboration>
+  <bpmn:process id="Proc_Policyholder" isExecutable="false">
+    <bpmn:startEvent id="Cust_Start" name="Accident Occurs" />
+    <bpmn:task id="Cust_Submit" name="Submit Claim Dossier" />
+    <bpmn:eventBasedGateway id="Cust_AwaitOutcome" name="Await Insurer Decision" />
+    <bpmn:intermediateCatchEvent id="Cust_WaitNotice" name="Receive Ineligibility Notice" />
+    <bpmn:intermediateCatchEvent id="Cust_ReceiveFunds" name="Receive Indemnity Payout" />
+    <bpmn:endEvent id="Cust_End_Denied" name="Coverage Denied" />
+    <bpmn:endEvent id="Cust_End_Paid" name="Claim Settled" />
+    <bpmn:sequenceFlow id="CF_1" sourceRef="Cust_Start" targetRef="Cust_Submit" />
+    <bpmn:sequenceFlow id="CF_2" sourceRef="Cust_Submit" targetRef="Cust_AwaitOutcome" />
+    <bpmn:sequenceFlow id="CF_3" sourceRef="Cust_AwaitOutcome" targetRef="Cust_WaitNotice" />
+    <bpmn:sequenceFlow id="CF_4" sourceRef="Cust_WaitNotice" targetRef="Cust_End_Denied" />
+    <bpmn:sequenceFlow id="CF_5" sourceRef="Cust_AwaitOutcome" targetRef="Cust_ReceiveFunds" />
+    <bpmn:sequenceFlow id="CF_6" sourceRef="Cust_ReceiveFunds" targetRef="Cust_End_Paid" />
+  </bpmn:process>
+  <bpmn:process id="Proc_Insurer" name="Insurance Enterprise" isExecutable="false">
+    <bpmn:laneSet id="Proc_Insurer_LaneSet">
+      <bpmn:lane id="Lane_Intake" name="Claims Intake &#38; Triage">
+        <bpmn:flowNodeRef>Ins_Start</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ValidatePolicy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gate_ValidPolicy</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RejectClaim</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_ClaimRejected</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Assessment" name="Assessment &#38; Appraisal">
+        <bpmn:flowNodeRef>Task_AssignAdjuster</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Sub_Appraisal</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Boundary_Timeout</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ExpediteReview</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Settlement" name="Settlement &#38; Finance">
+        <bpmn:flowNodeRef>Gate_Approval</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Disburse</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Settled</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Ins_Start" name="Claim Notice Received" />
+    <bpmn:task id="Task_ValidatePolicy" name="Verify Coverage Eligibility" />
+    <bpmn:exclusiveGateway id="Gate_ValidPolicy" name="Policy Active &#38; In-Force?" />
+    <bpmn:task id="Task_RejectClaim" name="Issue Rejection Letter" />
+    <bpmn:endEvent id="End_ClaimRejected" name="Claim Ineligible" />
+    <bpmn:task id="Task_AssignAdjuster" name="Assign Field Adjuster" />
+    <bpmn:subProcess id="Sub_Appraisal" name="Damage Appraisal &#38; Forensics">
+      <bpmn:startEvent id="Sub_ApprStart" name="Begin Inspection" />
+      <bpmn:task id="Sub_Inspect" name="Physical Damage Inspection" />
+      <bpmn:exclusiveGateway id="Gate_Fraud" name="Fraud Flags Raised?" />
+      <bpmn:task id="Sub_FraudCheck" name="Special Investigation Audit" />
+      <bpmn:task id="Sub_Estimate" name="Calculate Repair Estimate" />
+      <bpmn:exclusiveGateway id="Gate_FraudMerge" name="Audit Complete" />
+      <bpmn:endEvent id="Sub_ApprEnd" name="Appraisal Ready" />
+      <bpmn:sequenceFlow id="AF_1" sourceRef="Sub_ApprStart" targetRef="Sub_Inspect" />
+      <bpmn:sequenceFlow id="AF_2" sourceRef="Sub_Inspect" targetRef="Gate_Fraud" />
+      <bpmn:sequenceFlow id="AF_3" name="Flagged" sourceRef="Gate_Fraud" targetRef="Sub_FraudCheck" />
+      <bpmn:sequenceFlow id="AF_4" name="Clear" sourceRef="Gate_Fraud" targetRef="Sub_Estimate" />
+      <bpmn:sequenceFlow id="AF_5" sourceRef="Sub_FraudCheck" targetRef="Gate_FraudMerge" />
+      <bpmn:sequenceFlow id="AF_6" sourceRef="Sub_Estimate" targetRef="Gate_FraudMerge" />
+      <bpmn:sequenceFlow id="AF_7" sourceRef="Gate_FraudMerge" targetRef="Sub_ApprEnd" />
+    </bpmn:subProcess>
+    <bpmn:boundaryEvent id="Boundary_Timeout" name="Inspection Overdue SLA" attachedToRef="Sub_Appraisal">
+      <bpmn:timerEventDefinition />
+    </bpmn:boundaryEvent>
+    <bpmn:task id="Task_ExpediteReview" name="Desk Adjuster Fast-Track" />
+    <bpmn:exclusiveGateway id="Gate_Approval" name="Settlement Approved?" />
+    <bpmn:task id="Task_Disburse" name="Execute Wire Transfer" />
+    <bpmn:endEvent id="End_Settled" name="Claim Indemnified" />
+    <bpmn:sequenceFlow id="IF_1" sourceRef="Ins_Start" targetRef="Task_ValidatePolicy" />
+    <bpmn:sequenceFlow id="IF_2" sourceRef="Task_ValidatePolicy" targetRef="Gate_ValidPolicy" />
+    <bpmn:sequenceFlow id="IF_NoPolicy" name="No" sourceRef="Gate_ValidPolicy" targetRef="Task_RejectClaim" />
+    <bpmn:sequenceFlow id="IF_RejectDone" sourceRef="Task_RejectClaim" targetRef="End_ClaimRejected" />
+    <bpmn:sequenceFlow id="IF_YesPolicy" name="Yes" sourceRef="Gate_ValidPolicy" targetRef="Task_AssignAdjuster" />
+    <bpmn:sequenceFlow id="IF_ToAppraisal" sourceRef="Task_AssignAdjuster" targetRef="Sub_Appraisal" />
+    <bpmn:sequenceFlow id="IF_ToApproval" sourceRef="Sub_Appraisal" targetRef="Gate_Approval" />
+    <bpmn:sequenceFlow id="IF_Timeout" sourceRef="Boundary_Timeout" targetRef="Task_ExpediteReview" />
+    <bpmn:sequenceFlow id="IF_ExpediteJoin" sourceRef="Task_ExpediteReview" targetRef="Gate_Approval" />
+    <bpmn:sequenceFlow id="IF_Approved" name="Authorized" sourceRef="Gate_Approval" targetRef="Task_Disburse" />
+    <bpmn:sequenceFlow id="IF_Disbursed" sourceRef="Task_Disburse" targetRef="End_Settled" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Policyholder_di" bpmnElement="Pool_Policyholder">
+        <dc:Bounds x="100" y="80" width="2118" height="228" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Pool_Insurer_di" bpmnElement="Pool_Insurer">
+        <dc:Bounds x="100" y="368" width="2118" height="700" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Intake_di" bpmnElement="Lane_Intake">
+        <dc:Bounds x="130" y="368" width="2088" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Assessment_di" bpmnElement="Lane_Assessment">
+        <dc:Bounds x="130" y="493" width="2088" height="450" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Settlement_di" bpmnElement="Lane_Settlement">
+        <dc:Bounds x="130" y="943" width="2088" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
+        <dc:Bounds x="150" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="124" y="173" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_Submit_di" bpmnElement="Cust_Submit">
+        <dc:Bounds x="246" y="105" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_AwaitOutcome_di" bpmnElement="Cust_AwaitOutcome">
+        <dc:Bounds x="406" y="120" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="371" y="100" width="120" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_WaitNotice_di" bpmnElement="Cust_WaitNotice">
+        <dc:Bounds x="676" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="622" y="103" width="144" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_ReceiveFunds_di" bpmnElement="Cust_ReceiveFunds">
+        <dc:Bounds x="1994" y="247" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1943" y="223" width="138" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_End_Denied_di" bpmnElement="Cust_End_Denied">
+        <dc:Bounds x="772" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="745" y="173" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Cust_End_Paid_di" bpmnElement="Cust_End_Paid">
+        <dc:Bounds x="2090" y="247" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2071" y="293" width="74" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Ins_Start_di" bpmnElement="Ins_Start">
+        <dc:Bounds x="278" y="415" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="235" y="461" width="122" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ValidatePolicy_di" bpmnElement="Task_ValidatePolicy">
+        <dc:Bounds x="374" y="393" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_ValidPolicy_di" bpmnElement="Gate_ValidPolicy">
+        <dc:Bounds x="534" y="408" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="491" y="388" width="136" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RejectClaim_di" bpmnElement="Task_RejectClaim">
+        <dc:Bounds x="644" y="393" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ClaimRejected_di" bpmnElement="End_ClaimRejected">
+        <dc:Bounds x="1152" y="415" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1127" y="461" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AssignAdjuster_di" bpmnElement="Task_AssignAdjuster">
+        <dc:Bounds x="644" y="608" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Appraisal_di" bpmnElement="Sub_Appraisal" isExpanded="true">
+        <dc:Bounds x="804" y="513" width="732" height="270" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_ApprStart_di" bpmnElement="Sub_ApprStart">
+        <dc:Bounds x="834" y="570" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="807" y="616" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Inspect_di" bpmnElement="Sub_Inspect">
+        <dc:Bounds x="930" y="548" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Fraud_di" bpmnElement="Gate_Fraud">
+        <dc:Bounds x="1090" y="563" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1060" y="543" width="110" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_FraudCheck_di" bpmnElement="Sub_FraudCheck">
+        <dc:Bounds x="1200" y="548" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_Estimate_di" bpmnElement="Sub_Estimate">
+        <dc:Bounds x="1200" y="668" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_FraudMerge_di" bpmnElement="Gate_FraudMerge">
+        <dc:Bounds x="1360" y="563" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1344" y="543" width="82" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Sub_ApprEnd_di" bpmnElement="Sub_ApprEnd">
+        <dc:Bounds x="1470" y="570" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1444" y="616" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ExpediteReview_di" bpmnElement="Task_ExpediteReview">
+        <dc:Bounds x="1594" y="843" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gate_Approval_di" bpmnElement="Gate_Approval">
+        <dc:Bounds x="1852" y="978" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1819" y="1034" width="116" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Disburse_di" bpmnElement="Task_Disburse">
+        <dc:Bounds x="1962" y="963" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Settled_di" bpmnElement="End_Settled">
+        <dc:Bounds x="2122" y="985" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2091" y="1031" width="98" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Timeout_di" bpmnElement="Boundary_Timeout">
+        <dc:Bounds x="1152" y="765" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1185" y="798" width="128" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="CF_3_di" bpmnElement="CF_3">
+        <di:waypoint x="456" y="145" />
+        <di:waypoint x="676" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_5_di" bpmnElement="CF_5">
+        <di:waypoint x="431" y="170" />
+        <di:waypoint x="431" y="265" />
+        <di:waypoint x="1994" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_2_di" bpmnElement="CF_2">
+        <di:waypoint x="346" y="145" />
+        <di:waypoint x="406" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_1_di" bpmnElement="CF_1">
+        <di:waypoint x="186" y="145" />
+        <di:waypoint x="246" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_4_di" bpmnElement="CF_4">
+        <di:waypoint x="712" y="145" />
+        <di:waypoint x="772" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="CF_6_di" bpmnElement="CF_6">
+        <di:waypoint x="2030" y="265" />
+        <di:waypoint x="2090" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_3_di" bpmnElement="AF_3">
+        <di:waypoint x="1140" y="588" />
+        <di:waypoint x="1200" y="588" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1145" y="564" width="46" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_4_di" bpmnElement="AF_4">
+        <di:waypoint x="1115" y="613" />
+        <di:waypoint x="1115" y="708" />
+        <di:waypoint x="1200" y="708" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1123" y="654" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_7_di" bpmnElement="AF_7">
+        <di:waypoint x="1410" y="588" />
+        <di:waypoint x="1470" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_2_di" bpmnElement="AF_2">
+        <di:waypoint x="1030" y="588" />
+        <di:waypoint x="1090" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_5_di" bpmnElement="AF_5">
+        <di:waypoint x="1300" y="588" />
+        <di:waypoint x="1360" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_6_di" bpmnElement="AF_6">
+        <di:waypoint x="1300" y="708" />
+        <di:waypoint x="1385" y="708" />
+        <di:waypoint x="1385" y="613" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_1_di" bpmnElement="AF_1">
+        <di:waypoint x="870" y="588" />
+        <di:waypoint x="930" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_NoPolicy_di" bpmnElement="IF_NoPolicy">
+        <di:waypoint x="584" y="433" />
+        <di:waypoint x="644" y="433" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="602" y="409" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_YesPolicy_di" bpmnElement="IF_YesPolicy">
+        <di:waypoint x="559" y="458" />
+        <di:waypoint x="559" y="648" />
+        <di:waypoint x="644" y="648" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="567" y="546" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_Approved_di" bpmnElement="IF_Approved">
+        <di:waypoint x="1902" y="1003" />
+        <di:waypoint x="1962" y="1003" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1901" y="979" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_2_di" bpmnElement="IF_2">
+        <di:waypoint x="474" y="433" />
+        <di:waypoint x="534" y="433" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_ToApproval_di" bpmnElement="IF_ToApproval">
+        <di:waypoint x="1536" y="648" />
+        <di:waypoint x="1877" y="648" />
+        <di:waypoint x="1877" y="978" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_ExpediteJoin_di" bpmnElement="IF_ExpediteJoin">
+        <di:waypoint x="1694" y="883" />
+        <di:waypoint x="1822" y="883" />
+        <di:waypoint x="1822" y="1003" />
+        <di:waypoint x="1852" y="1003" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_1_di" bpmnElement="IF_1">
+        <di:waypoint x="314" y="433" />
+        <di:waypoint x="374" y="433" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_RejectDone_di" bpmnElement="IF_RejectDone">
+        <di:waypoint x="744" y="433" />
+        <di:waypoint x="1152" y="433" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_ToAppraisal_di" bpmnElement="IF_ToAppraisal">
+        <di:waypoint x="744" y="648" />
+        <di:waypoint x="804" y="648" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_Timeout_di" bpmnElement="IF_Timeout">
+        <di:waypoint x="1170" y="801" />
+        <di:waypoint x="1170" y="883" />
+        <di:waypoint x="1594" y="883" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="IF_Disbursed_di" bpmnElement="IF_Disbursed">
+        <di:waypoint x="2062" y="1003" />
+        <di:waypoint x="2122" y="1003" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_ClaimDoc_di" bpmnElement="MF_ClaimDoc">
+        <di:waypoint x="296" y="185" />
+        <di:waypoint x="296" y="415" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="306" y="293" width="106" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Rejection_di" bpmnElement="MF_Rejection">
+        <di:waypoint x="694" y="393" />
+        <di:waypoint x="694" y="163" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="704" y="271" width="88" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="MF_Wire_di" bpmnElement="MF_Wire">
+        <di:waypoint x="2012" y="963" />
+        <di:waypoint x="2012" y="283" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2022" y="616" width="118" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

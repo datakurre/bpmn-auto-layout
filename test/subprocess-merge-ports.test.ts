@@ -130,4 +130,33 @@ describe('subprocess-layout merge port assignment', () => {
     // F_ToSingle is skipped because single incoming
     expect(targetPortMap.has('F_ToSingle')).toBe(false);
   });
+
+  it('aligns all scope end events to maxRank when alignEndEvents option is enabled', async () => {
+    const { BpmnBuilder, layoutProcess } = await import('../src');
+    const builder = new BpmnBuilder('Process_AlignEnd');
+    builder
+      .addStartEvent('Start_1', 'Start')
+      .addTask('Task_1', 'Task 1')
+      .addEndEvent('End_Early', 'Early End')
+      .addTask('Task_2', 'Task 2')
+      .addEndEvent('End_Late', 'Late End')
+      .addSequenceFlow('F1', 'Start_1', 'Task_1')
+      .addSequenceFlow('F2', 'Task_1', 'End_Early')
+      .addSequenceFlow('F3', 'Task_1', 'Task_2')
+      .addSequenceFlow('F4', 'Task_2', 'End_Late');
+
+    const inputXml = await builder.toXml();
+    const resultXml = await layoutProcess(inputXml, { alignEndEvents: true });
+    expect(resultXml).toContain('End_Early_di');
+    expect(resultXml).toContain('End_Late_di');
+
+    // With alignEndEvents: true, End_Early and End_Late should have the same X coordinate (maxRank)
+    const earlyMatch = resultXml.match(/End_Early_di[\s\S]*?<dc:Bounds ([^>]+)/);
+    const lateMatch = resultXml.match(/End_Late_di[\s\S]*?<dc:Bounds ([^>]+)/);
+    expect(earlyMatch).toBeTruthy();
+    expect(lateMatch).toBeTruthy();
+    const earlyX = earlyMatch![1].match(/x="([^"]+)"/)![1];
+    const lateX = lateMatch![1].match(/x="([^"]+)"/)![1];
+    expect(earlyX).toBe(lateX);
+  });
 });

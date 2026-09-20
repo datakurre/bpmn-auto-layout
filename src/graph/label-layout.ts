@@ -26,6 +26,7 @@ export interface LabelLayoutContext {
   shapes: PlacedShape[];
   edges: PlacedEdge[];
   lanes?: Array<{ element: any; bounds: Bounds }>;
+  pools?: Array<{ element: any; bounds: Bounds }>;
 }
 
 export interface CollisionContext {
@@ -35,6 +36,7 @@ export interface CollisionContext {
   ignoreElementId?: string;
   attachedToHostId?: string;
   lanes?: Array<{ element: any; bounds: Bounds }>;
+  pools?: Array<{ element: any; bounds: Bounds }>;
 }
 
 export function isEvent(element: any): boolean {
@@ -287,16 +289,22 @@ function doesBoxCollideWithEdges(box: Bounds, cctx: CollisionContext): boolean {
   return false;
 }
 
-export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
+function doesBoxCollideWithShapes(box: Bounds, cctx: CollisionContext): boolean {
   for (const s of cctx.shapes) {
     if (s.element.id === cctx.ignoreElementId) {
       continue;
     }
     const t = s.element?.$type;
-    if (t === 'bpmn:Participant' || t === 'bpmn:Lane' || s.isExpanded) {
+    if (t === 'bpmn:Participant' || t === 'bpmn:Lane') {
+      if (doesBoxCollideWithContainerBoundaries(box, s.bounds)) {
+        return true;
+      }
+      continue;
+    }
+    if (s.isExpanded) {
       if (
-        s.element.id !== cctx.attachedToHostId &&
-        doesBoxCollideWithContainerBoundaries(box, s.bounds)
+        doesBoxCollideWithContainerBoundaries(box, s.bounds) ||
+        (s.element.id === cctx.attachedToHostId && boxesOverlap(box, s.bounds))
       ) {
         return true;
       }
@@ -306,13 +314,36 @@ export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
       return true;
     }
   }
+  return false;
+}
 
+function doesBoxCollideWithContainers(box: Bounds, cctx: CollisionContext): boolean {
   if (cctx.lanes) {
     for (const lane of cctx.lanes) {
       if (doesBoxCollideWithContainerBoundaries(box, lane.bounds)) {
         return true;
       }
     }
+  }
+
+  if (cctx.pools) {
+    for (const pool of cctx.pools) {
+      if (doesBoxCollideWithContainerBoundaries(box, pool.bounds)) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
+  if (doesBoxCollideWithShapes(box, cctx)) {
+    return true;
+  }
+
+  if (doesBoxCollideWithContainers(box, cctx)) {
+    return true;
   }
 
   if (doesBoxCollideWithEdges(box, cctx)) {
@@ -544,6 +575,7 @@ export function layoutElementLabel(
     ignoreElementId: shape.element.id,
     attachedToHostId: hostId,
     lanes: ctx.lanes,
+    pools: ctx.pools,
   };
   const pctx: PlacementContext = { shape, margin, cctx };
 
@@ -564,16 +596,17 @@ export interface PathLabelGeom {
 
 export function computePathSegmentLabel(
   geom: PathLabelGeom,
-  side: 'top' | 'bottom' | 'right' | 'left'
+  side: 'top' | 'bottom' | 'right' | 'left',
+  fraction = 0.5
 ): Bounds {
   const { p1, p2, dim, margin, text } = geom;
   const isHorizontal = p1.y === p2.y;
   const shift = computeLabelVisualShift(text);
-  const mx = Math.round((p1.x + p2.x) / 2) - shift;
-  const my = Math.round((p1.y + p2.y) / 2);
+  const mx = Math.round(p1.x + (p2.x - p1.x) * fraction) - shift;
+  const my = Math.round(p1.y + (p2.y - p1.y) * fraction);
 
   if (isHorizontal) {
-    const y = side === 'top' ? p1.y - margin - dim.height : p1.y + margin;
+    const y = side === 'top' ? my - margin - dim.height : my + margin;
     return {
       x: mx - dim.width / 2,
       y,
@@ -582,13 +615,31 @@ export function computePathSegmentLabel(
     };
   }
 
-  const x = side === 'right' ? p1.x + margin : p1.x - margin - dim.width;
+  const x = side === 'right' ? mx + margin : mx - margin - dim.width;
   return {
     x,
     y: my - dim.height / 2,
     width: dim.width,
     height: dim.height,
   };
+}
+
+const PATH_LABEL_FRACTIONS = [0.5, 0.4, 0.6, 0.3, 0.7, 0.25, 0.75];
+
+function findClearPathLabelPlacement(
+  geom: PathLabelGeom,
+  sides: Array<'top' | 'bottom' | 'right' | 'left'>,
+  cctx: CollisionContext
+): Bounds | undefined {
+  for (const fraction of PATH_LABEL_FRACTIONS) {
+    for (const side of sides) {
+      const candidate = computePathSegmentLabel(geom, side, fraction);
+      if (!doesBoxCollide(candidate, cctx)) {
+        return candidate;
+      }
+    }
+  }
+  return undefined;
 }
 
 export function layoutPathLabel(
@@ -627,26 +678,25 @@ export function layoutPathLabel(
     placedLabels,
     ignoreElementId: edge.element.id,
     lanes: ctx.lanes,
+    pools: ctx.pools,
   };
 
   for (const text of wrapCandidates) {
     const dim = estimateLabelDimensions(text);
     const geom: PathLabelGeom = { p1, p2, dim, margin, text };
-    for (const side of sides) {
-      const candidate = computePathSegmentLabel(geom, side);
-      if (!doesBoxCollide(candidate, cctx)) {
-        edge.labelBounds = candidate;
-        edge.element.name = text;
-        placedLabels.push(candidate);
-        return;
-      }
+    const clearPlacement = findClearPathLabelPlacement(geom, sides, cctx);
+    if (clearPlacement) {
+      edge.labelBounds = clearPlacement;
+      edge.element.name = text;
+      placedLabels.push(clearPlacement);
+      return;
     }
   }
 
   const fallbackText = wrapCandidates[0];
   const dim = estimateLabelDimensions(fallbackText);
   const geom: PathLabelGeom = { p1, p2, dim, margin, text: fallbackText };
-  const fallbackBounds = computePathSegmentLabel(geom, sides[0]);
+  const fallbackBounds = computePathSegmentLabel(geom, sides[0], 0.5);
   edge.labelBounds = fallbackBounds;
   placedLabels.push(fallbackBounds);
 }
