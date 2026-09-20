@@ -377,7 +377,7 @@ function findClearIncomingStepX(initialStepX: number, ctx: IncomingStepContext):
     }
   }
   if (blockingX < Infinity) {
-    const candidate = blockingX - 20 + ctx.stepXOffset;
+    const candidate = Math.min(ctx.exitX + 20, blockingX - 20) + ctx.stepXOffset;
     if (candidate > ctx.exitX) {
       stepX = candidate;
     }

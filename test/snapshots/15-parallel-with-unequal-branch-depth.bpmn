@@ -158,8 +158,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_B3_Out_di" bpmnElement="Flow_B3_Out">
         <di:waypoint x="1298" y="460" />
-        <di:waypoint x="1338" y="460" />
-        <di:waypoint x="1338" y="180" />
+        <di:waypoint x="1318" y="460" />
+        <di:waypoint x="1318" y="180" />
         <di:waypoint x="1518" y="180" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_B2_2_di" bpmnElement="Flow_B2_2">
