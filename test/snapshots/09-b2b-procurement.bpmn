@@ -268,18 +268,17 @@
         <di:waypoint x="326" y="415" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Quote_di" bpmnElement="Msg_Quote">
-        <di:waypoint x="646" y="455" />
-        <di:waypoint x="666" y="455" />
-        <di:waypoint x="666" y="360" />
-        <di:waypoint x="613" y="360" />
-        <di:waypoint x="613" y="185" />
+        <di:waypoint x="596" y="415" />
+        <di:waypoint x="596" y="360" />
+        <di:waypoint x="579" y="360" />
+        <di:waypoint x="579" y="185" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Confirm_di" bpmnElement="Msg_Confirm">
         <di:waypoint x="646" y="575" />
         <di:waypoint x="666" y="575" />
         <di:waypoint x="666" y="360" />
-        <di:waypoint x="579" y="360" />
-        <di:waypoint x="579" y="185" />
+        <di:waypoint x="613" y="360" />
+        <di:waypoint x="613" y="185" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Guarantee_di" bpmnElement="Msg_Guarantee">
         <di:waypoint x="866" y="305" />

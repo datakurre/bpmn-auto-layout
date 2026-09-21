@@ -189,6 +189,8 @@ export class LayoutEngine {
       plane,
       participants,
       edges: allEdges,
+      allLanes,
+      allPools,
     });
 
     layoutAllLabels({
@@ -335,25 +337,33 @@ export class LayoutEngine {
   private routeAllMessageFlows(
     messageFlows: any[],
     allShapesMap: Map<string, Bounds>,
-    options: { plane: any; participants: any[]; edges: PlacedEdge[] }
+    options: {
+      plane: any;
+      participants: any[];
+      edges: PlacedEdge[];
+      allLanes: Array<{ element: any; bounds: Bounds }>;
+      allPools: PoolEntry[];
+    }
   ): void {
     const participantIds = new Set(options.participants.map((p: any) => p.id));
+    for (const pool of options.allPools) {
+      participantIds.add(pool.element.id);
+    }
+    const laneIds = new Set(options.allLanes.map((lane) => lane.element.id));
     const poolBoundsList = options.participants
       .map((p: any) => allShapesMap.get(p.id))
       .filter((b): b is Bounds => Boolean(b));
     const flowNodeBounds = Array.from(allShapesMap.entries())
-      .filter(([id]) => !participantIds.has(id))
+      .filter(([id]) => !participantIds.has(id) && !laneIds.has(id))
       .map(([, b]) => b);
 
-    const flowsByTarget = new Map<string, any[]>();
-    for (const flow of messageFlows) {
-      const tgtId = flow.targetRef?.id || flow.targetRef;
-      if (tgtId) {
-        const list = flowsByTarget.get(tgtId) || [];
-        list.push(flow);
-        flowsByTarget.set(tgtId, list);
-      }
-    }
+    const { targetPorts: poolTargetPorts, sourcePorts: poolSourcePorts } = resolveAllPoolPorts(
+      options.participants,
+      messageFlows,
+      allShapesMap
+    );
+
+    const flowsByTarget = groupFlowsByTarget(messageFlows);
 
     for (const flow of messageFlows) {
       const srcId = flow.sourceRef?.id || flow.sourceRef;
@@ -364,19 +374,23 @@ export class LayoutEngine {
       if (srcBounds && tgtBounds) {
         const interPoolChannelY = computeInterPoolChannelY(srcBounds, tgtBounds, poolBoundsList);
         const flowsForTarget = flowsByTarget.get(tgtId)!;
-        const targetPortX = computeTargetPortX({
-          flow,
-          flowsForTarget,
-          tgtBounds,
-          allShapesMap,
-          obstacles: flowNodeBounds,
-          channelY: interPoolChannelY,
-        });
+        const targetPortX = participantIds.has(tgtId)
+          ? poolTargetPorts.get(flow.id)
+          : computeTargetPortX({
+              flow,
+              flowsForTarget,
+              tgtBounds,
+              allShapesMap,
+              obstacles: flowNodeBounds,
+              channelY: interPoolChannelY,
+            });
+        const sourcePortX = participantIds.has(srcId) ? poolSourcePorts.get(flow.id) : undefined;
 
         const waypoints = routeMessageFlow(srcBounds, tgtBounds, {
           obstacles: flowNodeBounds,
           interPoolChannelY,
           targetPortX,
+          sourcePortX,
         });
         options.edges.push({ element: flow, waypoints });
       }
@@ -455,6 +469,146 @@ export function getEffectiveApproachX(sourceBounds: Bounds, ctx: ApproachContext
   return centerX;
 }
 
+export interface PoolPortEntry {
+  flowId: string;
+  idealX: number;
+}
+
+export function layoutPoolConnectionPorts(
+  poolBounds: Bounds,
+  entries: PoolPortEntry[]
+): Map<string, number> {
+  const result = new Map<string, number>();
+  if (entries.length === 0) {
+    return result;
+  }
+  if (entries.length === 1) {
+    result.set(entries[0].flowId, entries[0].idealX);
+    return result;
+  }
+
+  const sorted = [...entries].sort((a, b) => {
+    if (a.idealX !== b.idealX) {
+      return a.idealX - b.idealX;
+    }
+    return a.flowId.localeCompare(b.flowId);
+  });
+
+  const MIN_PORT_SPACING = 30;
+  const positions = sorted.map((e) => e.idealX);
+  for (let i = 1; i < positions.length; i++) {
+    if (positions[i] < positions[i - 1] + MIN_PORT_SPACING) {
+      positions[i] = positions[i - 1] + MIN_PORT_SPACING;
+    }
+  }
+
+  const maxAllowedX = poolBounds.x + poolBounds.width - 20;
+  if (positions[positions.length - 1] > maxAllowedX) {
+    const overflow = positions[positions.length - 1] - maxAllowedX;
+    for (let i = positions.length - 1; i >= 0; i--) {
+      positions[i] = Math.max(poolBounds.x + 20, positions[i] - overflow);
+    }
+  }
+
+  for (let i = 0; i < sorted.length; i++) {
+    result.set(sorted[i].flowId, positions[i]);
+  }
+  return result;
+}
+
+export interface CollectPoolPortsParams {
+  poolId: string;
+  poolBounds: Bounds;
+  messageFlows: any[];
+  allShapesMap: Map<string, Bounds>;
+}
+
+export function collectPoolPortEntries(params: CollectPoolPortsParams): PoolPortEntry[] {
+  const { poolId, poolBounds, messageFlows, allShapesMap } = params;
+  const entries: PoolPortEntry[] = [];
+  for (const flow of messageFlows) {
+    const srcId = flow.sourceRef?.id || flow.sourceRef;
+    const tgtId = flow.targetRef?.id || flow.targetRef;
+    if (tgtId === poolId) {
+      const srcBounds = allShapesMap.get(srcId);
+      const rawX = srcBounds
+        ? Math.round(srcBounds.x + srcBounds.width / 2)
+        : Math.round(poolBounds.x + poolBounds.width / 2);
+      const idealX = Math.max(
+        poolBounds.x + 20,
+        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+      );
+      entries.push({ flowId: flow.id, idealX });
+    } else if (srcId === poolId) {
+      const tgtBounds = allShapesMap.get(tgtId);
+      const rawX = tgtBounds
+        ? Math.round(tgtBounds.x + tgtBounds.width / 2)
+        : Math.round(poolBounds.x + poolBounds.width / 2);
+      const idealX = Math.max(
+        poolBounds.x + 20,
+        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+      );
+      entries.push({ flowId: flow.id, idealX });
+    }
+  }
+  return entries;
+}
+
+export interface PoolPortsMap {
+  targetPorts: Map<string, number>;
+  sourcePorts: Map<string, number>;
+}
+
+export function resolveAllPoolPorts(
+  participants: any[],
+  messageFlows: any[],
+  allShapesMap: Map<string, Bounds>
+): PoolPortsMap {
+  const targetPorts = new Map<string, number>();
+  const sourcePorts = new Map<string, number>();
+
+  for (const p of participants) {
+    const poolBounds = allShapesMap.get(p.id);
+    if (!poolBounds) {
+      continue;
+    }
+    const entries = collectPoolPortEntries({
+      poolId: p.id,
+      poolBounds,
+      messageFlows,
+      allShapesMap,
+    });
+    const portMap = layoutPoolConnectionPorts(poolBounds, entries);
+    for (const flow of messageFlows) {
+      const flowId = flow.id;
+      const resolved = portMap.get(flowId);
+      if (resolved !== undefined) {
+        const tgtId = flow.targetRef?.id || flow.targetRef;
+        if (tgtId === p.id) {
+          targetPorts.set(flowId, resolved);
+        } else {
+          sourcePorts.set(flowId, resolved);
+        }
+      }
+    }
+  }
+
+  return { targetPorts, sourcePorts };
+}
+
+export function groupFlowsByTarget(messageFlows: any[]): Map<string, any[]> {
+  const flowsByTarget = new Map<string, any[]>();
+  for (const flow of messageFlows) {
+    const tgtId = flow.targetRef?.id || flow.targetRef;
+    if (tgtId) {
+      const list = flowsByTarget.get(tgtId) || [];
+      list.push(flow);
+      flowsByTarget.set(tgtId, list);
+    }
+  }
+  return flowsByTarget;
+}
+
 export interface TargetPortParams {
   flow: any;
   flowsForTarget: any[];
@@ -462,10 +616,27 @@ export interface TargetPortParams {
   allShapesMap: Map<string, Bounds>;
   obstacles: Bounds[];
   channelY?: number;
+  isTargetPool?: boolean;
 }
 
 export function computeTargetPortX(params: TargetPortParams): number | undefined {
-  const { flow, flowsForTarget, tgtBounds, allShapesMap, obstacles, channelY } = params;
+  const { flow, flowsForTarget, tgtBounds, allShapesMap, obstacles, channelY, isTargetPool } =
+    params;
+
+  if (isTargetPool) {
+    const entries = flowsForTarget.map((f) => {
+      const srcId = f.sourceRef?.id || f.sourceRef;
+      const srcBounds = allShapesMap.get(srcId);
+      const rawX = srcBounds
+        ? Math.round(srcBounds.x + srcBounds.width / 2)
+        : Math.round(tgtBounds.x + tgtBounds.width / 2);
+      const idealX = Math.max(tgtBounds.x + 20, Math.min(tgtBounds.x + tgtBounds.width - 20, rawX));
+      return { flowId: f.id, idealX };
+    });
+    const portMap = layoutPoolConnectionPorts(tgtBounds, entries);
+    return portMap.get(flow.id);
+  }
+
   if (flowsForTarget.length <= 1) {
     return undefined;
   }

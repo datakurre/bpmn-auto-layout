@@ -165,6 +165,7 @@ export interface MessageFlowRouteOptions {
   obstacles?: Bounds[];
   interPoolChannelY?: number;
   targetPortX?: number;
+  sourcePortX?: number;
 }
 
 export function isMessageCorridorBlocked(
@@ -178,10 +179,22 @@ export function isMessageCorridorBlocked(
   const [y1, y2] = yRange;
   const minY = Math.min(y1, y2);
   const maxY = Math.max(y1, y2);
-  return ctx.obstacles.some(
-    (b) =>
-      !ctx.ignore.includes(b) && x > b.x && x < b.x + b.width && b.y + b.height > minY && b.y < maxY
-  );
+  return ctx.obstacles.some((b) => {
+    if (ctx.ignore.includes(b)) {
+      return false;
+    }
+    const enclosesAny = ctx.ignore.some(
+      (ig) =>
+        ig.x >= b.x - 5 &&
+        ig.x + ig.width <= b.x + b.width + 5 &&
+        ig.y >= b.y - 5 &&
+        ig.y + ig.height <= b.y + b.height + 5
+    );
+    if (enclosesAny) {
+      return false;
+    }
+    return x > b.x && x < b.x + b.width && b.y + b.height > minY && b.y < maxY;
+  });
 }
 
 export function routeMessageFlow(
@@ -194,63 +207,27 @@ export function routeMessageFlow(
     : (options ?? {});
   const ignore = [sourceBounds, targetBounds];
 
-  // Source is above target
-  if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
-    const srcBottom: Point = {
-      x: Math.round(sourceBounds.x + sourceBounds.width / 2),
-      y: sourceBounds.y + sourceBounds.height,
-    };
-    const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
-    const tgtTop: Point = {
-      x: tgtX,
-      y: targetBounds.y,
-    };
+  const isAbove = sourceBounds.y + sourceBounds.height <= targetBounds.y;
+  const srcY = isAbove ? sourceBounds.y + sourceBounds.height : sourceBounds.y;
+  const tgtY = isAbove ? targetBounds.y : targetBounds.y + targetBounds.height;
 
-    if (srcBottom.x === tgtTop.x) {
-      return [srcBottom, tgtTop];
-    }
+  const srcX = opts.sourcePortX ?? Math.round(sourceBounds.x + sourceBounds.width / 2);
+  const srcPort: Point = { x: srcX, y: srcY };
+  const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
+  const tgtPort: Point = { x: tgtX, y: tgtY };
 
-    const midY = opts.interPoolChannelY ?? Math.round((srcBottom.y + tgtTop.y) / 2);
-    const blocked = isMessageCorridorBlocked(srcBottom.x, [srcBottom.y, midY], {
+  if (srcPort.x === tgtPort.x) {
+    const blocked = isMessageCorridorBlocked(srcPort.x, [srcPort.y, tgtPort.y], {
       ignore,
       obstacles: opts.obstacles,
     });
-
-    if (blocked) {
-      const srcRight: Point = {
-        x: sourceBounds.x + sourceBounds.width,
-        y: Math.round(sourceBounds.y + sourceBounds.height / 2),
-      };
-      const stepX = sourceBounds.x + sourceBounds.width + 20;
-      return [
-        srcRight,
-        { x: stepX, y: srcRight.y },
-        { x: stepX, y: midY },
-        { x: tgtTop.x, y: midY },
-        tgtTop,
-      ];
+    if (!blocked) {
+      return [srcPort, tgtPort];
     }
-
-    return [srcBottom, { x: srcBottom.x, y: midY }, { x: tgtTop.x, y: midY }, tgtTop];
   }
 
-  // Source is below target
-  const srcTop: Point = {
-    x: Math.round(sourceBounds.x + sourceBounds.width / 2),
-    y: sourceBounds.y,
-  };
-  const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
-  const tgtBottom: Point = {
-    x: tgtX,
-    y: targetBounds.y + targetBounds.height,
-  };
-
-  if (srcTop.x === tgtBottom.x) {
-    return [srcTop, tgtBottom];
-  }
-
-  const midY = opts.interPoolChannelY ?? Math.round((srcTop.y + tgtBottom.y) / 2);
-  const blocked = isMessageCorridorBlocked(srcTop.x, [srcTop.y, midY], {
+  const midY = opts.interPoolChannelY ?? Math.round((srcPort.y + tgtPort.y) / 2);
+  const blocked = isMessageCorridorBlocked(srcPort.x, [srcPort.y, midY], {
     ignore,
     obstacles: opts.obstacles,
   });
@@ -265,10 +242,10 @@ export function routeMessageFlow(
       srcRight,
       { x: stepX, y: srcRight.y },
       { x: stepX, y: midY },
-      { x: tgtBottom.x, y: midY },
-      tgtBottom,
+      { x: tgtPort.x, y: midY },
+      tgtPort,
     ];
   }
 
-  return [srcTop, { x: srcTop.x, y: midY }, { x: tgtBottom.x, y: midY }, tgtBottom];
+  return [srcPort, { x: srcPort.x, y: midY }, { x: tgtPort.x, y: midY }, tgtPort];
 }

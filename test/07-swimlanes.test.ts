@@ -3,13 +3,20 @@ import { BpmnModdle } from 'bpmn-moddle';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
-import { routeMessageFlow, layoutProcessLanes } from '../src/hierarchy/swimlane-layout';
+import {
+  routeMessageFlow,
+  layoutProcessLanes,
+  isMessageCorridorBlocked,
+} from '../src/hierarchy/swimlane-layout';
 import {
   findEnclosingPool,
   computeInterPoolChannelY,
   getEffectiveApproachX,
   computeTargetPortX,
   computeScopeContentYExtents,
+  layoutPoolConnectionPorts,
+  collectPoolPortEntries,
+  resolveAllPoolPorts,
 } from '../src/layout-engine';
 import { expectImageSnapshotMatch } from './helpers/snapshot-helper';
 
@@ -262,6 +269,192 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
       obstacles: [],
     });
     expect(portNoIds).toBe(433);
+  });
+
+  it('handles pool connection port layout and spacing', () => {
+    const poolBounds = { x: 100, y: 500, width: 400, height: 80 };
+
+    // Empty entries
+    expect(layoutPoolConnectionPorts(poolBounds, []).size).toBe(0);
+
+    // Single entry
+    const single = layoutPoolConnectionPorts(poolBounds, [{ flowId: 'F1', idealX: 250 }]);
+    expect(single.get('F1')).toBe(250);
+
+    // Multiple entries requiring spacing
+    const spaced = layoutPoolConnectionPorts(poolBounds, [
+      { flowId: 'F1', idealX: 200 },
+      { flowId: 'F2', idealX: 205 },
+    ]);
+    expect(spaced.get('F1')).toBe(200);
+    expect(spaced.get('F2')).toBe(230);
+
+    // Entries overflowing pool right edge shift left
+    const overflowEntries = [
+      { flowId: 'F1', idealX: 450 },
+      { flowId: 'F2', idealX: 470 },
+      { flowId: 'F3', idealX: 475 },
+    ];
+    const shifted = layoutPoolConnectionPorts(poolBounds, overflowEntries);
+    expect(shifted.get('F3')).toBeLessThanOrEqual(480);
+    expect(shifted.get('F1')).toBeGreaterThanOrEqual(120);
+
+    // computeTargetPortX with isTargetPool: true
+    const flow1 = { id: 'F1', sourceRef: 'S1' };
+    const flow2 = { id: 'F2', sourceRef: 'S2' };
+    const allShapes = new Map([
+      ['S1', { x: 150, y: 100, width: 100, height: 80 }],
+      ['S2', { x: 300, y: 100, width: 100, height: 80 }],
+    ]);
+    const port1 = computeTargetPortX({
+      flow: flow1,
+      flowsForTarget: [flow1, flow2],
+      tgtBounds: poolBounds,
+      allShapesMap: allShapes,
+      obstacles: [],
+      isTargetPool: true,
+    });
+    const port2 = computeTargetPortX({
+      flow: flow2,
+      flowsForTarget: [flow1, flow2],
+      tgtBounds: poolBounds,
+      allShapesMap: allShapes,
+      obstacles: [],
+      isTargetPool: true,
+    });
+    expect(port1).toBe(200);
+    expect(port2).toBe(350);
+
+    // Flow with object sourceRef
+    const flowObj = { id: 'F3', sourceRef: { id: 'S1' } };
+    const portObj = computeTargetPortX({
+      flow: flowObj,
+      flowsForTarget: [flowObj],
+      tgtBounds: poolBounds,
+      allShapesMap: allShapes,
+      obstacles: [],
+      isTargetPool: true,
+    });
+    expect(portObj).toBe(200);
+
+    // Fallback when source not in allShapesMap
+    const flowUnknown = { id: 'FU', sourceRef: 'Unknown' };
+    const portUnknown = computeTargetPortX({
+      flow: flowUnknown,
+      flowsForTarget: [flowUnknown],
+      tgtBounds: poolBounds,
+      allShapesMap: new Map(),
+      obstacles: [],
+      isTargetPool: true,
+    });
+    expect(portUnknown).toBe(300);
+  });
+
+  it('collects and resolves pool ports for collaboration participants', () => {
+    const poolBounds = { x: 100, y: 500, width: 400, height: 80 };
+    const shapes = new Map([
+      ['Pool_Ext', poolBounds],
+      ['Task_A', { x: 200, y: 100, width: 100, height: 80 }],
+      ['Task_B', { x: 250, y: 700, width: 100, height: 80 }],
+    ]);
+    const flows = [
+      { id: 'MF_In', sourceRef: 'Task_A', targetRef: 'Pool_Ext' },
+      { id: 'MF_Out', sourceRef: 'Pool_Ext', targetRef: 'Task_B' },
+      { id: 'MF_Missing', sourceRef: 'Unknown_Src', targetRef: 'Pool_Ext' },
+      { id: 'MF_Out_Missing', sourceRef: 'Pool_Ext', targetRef: 'Unknown_Tgt' },
+      { id: 'MF_Obj_In', sourceRef: { id: 'Task_A' }, targetRef: { id: 'Pool_Ext' } },
+      { id: 'MF_Obj_Out', sourceRef: { id: 'Pool_Ext' }, targetRef: { id: 'Task_B' } },
+    ];
+
+    const entries = collectPoolPortEntries({
+      poolId: 'Pool_Ext',
+      poolBounds,
+      messageFlows: flows,
+      allShapesMap: shapes,
+    });
+    expect(entries.length).toBe(6);
+
+    const participants = [{ id: 'Pool_Ext' }, { id: 'Pool_No_Bounds' }];
+    const resolved = resolveAllPoolPorts(participants, flows, shapes);
+    expect(resolved.targetPorts.get('MF_In')).toBeDefined();
+    expect(resolved.sourcePorts.get('MF_Out')).toBeDefined();
+    expect(resolved.targetPorts.get('MF_Obj_In')).toBeDefined();
+    expect(resolved.sourcePorts.get('MF_Obj_Out')).toBeDefined();
+  });
+
+  it('handles enclosing containers and obstacles in routeMessageFlow and isMessageCorridorBlocked', () => {
+    const parentContainer = { x: 50, y: 50, width: 300, height: 300 };
+    const innerNode = { x: 100, y: 100, width: 100, height: 80 };
+    const blocked = isMessageCorridorBlocked(150, [180, 250], {
+      ignore: [innerNode],
+      obstacles: [parentContainer],
+    });
+    expect(blocked).toBe(false);
+
+    // Collinear obstacle detection in routeMessageFlow (source above target)
+    const src = { x: 100, y: 50, width: 100, height: 80 };
+    const tgt = { x: 100, y: 400, width: 100, height: 80 };
+    const obstacle = { x: 100, y: 200, width: 100, height: 80 };
+    const blockedDownRoute = routeMessageFlow(src, tgt, { obstacles: [obstacle] });
+    expect(blockedDownRoute.length).toBe(5);
+
+    // Collinear obstacle detection in routeMessageFlow (source below target)
+    const blockedUpRoute = routeMessageFlow(tgt, src, { obstacles: [obstacle] });
+    expect(blockedUpRoute.length).toBe(5);
+
+    // sourcePortX support when source is below target
+    const srcPool = { x: 100, y: 500, width: 600, height: 100 };
+    const tgtNode = { x: 300, y: 100, width: 100, height: 80 };
+    const waypointsUp = routeMessageFlow(srcPool, tgtNode, {
+      sourcePortX: 350,
+      targetPortX: 350,
+    });
+    expect(waypointsUp.length).toBe(2);
+    expect(waypointsUp[0].x).toBe(350);
+    expect(waypointsUp[1].x).toBe(350);
+
+    // sourcePortX support when source is above target
+    const topPool = { x: 100, y: 50, width: 600, height: 100 };
+    const bottomNode = { x: 300, y: 300, width: 100, height: 80 };
+    const waypointsDown = routeMessageFlow(topPool, bottomNode, {
+      sourcePortX: 350,
+      targetPortX: 350,
+    });
+    expect(waypointsDown.length).toBe(2);
+    expect(waypointsDown[0].x).toBe(350);
+    expect(waypointsDown[1].x).toBe(350);
+  });
+
+  it('layouts collaboration with lanes and external pool with straight vertical message flows', async () => {
+    const builder = new BpmnBuilder('Proc_Lanes');
+    builder
+      .addParticipant('Pool_Main', 'Proc_Lanes', 'Main Service')
+      .addStartEvent('Start_1', 'Start')
+      .addTask('Task_Lane1', 'Draft Message')
+      .addTask('Task_Lane2', 'Process Reply')
+      .addEndEvent('End_1', 'Done')
+      .addLane('Lane_1', ['Start_1', 'Task_Lane1'], 'Drafting')
+      .addLane('Lane_2', ['Task_Lane2', 'End_1'], 'Processing')
+      .addSequenceFlow('F1', 'Start_1', 'Task_Lane1')
+      .addSequenceFlow('F2', 'Task_Lane1', 'Task_Lane2')
+      .addSequenceFlow('F3', 'Task_Lane2', 'End_1')
+      .addParticipant('Pool_External', undefined as any, 'External Partner')
+      .addMessageFlow('MF_To_Partner', 'Task_Lane1', 'Pool_External')
+      .addMessageFlow('MF_From_Partner', 'Pool_External', 'Task_Lane2');
+
+    const inputXml = await builder.toXml();
+    const resultXml = await layoutProcess(inputXml);
+
+    expect(resultXml).toContain('id="Pool_Main_di"');
+    expect(resultXml).toContain('id="Pool_External_di"');
+    expect(resultXml).toContain('id="MF_To_Partner_di"');
+    expect(resultXml).toContain('id="MF_From_Partner_di"');
+
+    const score = await scoreDiagram(resultXml);
+    expect(score.isValid).toBe(true);
+    expect(score.hardViolations.shapeOverlaps).toBe(0);
+    expect(score.hardViolations.edgeShapeCrossings).toBe(0);
+    expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
   });
 
   it('handles edges with string sourceRef in layoutProcessLanes', () => {
