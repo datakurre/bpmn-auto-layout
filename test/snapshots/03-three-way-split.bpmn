@@ -22,7 +22,7 @@
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
         <dc:Bounds x="100" y="162" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="102" y="208" width="28" height="14" />
+          <dc:Bounds x="104" y="208" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Fork_1_di" bpmnElement="Fork_1">
@@ -49,7 +49,7 @@
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
         <dc:Bounds x="576" y="162" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="573" y="208" width="38" height="14" />
+          <dc:Bounds x="575" y="208" width="38" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">

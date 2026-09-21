@@ -143,7 +143,7 @@
       <bpmndi:BPMNShape id="Pay_Gate_di" bpmnElement="Pay_Gate">
         <dc:Bounds x="1330" y="620" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1321" y="600" width="64" height="14" />
+          <dc:Bounds x="1323" y="600" width="64" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Pay_Receipt_di" bpmnElement="Pay_Receipt">
@@ -184,7 +184,7 @@
         <di:waypoint x="584" y="335" />
         <di:waypoint x="644" y="335" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="600" y="311" width="24" height="14" />
+          <dc:Bounds x="602" y="311" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="OF_4_di" bpmnElement="OF_4">
@@ -192,7 +192,7 @@
         <di:waypoint x="559" y="455" />
         <di:waypoint x="644" y="455" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="567" y="401" width="20" height="14" />
+          <dc:Bounds x="569" y="401" width="20" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="OF_7_di" bpmnElement="OF_7">
@@ -228,7 +228,7 @@
         <di:waypoint x="1380" y="645" />
         <di:waypoint x="1440" y="645" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1382" y="621" width="52" height="14" />
+          <dc:Bounds x="1384" y="621" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="PF_4_di" bpmnElement="PF_4">
@@ -236,7 +236,7 @@
         <di:waypoint x="1355" y="765" />
         <di:waypoint x="1440" y="765" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1363" y="711" width="50" height="14" />
+          <dc:Bounds x="1365" y="711" width="50" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="PF_7_di" bpmnElement="PF_7">

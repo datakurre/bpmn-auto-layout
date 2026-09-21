@@ -5,7 +5,6 @@ import {
   estimateLabelDimensions,
   estimateTextAnnotationDimensions,
   estimateWordWidth,
-  computeLabelVisualShift,
   generateTextWrapCandidates,
   boxesOverlap,
   doesBoxCollide,
@@ -38,17 +37,6 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       expect(estimateWordWidth('i')).toBe(3.5);
       expect(estimateWordWidth('A')).toBe(7.5);
       expect(estimateWordWidth('a')).toBe(6.0);
-    });
-
-    it('computes label visual shift compensating for renderer widening', () => {
-      expect(computeLabelVisualShift(undefined)).toBe(0);
-      expect(computeLabelVisualShift('')).toBe(0);
-      expect(computeLabelVisualShift('   ')).toBe(0);
-      expect(computeLabelVisualShift('Start')).toBe(2);
-      expect(computeLabelVisualShift('  Start  ')).toBe(2);
-      expect(computeLabelVisualShift('Start\n\n')).toBe(2);
-      expect(computeLabelVisualShift('Process Started')).toBe(0);
-      expect(computeLabelVisualShift('Order\nPlaced')).toBe(2);
     });
 
     it('accurately estimates label dimensions for various text patterns', () => {

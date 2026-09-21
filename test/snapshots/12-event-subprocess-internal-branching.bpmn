@@ -56,7 +56,7 @@
       <bpmndi:BPMNShape id="Gate_Severity_di" bpmnElement="Gate_Severity">
         <dc:Bounds x="226" y="290" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="223" y="270" width="52" height="14" />
+          <dc:Bounds x="225" y="270" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_AutoRetry_di" bpmnElement="Task_AutoRetry">
@@ -68,7 +68,7 @@
       <bpmndi:BPMNShape id="Gate_Err_Merge_di" bpmnElement="Gate_Err_Merge">
         <dc:Bounds x="496" y="290" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="501" y="270" width="36" height="14" />
+          <dc:Bounds x="503" y="270" width="36" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Err_di" bpmnElement="End_Err">
@@ -98,7 +98,7 @@
         <di:waypoint x="276" y="315" />
         <di:waypoint x="336" y="315" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="290" y="291" width="28" height="14" />
+          <dc:Bounds x="292" y="291" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SubFlow_High_di" bpmnElement="SubFlow_High">
@@ -106,7 +106,7 @@
         <di:waypoint x="251" y="435" />
         <di:waypoint x="336" y="435" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="259" y="381" width="28" height="14" />
+          <dc:Bounds x="261" y="381" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SubFlow_4_di" bpmnElement="SubFlow_4">

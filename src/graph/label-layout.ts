@@ -93,41 +93,6 @@ export function estimateWordWidth(word: string): number {
   return width;
 }
 
-export function computeLabelVisualShift(text?: string): number {
-  if (!text || text.trim() === '') {
-    return 0;
-  }
-  const words = text.split(/\s+/);
-  let maxWordW = 0;
-  for (const w of words) {
-    if (!w) {
-      continue;
-    }
-    const wLen = estimateWordWidth(w);
-    if (wLen > maxWordW) {
-      maxWordW = wLen;
-    }
-  }
-  const lines = text.split('\n');
-  let maxLineW = 0;
-  for (const line of lines) {
-    const trimmedLine = line.trim();
-    if (!trimmedLine) {
-      continue;
-    }
-    const lLen = estimateWordWidth(trimmedLine);
-    if (lLen > maxLineW) {
-      maxLineW = lLen;
-    }
-  }
-  const neededW = Math.ceil(maxWordW) + 4;
-  const boxW = Math.ceil(maxLineW);
-  if (boxW < neededW) {
-    return 2;
-  }
-  return 0;
-}
-
 export function estimateLabelDimensions(text: string): { width: number; height: number } {
   const lines = text.split('\n');
   let maxLineWidth = 0;
@@ -365,9 +330,8 @@ function computeOrthogonalElementBounds(
   geom: ElementLabelGeom,
   side: 'bottom' | 'top' | 'right' | 'left'
 ): Bounds {
-  const { elementBounds, dim, margin, text } = geom;
-  const shift = computeLabelVisualShift(text);
-  const cx = Math.round(elementBounds.x + elementBounds.width / 2) - shift;
+  const { elementBounds, dim, margin } = geom;
+  const cx = Math.round(elementBounds.x + elementBounds.width / 2);
   const cy = Math.round(elementBounds.y + elementBounds.height / 2);
 
   if (side === 'bottom') {
@@ -639,10 +603,9 @@ export function computePathSegmentLabel(
   side: 'top' | 'bottom' | 'right' | 'left',
   fraction = 0.5
 ): Bounds {
-  const { p1, p2, dim, margin, text } = geom;
+  const { p1, p2, dim, margin } = geom;
   const isHorizontal = p1.y === p2.y;
-  const shift = computeLabelVisualShift(text);
-  const mx = Math.round(p1.x + (p2.x - p1.x) * fraction) - shift;
+  const mx = Math.round(p1.x + (p2.x - p1.x) * fraction);
   const my = Math.round(p1.y + (p2.y - p1.y) * fraction);
 
   if (isHorizontal) {

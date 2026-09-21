@@ -122,7 +122,7 @@
         <di:waypoint x="621" y="185" />
         <di:waypoint x="1001" y="185" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="784" y="161" width="50" height="14" />
+          <dc:Bounds x="786" y="161" width="50" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Mgr_Appr_di" bpmnElement="Flow_Mgr_Appr">
@@ -130,7 +130,7 @@
         <di:waypoint x="621" y="545" />
         <di:waypoint x="706" y="545" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="629" y="491" width="52" height="14" />
+          <dc:Bounds x="631" y="491" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Resubmit_di" bpmnElement="Flow_Resubmit">
@@ -139,14 +139,14 @@
         <di:waypoint x="326" y="105" />
         <di:waypoint x="326" y="145" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="648" y="81" width="52" height="14" />
+          <dc:Bounds x="650" y="81" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Abort_di" bpmnElement="Flow_Abort">
         <di:waypoint x="1051" y="185" />
         <di:waypoint x="1168" y="185" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1092" y="161" width="32" height="14" />
+          <dc:Bounds x="1094" y="161" width="32" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Fin_Ok_di" bpmnElement="Flow_Fin_Ok">
@@ -154,7 +154,7 @@
         <di:waypoint x="891" y="665" />
         <di:waypoint x="976" y="665" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="899" y="611" width="24" height="14" />
+          <dc:Bounds x="901" y="611" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Fin_No_di" bpmnElement="Flow_Fin_No">

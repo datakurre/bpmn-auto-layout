@@ -106,7 +106,7 @@
         <di:waypoint x="1408" y="140" />
         <di:waypoint x="1468" y="140" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1421" y="116" width="30" height="14" />
+          <dc:Bounds x="1423" y="116" width="30" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_RetryLoop_di" bpmnElement="Flow_RetryLoop">

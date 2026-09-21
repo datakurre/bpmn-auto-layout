@@ -87,14 +87,14 @@
         <di:waypoint x="221" y="260" />
         <di:waypoint x="306" y="260" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="229" y="206" width="32" height="14" />
+          <dc:Bounds x="231" y="206" width="32" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
         <di:waypoint x="676" y="260" />
         <di:waypoint x="736" y="260" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="673" y="236" width="62" height="14" />
+          <dc:Bounds x="675" y="236" width="62" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Rejected_di" bpmnElement="Flow_Rejected">

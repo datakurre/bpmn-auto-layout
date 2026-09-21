@@ -83,19 +83,19 @@
       <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision">
         <dc:Bounds x="802" y="240" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="796" y="220" width="58" height="14" />
+          <dc:Bounds x="798" y="220" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Published_di" bpmnElement="End_Published">
         <dc:Bounds x="912" y="247" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="900" y="293" width="56" height="14" />
+          <dc:Bounds x="902" y="293" width="56" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Event_Reject_di" bpmnElement="Event_Reject">
         <dc:Bounds x="418" y="507" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="415" y="553" width="38" height="14" />
+          <dc:Bounds x="417" y="553" width="38" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_ReturnJoin_di" bpmnElement="Gateway_ReturnJoin">
@@ -118,7 +118,7 @@
         <di:waypoint x="852" y="265" />
         <di:waypoint x="912" y="265" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="868" y="241" width="24" height="14" />
+          <dc:Bounds x="870" y="241" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Rejected_di" bpmnElement="Flow_Rejected">
@@ -126,7 +126,7 @@
         <di:waypoint x="827" y="525" />
         <di:waypoint x="454" y="525" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="629" y="501" width="20" height="14" />
+          <dc:Bounds x="631" y="501" width="20" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_ReturnToMerge_di" bpmnElement="Flow_ReturnToMerge">

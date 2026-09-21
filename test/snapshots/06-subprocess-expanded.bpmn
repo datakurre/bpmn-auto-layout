@@ -18,7 +18,7 @@
       <bpmndi:BPMNShape id="Start_Parent_di" bpmnElement="Start_Parent">
         <dc:Bounds x="100" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="102" y="168" width="28" height="14" />
+          <dc:Bounds x="104" y="168" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_Order_di" bpmnElement="Sub_Order" isExpanded="true">
@@ -42,7 +42,7 @@
       <bpmndi:BPMNShape id="End_Parent_di" bpmnElement="End_Parent">
         <dc:Bounds x="608" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="598" y="168" width="52" height="14" />
+          <dc:Bounds x="600" y="168" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Sub_Flow_1_di" bpmnElement="Sub_Flow_1">

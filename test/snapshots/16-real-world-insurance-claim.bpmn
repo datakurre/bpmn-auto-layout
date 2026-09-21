@@ -256,7 +256,7 @@
         <di:waypoint x="1140" y="588" />
         <di:waypoint x="1200" y="588" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1145" y="564" width="46" height="14" />
+          <dc:Bounds x="1147" y="564" width="46" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="AF_4_di" bpmnElement="AF_4">
@@ -264,7 +264,7 @@
         <di:waypoint x="1115" y="708" />
         <di:waypoint x="1200" y="708" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1123" y="654" width="32" height="14" />
+          <dc:Bounds x="1125" y="654" width="32" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="AF_7_di" bpmnElement="AF_7">
@@ -292,7 +292,7 @@
         <di:waypoint x="584" y="433" />
         <di:waypoint x="644" y="433" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="602" y="409" width="20" height="14" />
+          <dc:Bounds x="604" y="409" width="20" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="IF_YesPolicy_di" bpmnElement="IF_YesPolicy">
@@ -300,14 +300,14 @@
         <di:waypoint x="559" y="648" />
         <di:waypoint x="644" y="648" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="567" y="546" width="24" height="14" />
+          <dc:Bounds x="569" y="546" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="IF_Approved_di" bpmnElement="IF_Approved">
         <di:waypoint x="1902" y="1003" />
         <di:waypoint x="1962" y="1003" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1901" y="979" width="58" height="14" />
+          <dc:Bounds x="1903" y="979" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="IF_2_di" bpmnElement="IF_2">

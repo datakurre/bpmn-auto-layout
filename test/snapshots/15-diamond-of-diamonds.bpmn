@@ -94,7 +94,7 @@
         <di:waypoint x="246" y="140" />
         <di:waypoint x="306" y="140" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="260" y="116" width="28" height="14" />
+          <dc:Bounds x="262" y="116" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_To_Std_di" bpmnElement="Flow_To_Std">
@@ -102,14 +102,14 @@
         <di:waypoint x="221" y="380" />
         <di:waypoint x="306" y="380" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="229" y="266" width="50" height="14" />
+          <dc:Bounds x="231" y="266" width="50" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_High_Exp_di" bpmnElement="Flow_High_Exp">
         <di:waypoint x="356" y="140" />
         <di:waypoint x="416" y="140" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="365" y="116" width="38" height="14" />
+          <dc:Bounds x="367" y="116" width="38" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_High_Vip_di" bpmnElement="Flow_High_Vip">
@@ -117,7 +117,7 @@
         <di:waypoint x="331" y="260" />
         <di:waypoint x="416" y="260" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="339" y="206" width="24" height="14" />
+          <dc:Bounds x="341" y="206" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_High_Out_di" bpmnElement="Flow_High_Out">

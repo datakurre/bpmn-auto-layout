@@ -21,13 +21,13 @@
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
         <dc:Bounds x="100" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="102" y="168" width="28" height="14" />
+          <dc:Bounds x="104" y="168" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Split_1_di" bpmnElement="Split_1">
         <dc:Bounds x="196" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="199" y="95" width="40" height="14" />
+          <dc:Bounds x="201" y="95" width="40" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_A1_di" bpmnElement="Task_A1">
@@ -42,13 +42,13 @@
       <bpmndi:BPMNShape id="Join_1_di" bpmnElement="Join_1">
         <dc:Bounds x="626" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="623" y="95" width="52" height="14" />
+          <dc:Bounds x="625" y="95" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
         <dc:Bounds x="736" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="737" y="168" width="30" height="14" />
+          <dc:Bounds x="739" y="168" width="30" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
