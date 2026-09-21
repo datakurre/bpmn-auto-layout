@@ -72,13 +72,17 @@ export class LayoutEngine {
     }
 
     const diagram = this.diGenerator.ensureDiagram(definitions, targetElement);
+    const existingParticipantY = extractExistingParticipantY(diagram.plane);
     diagram.plane.planeElement = [];
 
     const collaboration = definitions.rootElements?.find(
       (el: any) => el.$type === 'bpmn:Collaboration'
     );
     if (collaboration) {
-      this.layoutCollaboration(definitions, collaboration, diagram.plane);
+      this.layoutCollaboration(definitions, collaboration, {
+        plane: diagram.plane,
+        existingY: existingParticipantY,
+      });
     } else {
       this.layoutSingleProcesses(definitions, diagram.plane);
     }
@@ -141,8 +145,14 @@ export class LayoutEngine {
     }
   }
 
-  private layoutCollaboration(definitions: any, collaboration: any, plane: any): void {
-    const participants = collaboration.participants || [];
+  private layoutCollaboration(
+    definitions: any,
+    collaboration: any,
+    ctx: { plane: any; existingY?: Map<string, number> }
+  ): void {
+    const plane = ctx.plane;
+    const rawParticipants = collaboration.participants || [];
+    const participants = orderCollaborationParticipants(rawParticipants, ctx.existingY);
     const allShapesMap = new Map<string, Bounds>();
     const allShapes: PlacedShape[] = [];
     const allEdges: PlacedEdge[] = [];
@@ -227,7 +237,7 @@ export class LayoutEngine {
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
       allShapesMap.set(participant.id, poolBounds);
-      return currentY + 160;
+      return currentY + poolBounds.height + 60;
     }
 
     const result = layoutScope(process, this.options);
@@ -274,7 +284,7 @@ export class LayoutEngine {
   }
 
   private layoutBlackBoxPool(participant: any, currentY: number, allPools?: PoolEntry[]): Bounds {
-    const poolBounds: Bounds = { x: 100, y: currentY, width: 400, height: 100 };
+    const poolBounds: Bounds = { x: 100, y: currentY, width: 400, height: 60 };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
   }
@@ -477,4 +487,45 @@ export function computeTargetPortX(params: TargetPortParams): number | undefined
 
   const index = sorted.findIndex((f) => f.id === flow.id);
   return tgtBounds.x + Math.round((tgtBounds.width * (index + 1)) / (sorted.length + 1));
+}
+
+export function orderCollaborationParticipants(
+  participants: any[],
+  existingY?: Map<string, number>
+): any[] {
+  if (!participants || participants.length <= 1) {
+    return participants || [];
+  }
+  if (existingY && existingY.size > 0) {
+    const hasAnyY = participants.some((p) => existingY.has(p.id));
+    if (hasAnyY) {
+      return [...participants].sort((a, b) => {
+        const yA = existingY.get(a.id);
+        const yB = existingY.get(b.id);
+        if (yA !== undefined && yB !== undefined) {
+          return yA - yB;
+        }
+        if (yA !== undefined) {
+          return -1;
+        }
+        if (yB !== undefined) {
+          return 1;
+        }
+        return 0;
+      });
+    }
+  }
+  return participants;
+}
+
+export function extractExistingParticipantY(plane: any): Map<string, number> {
+  const existingY = new Map<string, number>();
+  for (const pe of plane?.planeElement || []) {
+    const ref = pe.bpmnElement;
+    const bpmnId = typeof ref === 'string' ? ref : ref?.id;
+    if (bpmnId && pe.bounds?.y !== undefined) {
+      existingY.set(bpmnId, pe.bounds.y);
+    }
+  }
+  return existingY;
 }

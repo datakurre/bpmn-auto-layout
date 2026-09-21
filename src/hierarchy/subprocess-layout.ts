@@ -1,6 +1,7 @@
 import { DirectedGraph } from '../graph/graph';
 import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
+import { alignReturnPathLayers } from '../graph/return-path-layout';
 import { assignCoordinates } from '../graph/coordinate-assignment';
 import { routeOrthogonalEdge } from '../graph/orthogonal-router';
 import {
@@ -162,13 +163,15 @@ export interface ScopeRouteContext {
   boundaryEvents: any[];
   boundsMap: Map<string, Bounds>;
   feedbackEdges?: Set<string>;
+  returnNodes?: Set<string>;
+  returnGateways?: Map<string, string>;
 }
 
 interface PartitionedFlows {
   gatewayOutgoingFlows: Map<string, GatewayFlowInfo[]>;
   gatewayIncomingFlows: Map<string, GatewayIncomingFlowInfo[]>;
   otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>;
-  targetPortMap: Map<string, 'top' | 'bottom' | 'left'>;
+  targetPortMap: Map<string, 'top' | 'bottom' | 'left' | 'right'>;
 }
 
 export function getRefId(ref: any): string | undefined {
@@ -179,6 +182,8 @@ export interface IncomingFlowCandidate {
   flow: any;
   sourceBounds: Bounds;
   isFeedback?: boolean;
+  isReturnSource?: boolean;
+  isReturnGateway?: boolean;
 }
 
 function isCorridorBlocked(
@@ -217,21 +222,35 @@ function assignMergeBottomPort(
   return undefined;
 }
 
+function classifyMergeIncomingFlow(
+  f: IncomingFlowCandidate,
+  gwBounds: Bounds
+): 'forward' | 'bottom' | 'right' | 'left' {
+  const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gwBounds.x;
+  if (f.isReturnSource || (f.isReturnGateway && f.sourceBounds.x >= gwBounds.x + gwBounds.width)) {
+    return f.sourceBounds.y > gwBounds.y + gwBounds.height ? 'bottom' : 'right';
+  }
+  if (f.isFeedback || isBackwards) {
+    return 'left';
+  }
+  return 'forward';
+}
+
 export function assignMergeIncomingPorts(
   flows: IncomingFlowCandidate[],
   gwBounds: Bounds,
   allBounds?: Bounds[]
-): Map<string, 'top' | 'bottom' | 'left'> {
-  const ports = new Map<string, 'top' | 'bottom' | 'left'>();
+): Map<string, 'top' | 'bottom' | 'left' | 'right'> {
+  const ports = new Map<string, 'top' | 'bottom' | 'left' | 'right'>();
   const gwCenterY = gwBounds.y + gwBounds.height / 2;
 
   const forwardFlows: IncomingFlowCandidate[] = [];
   for (const f of flows) {
-    const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gwBounds.x;
-    if (f.isFeedback || isBackwards) {
-      ports.set(f.flow.id, 'left');
-    } else {
+    const port = classifyMergeIncomingFlow(f, gwBounds);
+    if (port === 'forward') {
       forwardFlows.push(f);
+    } else {
+      ports.set(f.flow.id, port);
     }
   }
 
@@ -286,8 +305,8 @@ export function computeMergeTargetPorts(
   sequenceFlows: any[],
   gatewaySet: Set<string>,
   ctx: ScopeRouteContext
-): Map<string, 'top' | 'bottom' | 'left'> {
-  const targetPortMap = new Map<string, 'top' | 'bottom' | 'left'>();
+): Map<string, 'top' | 'bottom' | 'left' | 'right'> {
+  const targetPortMap = new Map<string, 'top' | 'bottom' | 'left' | 'right'>();
 
   const gwIncomingMap = new Map<string, IncomingFlowCandidate[]>();
   for (const flow of sequenceFlows) {
@@ -301,6 +320,8 @@ export function computeMergeTargetPorts(
           flow,
           sourceBounds: srcBounds,
           isFeedback: ctx.feedbackEdges?.has(flow.id),
+          isReturnSource: Boolean(ctx.returnNodes?.has(srcId!)),
+          isReturnGateway: Boolean(ctx.returnGateways?.has(tgtId)),
         });
         gwIncomingMap.set(tgtId, list);
       }
@@ -341,11 +362,14 @@ function partitionScopeFlows(
     if (srcBounds && tgtBounds) {
       if (gatewaySet.has(srcId!)) {
         const list = gatewayOutgoingFlows.get(srcId!) || [];
+        const isReturnTarget =
+          Boolean(ctx.returnNodes?.has(tgtId!)) && tgtBounds.x < srcBounds.x + srcBounds.width;
         list.push({
           flow,
           targetBounds: tgtBounds,
           isFeedback: ctx.feedbackEdges?.has(flow.id),
-          targetPort: targetPortMap.get(flow.id),
+          targetPort: isReturnTarget ? 'right' : targetPortMap.get(flow.id),
+          isReturnPathTarget: isReturnTarget,
         });
         gatewayOutgoingFlows.set(srcId!, list);
       } else if (gatewaySet.has(tgtId!)) {
@@ -354,10 +378,13 @@ function partitionScopeFlows(
           otherFlows.push({ flow, srcId: srcId!, srcBounds, tgtBounds });
         } else {
           const list = gatewayIncomingFlows.get(tgtId!) || [];
+          const isReturnSource = Boolean(ctx.returnNodes?.has(srcId!));
           list.push({
             flow,
             sourceBounds: srcBounds,
             isFeedback: ctx.feedbackEdges?.has(flow.id),
+            targetPort: targetPortMap.get(flow.id),
+            isReturnSource,
           });
           gatewayIncomingFlows.set(tgtId!, list);
         }
@@ -373,7 +400,7 @@ function partitionScopeFlows(
 interface GatewayRouteScopeContext {
   routeCtx: ScopeRouteContext;
   sequenceFlows: any[];
-  targetPortMap: Map<string, 'top' | 'bottom' | 'left'>;
+  targetPortMap: Map<string, 'top' | 'bottom' | 'left' | 'right'>;
   usedPortsMap: Map<string, Set<'top' | 'bottom' | 'left' | 'right'>>;
 }
 
@@ -512,17 +539,43 @@ function routeAllGatewayIncomingFlows(
   return edges;
 }
 
+function routeReturnPathIntermediateFlow(srcBounds: Bounds, tgtBounds: Bounds): Point[] {
+  const srcWest: Point = {
+    x: srcBounds.x,
+    y: Math.round(srcBounds.y + srcBounds.height / 2),
+  };
+  const tgtEast: Point = {
+    x: tgtBounds.x + tgtBounds.width,
+    y: Math.round(tgtBounds.y + tgtBounds.height / 2),
+  };
+  if (srcWest.y === tgtEast.y) {
+    return [srcWest, tgtEast];
+  }
+  const midX = Math.round((srcWest.x + tgtEast.x) / 2);
+  return [srcWest, { x: midX, y: srcWest.y }, { x: midX, y: tgtEast.y }, tgtEast];
+}
+
+interface OtherFlowsContext {
+  boundaryEvents: any[];
+  allBounds: Bounds[];
+  returnNodes?: Set<string>;
+}
+
 function routeOtherFlows(
   otherFlows: Array<{ flow: any; srcId: string; srcBounds: Bounds; tgtBounds: Bounds }>,
-  boundaryEvents: any[],
-  allBounds: Bounds[]
+  ctx: OtherFlowsContext
 ): Array<{ element: any; waypoints: Point[] }> {
   const edges: Array<{ element: any; waypoints: Point[] }> = [];
   for (const { flow, srcId, srcBounds, tgtBounds } of otherFlows) {
-    const isFromBoundary = boundaryEvents.some((b: any) => b.id === srcId);
-    const waypoints = isFromBoundary
-      ? routeBoundaryExit(srcBounds, tgtBounds, allBounds)
-      : routeOrthogonalEdge(srcBounds, tgtBounds, allBounds);
+    const isFromBoundary = ctx.boundaryEvents.some((b: any) => b.id === srcId);
+    let waypoints: Point[];
+    if (isFromBoundary) {
+      waypoints = routeBoundaryExit(srcBounds, tgtBounds, ctx.allBounds);
+    } else if (ctx.returnNodes?.has(srcId) && srcBounds.x >= tgtBounds.x + tgtBounds.width) {
+      waypoints = routeReturnPathIntermediateFlow(srcBounds, tgtBounds);
+    } else {
+      waypoints = routeOrthogonalEdge(srcBounds, tgtBounds, ctx.allBounds);
+    }
     edges.push({ element: flow, waypoints });
   }
   return edges;
@@ -550,7 +603,11 @@ export function routeScopeEdges(
 
   const outEdges = routeAllGatewayOutgoingFlows(gatewayOutgoingFlows, gwCtx);
   const inEdges = routeAllGatewayIncomingFlows(gatewayIncomingFlows, gwCtx);
-  const otherEdges = routeOtherFlows(otherFlows, ctx.boundaryEvents, allBounds);
+  const otherEdges = routeOtherFlows(otherFlows, {
+    boundaryEvents: ctx.boundaryEvents,
+    allBounds,
+    returnNodes: ctx.returnNodes,
+  });
 
   return [...outEdges, ...inEdges, ...otherEdges];
 }
@@ -779,12 +836,13 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
   const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
   const feedbackEdges = findFeedbackEdges(graph);
   const ranks = assignLayers(graph, feedbackEdges);
+  const nodeToLane = extractNodeToLaneMap(scopeElement);
+  const returnPathAnalysis = alignReturnPathLayers(graph, ranks, { feedbackEdges, nodeToLane });
   alignTerminalBoundaryRanks(boundaryEvents, graph, ranks);
   clearMergeCorridorObstacles(graph, ranks);
   if (options?.alignEndEvents) {
     alignScopeEndEvents(graph, ranks);
   }
-  const nodeToLane = extractNodeToLaneMap(scopeElement);
 
   const { augmentedGraph, augmentedRanks } = insertDummyNodes(graph, ranks, {
     feedbackEdges,
@@ -822,6 +880,8 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
     boundaryEvents,
     boundsMap,
     feedbackEdges,
+    returnNodes: returnPathAnalysis.returnNodes,
+    returnGateways: returnPathAnalysis.returnGateways,
   });
   for (const e of routedEdges) {
     edges.push({

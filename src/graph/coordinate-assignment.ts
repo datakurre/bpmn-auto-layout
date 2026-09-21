@@ -426,6 +426,22 @@ function computeLaneStartOffsets(
   return offsets;
 }
 
+function getReturnNodeTrack(nodeId: string, ctx: TrackContext): number {
+  const outEdges = ctx.graph.outEdges(nodeId).filter((e) => !e.id.startsWith('_attach_'));
+  for (const outEdge of outEdges) {
+    const targetInEdges = ctx.graph
+      .inEdges(outEdge.target)
+      .filter((e) => !e.id.startsWith('_attach_'));
+    const hasBoundarySibling = targetInEdges.some(
+      (e) => ctx.graph.getNode(e.source)?.data?.$type === 'bpmn:BoundaryEvent'
+    );
+    if (hasBoundarySibling) {
+      return 2;
+    }
+  }
+  return 1;
+}
+
 function calculateSingleNodeTrack(
   node: { id: string; data?: any },
   inEdges: Array<{ id: string; source: string; target: string }>,
@@ -436,6 +452,12 @@ function calculateSingleNodeTrack(
     return (ctx.tracks.get(hostId) || 0) + 1;
   }
   if (inEdges.length === 0) {
+    const hasIncomingFeedback = ctx.graph
+      .inEdges(node.id)
+      .some((e) => ctx.feedbackEdges?.has(e.id));
+    if (hasIncomingFeedback) {
+      return getReturnNodeTrack(node.id, ctx);
+    }
     return 0;
   }
   if (inEdges.length === 1) {

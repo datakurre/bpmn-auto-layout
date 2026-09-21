@@ -1,0 +1,166 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_1">
+    <bpmn:participant id="Pool_Approval" name="Publication Approval Process" processRef="Process_Approval" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Approval" isExecutable="false">
+    <bpmn:laneSet id="Process_Approval_LaneSet">
+      <bpmn:lane id="Lane_Author" name="Author">
+        <bpmn:flowNodeRef>Start_Draft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_MergeDraft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CreateDraft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_Submit</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Editor" name="Editor">
+        <bpmn:flowNodeRef>Task_Review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Boundary_Retract</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Decision</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Published</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_Reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_ReturnJoin</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Draft" name="Start Draft" />
+    <bpmn:exclusiveGateway id="Gateway_MergeDraft" name="Merge Revisions" />
+    <bpmn:task id="Task_CreateDraft" name="Create Content" />
+    <bpmn:intermediateThrowEvent id="Event_Submit" name="Submit for Review">
+      <bpmn:messageEventDefinition />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:task id="Task_Review" name="Review Content" />
+    <bpmn:boundaryEvent id="Boundary_Retract" name="Retract Request" attachedToRef="Task_Review" />
+    <bpmn:exclusiveGateway id="Gateway_Decision" name="Approved?" />
+    <bpmn:endEvent id="End_Published" name="Published" />
+    <bpmn:intermediateThrowEvent id="Event_Reject" name="Reject">
+      <bpmn:messageEventDefinition />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:exclusiveGateway id="Gateway_ReturnJoin" name="Join Return Flows" />
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="Start_Draft" targetRef="Gateway_MergeDraft" />
+    <bpmn:sequenceFlow id="Flow_Merged" sourceRef="Gateway_MergeDraft" targetRef="Task_CreateDraft" />
+    <bpmn:sequenceFlow id="Flow_DraftToSubmit" sourceRef="Task_CreateDraft" targetRef="Event_Submit" />
+    <bpmn:sequenceFlow id="Flow_SubmitToReview" sourceRef="Event_Submit" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_ReviewToDecide" sourceRef="Task_Review" targetRef="Gateway_Decision" />
+    <bpmn:sequenceFlow id="Flow_Approved" name="Yes" sourceRef="Gateway_Decision" targetRef="End_Published" />
+    <bpmn:sequenceFlow id="Flow_Rejected" name="No" sourceRef="Gateway_Decision" targetRef="Event_Reject" />
+    <bpmn:sequenceFlow id="Flow_RejectToJoin" sourceRef="Event_Reject" targetRef="Gateway_ReturnJoin" />
+    <bpmn:sequenceFlow id="Flow_RetractToJoin" sourceRef="Boundary_Retract" targetRef="Gateway_ReturnJoin" />
+    <bpmn:sequenceFlow id="Flow_ReturnToMerge" sourceRef="Gateway_ReturnJoin" targetRef="Gateway_MergeDraft" />
+  </bpmn:process>
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_1">
+      <bpmndi:BPMNShape id="Pool_Approval_di" bpmnElement="Pool_Approval">
+        <dc:Bounds x="100" y="80" width="888" height="488" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Author_di" bpmnElement="Lane_Author">
+        <dc:Bounds x="130" y="80" width="858" height="125" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Editor_di" bpmnElement="Lane_Editor">
+        <dc:Bounds x="130" y="205" width="858" height="363" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_Draft_di" bpmnElement="Start_Draft">
+        <dc:Bounds x="180" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="170" y="173" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_MergeDraft_di" bpmnElement="Gateway_MergeDraft">
+        <dc:Bounds x="276" y="120" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="256" y="100" width="90" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CreateDraft_di" bpmnElement="Task_CreateDraft">
+        <dc:Bounds x="386" y="105" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_Submit_di" bpmnElement="Event_Submit">
+        <dc:Bounds x="546" y="127" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="514" y="103" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_Review_di" bpmnElement="Task_Review">
+        <dc:Bounds x="642" y="225" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_Decision_di" bpmnElement="Gateway_Decision">
+        <dc:Bounds x="802" y="240" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="796" y="220" width="58" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Published_di" bpmnElement="End_Published">
+        <dc:Bounds x="912" y="247" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="900" y="293" width="56" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_Reject_di" bpmnElement="Event_Reject">
+        <dc:Bounds x="418" y="507" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="415" y="553" width="38" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Gateway_ReturnJoin_di" bpmnElement="Gateway_ReturnJoin">
+        <dc:Bounds x="276" y="380" width="50" height="50" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="170" y="398" width="100" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Boundary_Retract_di" bpmnElement="Boundary_Retract">
+        <dc:Bounds x="674" y="287" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="707" y="320" width="86" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_Merged_di" bpmnElement="Flow_Merged">
+        <di:waypoint x="326" y="145" />
+        <di:waypoint x="386" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Approved_di" bpmnElement="Flow_Approved">
+        <di:waypoint x="852" y="265" />
+        <di:waypoint x="912" y="265" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="868" y="241" width="24" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Rejected_di" bpmnElement="Flow_Rejected">
+        <di:waypoint x="827" y="290" />
+        <di:waypoint x="827" y="525" />
+        <di:waypoint x="454" y="525" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="629" y="501" width="20" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReturnToMerge_di" bpmnElement="Flow_ReturnToMerge">
+        <di:waypoint x="301" y="380" />
+        <di:waypoint x="301" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_Start_di" bpmnElement="Flow_Start">
+        <di:waypoint x="216" y="145" />
+        <di:waypoint x="276" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_ReviewToDecide_di" bpmnElement="Flow_ReviewToDecide">
+        <di:waypoint x="742" y="265" />
+        <di:waypoint x="802" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RejectToJoin_di" bpmnElement="Flow_RejectToJoin">
+        <di:waypoint x="418" y="525" />
+        <di:waypoint x="301" y="525" />
+        <di:waypoint x="301" y="430" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_DraftToSubmit_di" bpmnElement="Flow_DraftToSubmit">
+        <di:waypoint x="486" y="145" />
+        <di:waypoint x="546" y="145" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_SubmitToReview_di" bpmnElement="Flow_SubmitToReview">
+        <di:waypoint x="582" y="145" />
+        <di:waypoint x="612" y="145" />
+        <di:waypoint x="612" y="265" />
+        <di:waypoint x="642" y="265" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_RetractToJoin_di" bpmnElement="Flow_RetractToJoin">
+        <di:waypoint x="692" y="323" />
+        <di:waypoint x="692" y="405" />
+        <di:waypoint x="326" y="405" />
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>

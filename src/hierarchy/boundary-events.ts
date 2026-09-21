@@ -115,6 +115,21 @@ function routeBackwardBoundaryExit(
     x: targetBounds.x,
     y: Math.round(targetBounds.y + targetBounds.height / 2),
   };
+
+  if (targetBounds.x + targetBounds.width <= sourceBounds.x) {
+    const tgtEast: Point = {
+      x: targetBounds.x + targetBounds.width,
+      y: tgtEntry.y,
+    };
+    const corner: Point = { x: srcBottom.x, y: tgtEast.y };
+    const directBlocked = filtered.some(
+      (obs) =>
+        isSegmentObstructed(srcBottom, corner, obs) || isSegmentObstructed(corner, tgtEast, obs)
+    );
+    if (!directBlocked && tgtEast.y > srcBottom.y) {
+      return [srcBottom, corner, tgtEast];
+    }
+  }
   const minX = Math.min(sourceBounds.x, targetBounds.x);
   const maxX = Math.max(sourceBounds.x + sourceBounds.width, targetBounds.x + targetBounds.width);
   let maxBottomY = Math.max(

@@ -415,11 +415,83 @@ function isCollinearPathBlocked(y: number, span: CollinearSpan, obstacles: Bound
   );
 }
 
+interface VerticalSpan {
+  yStart: number;
+  yEnd: number;
+  ignore: Bounds[];
+}
+
+function isVerticalPathBlocked(x: number, span: VerticalSpan, obstacles?: Bounds[]): boolean {
+  if (!obstacles) {
+    return false;
+  }
+  const minY = Math.min(span.yStart, span.yEnd);
+  const maxY = Math.max(span.yStart, span.yEnd);
+  return obstacles.some(
+    (b) =>
+      !span.ignore.includes(b) &&
+      x > b.x &&
+      x < b.x + b.width &&
+      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
+  );
+}
+
+function routeVerticalCollinearEdge(
+  sourceBounds: Bounds,
+  targetBounds: Bounds,
+  allBounds?: Bounds[]
+): Point[] | undefined {
+  const srcCenterX = Math.round(sourceBounds.x + sourceBounds.width / 2);
+  const tgtCenterX = Math.round(targetBounds.x + targetBounds.width / 2);
+  if (Math.abs(srcCenterX - tgtCenterX) > 20) {
+    return undefined;
+  }
+
+  if (sourceBounds.y >= targetBounds.y + targetBounds.height) {
+    const srcTop: Point = { x: srcCenterX, y: sourceBounds.y };
+    const tgtBottom: Point = { x: tgtCenterX, y: targetBounds.y + targetBounds.height };
+    const span = { yStart: srcTop.y, yEnd: tgtBottom.y, ignore: [sourceBounds, targetBounds] };
+    const blocked =
+      isVerticalPathBlocked(srcCenterX, span, allBounds) ||
+      isVerticalPathBlocked(tgtCenterX, span, allBounds);
+    if (!blocked) {
+      if (srcTop.x === tgtBottom.x) {
+        return [srcTop, tgtBottom];
+      }
+      const midY = Math.round((srcTop.y + tgtBottom.y) / 2);
+      return [srcTop, { x: srcTop.x, y: midY }, { x: tgtBottom.x, y: midY }, tgtBottom];
+    }
+  }
+
+  if (sourceBounds.y + sourceBounds.height <= targetBounds.y) {
+    const srcBottom: Point = { x: srcCenterX, y: sourceBounds.y + sourceBounds.height };
+    const tgtTop: Point = { x: tgtCenterX, y: targetBounds.y };
+    const span = { yStart: srcBottom.y, yEnd: tgtTop.y, ignore: [sourceBounds, targetBounds] };
+    const blocked =
+      isVerticalPathBlocked(srcCenterX, span, allBounds) ||
+      isVerticalPathBlocked(tgtCenterX, span, allBounds);
+    if (!blocked) {
+      if (srcBottom.x === tgtTop.x) {
+        return [srcBottom, tgtTop];
+      }
+      const midY = Math.round((srcBottom.y + tgtTop.y) / 2);
+      return [srcBottom, { x: srcBottom.x, y: midY }, { x: tgtTop.x, y: midY }, tgtTop];
+    }
+  }
+
+  return undefined;
+}
+
 export function routeOrthogonalEdge(
   sourceBounds: Bounds,
   targetBounds: Bounds,
   allBounds?: Bounds[]
 ): Point[] {
+  const vertCollinear = routeVerticalCollinearEdge(sourceBounds, targetBounds, allBounds);
+  if (vertCollinear) {
+    return vertCollinear;
+  }
+
   // If target is to the right of source (forward flow)
   if (sourceBounds.x + sourceBounds.width <= targetBounds.x) {
     const srcExit: Point = {

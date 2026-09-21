@@ -6,12 +6,15 @@ export interface GatewayFlowInfo {
   targetBounds: Bounds;
   isFeedback?: boolean;
   targetPort?: 'top' | 'bottom' | 'left' | 'right';
+  isReturnPathTarget?: boolean;
 }
 
 export interface GatewayIncomingFlowInfo {
   flow: any;
   sourceBounds: Bounds;
   isFeedback?: boolean;
+  targetPort?: 'top' | 'bottom' | 'left' | 'right';
+  isReturnSource?: boolean;
 }
 
 export interface GatewayRouteOptions {
@@ -1030,6 +1033,25 @@ interface OutgoingSeparationResult {
   hasOutgoingFeedback: boolean;
 }
 
+function routeReturnPathGatewayExit(
+  gw: Bounds,
+  f: GatewayFlowInfo
+): { waypoints: Point[]; port: 'top' | 'bottom' } {
+  const tgtEast: Point = {
+    x: f.targetBounds.x + f.targetBounds.width,
+    y: Math.round(f.targetBounds.y + f.targetBounds.height / 2),
+  };
+  const isBelow = f.targetBounds.y >= gw.y;
+  const srcExit: Point = {
+    x: Math.round(gw.x + gw.width / 2),
+    y: isBelow ? gw.y + gw.height : gw.y,
+  };
+  return {
+    waypoints: [srcExit, { x: srcExit.x, y: tgtEast.y }, tgtEast],
+    port: isBelow ? 'bottom' : 'top',
+  };
+}
+
 function separateOutgoingFeedbackFlows(
   flows: GatewayFlowInfo[],
   options: GatewayRouteOptions,
@@ -1042,6 +1064,16 @@ function separateOutgoingFeedbackFlows(
   for (const f of flows) {
     const isBackwards = f.targetBounds.x < gw.x + gw.width;
     if (f.isFeedback || isBackwards) {
+      if (
+        (f.isReturnPathTarget || f.targetPort === 'right') &&
+        f.targetBounds.x + f.targetBounds.width <= gw.x + gw.width / 2
+      ) {
+        const { waypoints, port } = routeReturnPathGatewayExit(gw, f);
+        result.set(f.flow.id, waypoints);
+        options.usedPorts?.add(port);
+        hasOutgoingFeedback = true;
+        continue;
+      }
       const waypoints = routeOrthogonalEdge(gw, f.targetBounds, options.allBounds);
       result.set(f.flow.id, waypoints);
       if (waypoints[0].y <= gw.y) {
@@ -1131,6 +1163,62 @@ export function routeGatewayOutgoingEdges(
   return result;
 }
 
+function routeReturnPathGatewayEntry(gw: Bounds, f: GatewayIncomingFlowInfo): Point[] {
+  const srcWest: Point = {
+    x: f.sourceBounds.x,
+    y: Math.round(f.sourceBounds.y + f.sourceBounds.height / 2),
+  };
+  if (f.targetPort === 'bottom' || f.sourceBounds.y > gw.y + gw.height) {
+    const tgtBottom: Point = {
+      x: Math.round(gw.x + gw.width / 2),
+      y: gw.y + gw.height,
+    };
+    return [srcWest, { x: tgtBottom.x, y: srcWest.y }, tgtBottom];
+  }
+  const tgtEast: Point = {
+    x: gw.x + gw.width,
+    y: Math.round(gw.y + gw.height / 2),
+  };
+  if (srcWest.y === tgtEast.y) {
+    return [srcWest, tgtEast];
+  }
+  const midX = Math.round((srcWest.x + tgtEast.x) / 2);
+  return [srcWest, { x: midX, y: srcWest.y }, { x: midX, y: tgtEast.y }, tgtEast];
+}
+
+interface IncomingRoutingState {
+  routes: Map<string, Point[]>;
+  usedPorts: Set<'top' | 'bottom' | 'left' | 'right'>;
+}
+
+function routeIncomingFeedbackFlow(
+  f: GatewayIncomingFlowInfo,
+  options: GatewayIncomingRouteOptions,
+  state: IncomingRoutingState
+): boolean {
+  const gw = options.gatewayBounds;
+  if (f.targetPort === 'right' || f.targetPort === 'bottom' || f.isReturnSource) {
+    const isBottom = f.targetPort === 'bottom' || f.sourceBounds.y > gw.y + gw.height;
+    state.routes.set(f.flow.id, routeReturnPathGatewayEntry(gw, f));
+    const port = isBottom ? 'bottom' : 'right';
+    state.usedPorts.add(port);
+    return isBottom;
+  }
+  const waypoints = routeOrthogonalEdge(f.sourceBounds, gw, options.allBounds);
+  state.routes.set(f.flow.id, waypoints);
+  const lastPt = waypoints[waypoints.length - 1];
+  if (lastPt.y <= gw.y) {
+    state.usedPorts.add('top');
+    return false;
+  }
+  if (lastPt.y >= gw.y + gw.height) {
+    state.usedPorts.add('bottom');
+    return true;
+  }
+  state.usedPorts.add('left');
+  return false;
+}
+
 export function routeGatewayIncomingEdges(
   flows: GatewayIncomingFlowInfo[],
   options: GatewayIncomingRouteOptions
@@ -1142,20 +1230,13 @@ export function routeGatewayIncomingEdges(
 
   const forwardFlows: GatewayIncomingFlowInfo[] = [];
   let hasIncomingFeedback = Boolean(options.hasIncomingFeedback);
+  const state: IncomingRoutingState = { routes, usedPorts };
 
   for (const f of flows) {
     const isBackwards = f.sourceBounds.x + f.sourceBounds.width > gw.x;
     if (f.isFeedback || isBackwards) {
-      const waypoints = routeOrthogonalEdge(f.sourceBounds, gw, options.allBounds);
-      routes.set(f.flow.id, waypoints);
-      const lastPt = waypoints[waypoints.length - 1];
-      if (lastPt.y <= gw.y) {
-        usedPorts.add('top');
-      } else if (lastPt.y >= gw.y + gw.height) {
-        usedPorts.add('bottom');
+      if (routeIncomingFeedbackFlow(f, options, state)) {
         hasIncomingFeedback = true;
-      } else {
-        usedPorts.add('left');
       }
     } else {
       forwardFlows.push(f);
