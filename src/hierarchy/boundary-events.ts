@@ -85,6 +85,44 @@ export function placeBoundaries(
   }
 }
 
+export function ensureBoundariesAttached(shapes: Array<{ element: any; bounds: Bounds }>): void {
+  const shapesMap = new Map(shapes.map((s) => [s.element.id, s]));
+  const eventsByHost = new Map<string, Array<{ element: any; bounds: Bounds }>>();
+
+  for (const s of shapes) {
+    if (s.element?.$type === 'bpmn:BoundaryEvent' || s.element?.attachedToRef) {
+      const hostId = getRefId(s.element.attachedToRef);
+      if (hostId && shapesMap.has(hostId)) {
+        const list = eventsByHost.get(hostId) || [];
+        list.push(s);
+        eventsByHost.set(hostId, list);
+      }
+    }
+  }
+
+  for (const [hostId, events] of eventsByHost.entries()) {
+    const hostShape = shapesMap.get(hostId)!;
+    const hostBounds = hostShape.bounds;
+    const count = events.length;
+    const expectedY = Math.round(hostBounds.y + hostBounds.height - 18);
+
+    if (count === 1) {
+      events[0].bounds.x = Math.round(hostBounds.x + (hostBounds.width - 36) / 2);
+      events[0].bounds.y = expectedY;
+      continue;
+    }
+
+    events.sort((a, b) => a.bounds.x - b.bounds.x);
+    const minX = hostBounds.x + 10;
+    const maxX = hostBounds.x + hostBounds.width - 46;
+    const step = (maxX - minX) / (count - 1);
+    for (let i = 0; i < count; i++) {
+      events[i].bounds.x = Math.round(minX + i * step);
+      events[i].bounds.y = expectedY;
+    }
+  }
+}
+
 function isSegmentObstructed(a: Point, b: Point, obs: Bounds): boolean {
   if (a.x === b.x) {
     if (a.x <= obs.x || a.x >= obs.x + obs.width) {

@@ -203,4 +203,53 @@ describe('Issue #83: Layout Diagnostics & Warnings', () => {
     collectPlaneDiagnostics({ planeElement: [{ $type: 'unknown' }] }, emptyWarnings);
     expect(emptyWarnings).toEqual([]);
   });
+
+  it('collects DETACHED_BOUNDARY_EVENT when boundary event is detached or missing host', () => {
+    const warnings: LayoutWarning[] = [];
+    const mockPlane = {
+      planeElement: [
+        {
+          $type: 'bpmndi:BPMNShape',
+          bpmnElement: { id: 'Task_1', $type: 'bpmn:Task' },
+          bounds: { x: 100, y: 100, width: 100, height: 80 },
+        },
+        {
+          $type: 'bpmndi:BPMNShape',
+          bpmnElement: { id: 'BE_NoHostRef', $type: 'bpmn:BoundaryEvent' },
+          bounds: { x: 132, y: 162, width: 36, height: 36 },
+        },
+        {
+          $type: 'bpmndi:BPMNShape',
+          bpmnElement: {
+            id: 'BE_MissingHost',
+            $type: 'bpmn:BoundaryEvent',
+            attachedToRef: 'Task_NonExistent',
+          },
+          bounds: { x: 132, y: 162, width: 36, height: 36 },
+        },
+        {
+          $type: 'bpmndi:BPMNShape',
+          bpmnElement: { id: 'BE_Detached', $type: 'bpmn:BoundaryEvent', attachedToRef: 'Task_1' },
+          bounds: { x: 300, y: 300, width: 36, height: 36 },
+        },
+        {
+          $type: 'bpmndi:BPMNShape',
+          bpmnElement: { id: 'BE_Attached', $type: 'bpmn:BoundaryEvent', attachedToRef: 'Task_1' },
+          bounds: { x: 132, y: 162, width: 36, height: 36 },
+        },
+      ],
+    };
+
+    collectPlaneDiagnostics(mockPlane, warnings);
+    expect(
+      warnings.some((w) => w.code === 'DETACHED_BOUNDARY_EVENT' && w.elementId === 'BE_NoHostRef')
+    ).toBe(true);
+    expect(
+      warnings.some((w) => w.code === 'DETACHED_BOUNDARY_EVENT' && w.elementId === 'BE_MissingHost')
+    ).toBe(true);
+    expect(
+      warnings.some((w) => w.code === 'DETACHED_BOUNDARY_EVENT' && w.elementId === 'BE_Detached')
+    ).toBe(true);
+    expect(warnings.some((w) => w.elementId === 'BE_Attached')).toBe(false);
+  });
 });

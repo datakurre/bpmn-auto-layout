@@ -717,6 +717,108 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       );
     });
 
+    it('prioritizes bottom-right diagonal placement for boundary events even without downward obstacles', () => {
+      const taskShape: PlacedShape = {
+        element: { id: 'Task_Host', $type: 'bpmn:Task', name: 'Host Activity' },
+        bounds: { x: 100, y: 100, width: 100, height: 80 },
+      };
+      const boundaryShape: PlacedShape = {
+        element: {
+          id: 'Boundary_1',
+          $type: 'bpmn:BoundaryEvent',
+          attachedToRef: 'Task_Host',
+          name: 'Retract',
+        },
+        bounds: { x: 132, y: 162, width: 36, height: 36 },
+      };
+
+      const placedLabels: any[] = [];
+      layoutElementLabel(boundaryShape, placedLabels, {
+        shapes: [taskShape, boundaryShape],
+        edges: [],
+      });
+
+      expect(boundaryShape.labelBounds).toBeDefined();
+      expect(boundaryShape.labelBounds!.x).toBe(
+        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_DIAGONAL_MARGIN
+      );
+      expect(boundaryShape.labelBounds!.y).toBe(
+        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
+      );
+    });
+
+    it('falls back to bottom-left diagonal placement for boundary events when bottom-right is blocked', () => {
+      const taskShape: PlacedShape = {
+        element: { id: 'Task_Host', $type: 'bpmn:Task', name: 'Host Activity' },
+        bounds: { x: 100, y: 100, width: 100, height: 80 },
+      };
+      const boundaryShape: PlacedShape = {
+        element: {
+          id: 'Boundary_1',
+          $type: 'bpmn:BoundaryEvent',
+          attachedToRef: 'Task_Host',
+          name: 'Retract',
+        },
+        bounds: { x: 132, y: 162, width: 36, height: 36 },
+      };
+      // Obstacle blocking bottom-right diagonal
+      const obstacle: PlacedShape = {
+        element: { id: 'Obstacle_BR', $type: 'bpmn:Task' },
+        bounds: { x: 165, y: 195, width: 80, height: 60 },
+      };
+
+      const placedLabels: any[] = [];
+      layoutElementLabel(boundaryShape, placedLabels, {
+        shapes: [taskShape, boundaryShape, obstacle],
+        edges: [],
+      });
+
+      expect(boundaryShape.labelBounds).toBeDefined();
+      // x should be bottom-left: boundaryShape.bounds.x - BOUNDARY_EVENT_DIAGONAL_MARGIN - width
+      expect(boundaryShape.labelBounds!.x).toBeLessThan(boundaryShape.bounds.x);
+      expect(boundaryShape.labelBounds!.y).toBe(
+        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
+      );
+    });
+
+    it('falls back to bottom-right diagonal placement when all corners are blocked for boundary events', () => {
+      const taskShape: PlacedShape = {
+        element: { id: 'Task_Host', $type: 'bpmn:Task', name: 'Host Activity' },
+        bounds: { x: 100, y: 100, width: 100, height: 80 },
+      };
+      const boundaryShape: PlacedShape = {
+        element: {
+          id: 'Boundary_1',
+          $type: 'bpmn:BoundaryEvent',
+          attachedToRef: 'Task_Host',
+          name: 'Retract',
+        },
+        bounds: { x: 132, y: 162, width: 36, height: 36 },
+      };
+      // Block all 4 corners
+      const obstacles: PlacedShape[] = [
+        { element: { id: 'O_BR' }, bounds: { x: 160, y: 190, width: 80, height: 60 } },
+        { element: { id: 'O_BL' }, bounds: { x: 50, y: 190, width: 85, height: 60 } },
+        { element: { id: 'O_TR' }, bounds: { x: 160, y: 120, width: 80, height: 60 } },
+        { element: { id: 'O_TL' }, bounds: { x: 50, y: 120, width: 85, height: 60 } },
+      ];
+
+      const placedLabels: any[] = [];
+      layoutElementLabel(boundaryShape, placedLabels, {
+        shapes: [taskShape, boundaryShape, ...obstacles],
+        edges: [],
+      });
+
+      expect(boundaryShape.labelBounds).toBeDefined();
+      // Fallback is bottom-right diagonal, NOT orthogonal bottom
+      expect(boundaryShape.labelBounds!.x).toBe(
+        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_DIAGONAL_MARGIN
+      );
+      expect(boundaryShape.labelBounds!.y).toBe(
+        boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
+      );
+    });
+
     it('handles all diagonal quadrant placements for gateways and boundary events', () => {
       // Gateway diagonal placements
       const gwCorners = ['top-right', 'bottom-right', 'top-left', 'bottom-left'] as const;

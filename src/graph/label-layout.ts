@@ -365,11 +365,10 @@ function computeOrthogonalElementBounds(
   geom: ElementLabelGeom,
   side: 'bottom' | 'top' | 'right' | 'left'
 ): Bounds {
-  const { elementBounds, dim, margin, element, text } = geom;
+  const { elementBounds, dim, margin, text } = geom;
   const shift = computeLabelVisualShift(text);
   const cx = Math.round(elementBounds.x + elementBounds.width / 2) - shift;
   const cy = Math.round(elementBounds.y + elementBounds.height / 2);
-  const isBoundary = isBoundaryEvent(element);
 
   if (side === 'bottom') {
     return {
@@ -388,18 +387,16 @@ function computeOrthogonalElementBounds(
     };
   }
   if (side === 'right') {
-    const dMargin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : margin;
     return {
-      x: elementBounds.x + elementBounds.width + dMargin,
-      y: isBoundary ? elementBounds.y + elementBounds.height + dMargin : cy - dim.height / 2,
+      x: elementBounds.x + elementBounds.width + margin,
+      y: cy - dim.height / 2,
       width: dim.width,
       height: dim.height,
     };
   }
-  const dMargin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : margin;
   return {
-    x: elementBounds.x - dMargin - dim.width,
-    y: isBoundary ? elementBounds.y + elementBounds.height + dMargin : cy - dim.height / 2,
+    x: elementBounds.x - margin - dim.width,
+    y: cy - dim.height / 2,
     width: dim.width,
     height: dim.height,
   };
@@ -547,6 +544,47 @@ function findBestDiagonalPlacement(pctx: PlacementContext): PlacementAttempt {
   };
 }
 
+function findBestBoundaryPlacement(pctx: PlacementContext): PlacementAttempt {
+  const wrapCandidates = generateTextWrapCandidates(pctx.shape.element.name);
+  const corners: Array<'bottom-right' | 'bottom-left' | 'top-right' | 'top-left'> = [
+    'bottom-right',
+    'bottom-left',
+    'top-right',
+    'top-left',
+  ];
+
+  for (const text of wrapCandidates) {
+    const dim = estimateLabelDimensions(text);
+    const geom: ElementLabelGeom = {
+      elementBounds: pctx.shape.bounds,
+      dim,
+      margin: pctx.margin,
+      element: pctx.shape.element,
+      text,
+    };
+    for (const corner of corners) {
+      const candidate = computeDiagonalElementBounds(geom, corner);
+      if (!doesBoxCollide(candidate, pctx.cctx)) {
+        return { labelBounds: candidate, text };
+      }
+    }
+  }
+
+  const fallbackText = wrapCandidates[wrapCandidates.length - 1];
+  const dim = estimateLabelDimensions(fallbackText);
+  const geom: ElementLabelGeom = {
+    elementBounds: pctx.shape.bounds,
+    dim,
+    margin: pctx.margin,
+    element: pctx.shape.element,
+    text: fallbackText,
+  };
+  return {
+    labelBounds: computeDiagonalElementBounds(geom, 'bottom-right'),
+    text: fallbackText,
+  };
+}
+
 export function layoutElementLabel(
   shape: PlacedShape,
   placedLabels: Bounds[],
@@ -579,7 +617,9 @@ export function layoutElementLabel(
   };
   const pctx: PlacementContext = { shape, margin, cctx };
 
-  const placement = findBestOrthogonalPlacement(pctx) || findBestDiagonalPlacement(pctx);
+  const placement = isBoundaryEvent(shape.element)
+    ? findBestBoundaryPlacement(pctx)
+    : findBestOrthogonalPlacement(pctx) || findBestDiagonalPlacement(pctx);
 
   shape.labelBounds = placement.labelBounds;
   shape.element.name = placement.text;

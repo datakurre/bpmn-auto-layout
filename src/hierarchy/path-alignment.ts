@@ -92,6 +92,18 @@ function collectSubProcessDescendants(
   }
 }
 
+function collectAllBoundaryEvents(scope: any): any[] {
+  const result: any[] = [];
+  for (const el of scope.flowElements || []) {
+    if (el.$type === 'bpmn:BoundaryEvent') {
+      result.push(el);
+    } else if (el.$type === 'bpmn:SubProcess' && el.flowElements) {
+      result.push(...collectAllBoundaryEvents(el));
+    }
+  }
+  return result;
+}
+
 function buildProcessForwardInfo(process: any): ProcessForwardInfo {
   const { regularNodes, boundaryEvents, sequenceFlows } = partitionScopeElements(process);
   const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
@@ -113,10 +125,13 @@ function buildProcessForwardInfo(process: any): ProcessForwardInfo {
     forwardSuccessors.get(srcId)?.push(tgtId);
   }
 
-  for (const be of boundaryEvents) {
+  const allBoundaryEvents = collectAllBoundaryEvents(process);
+  for (const be of allBoundaryEvents) {
     const hostId = getRefId(be.attachedToRef);
     if (hostId) {
-      forwardSuccessors.get(hostId)?.push(be.id);
+      const list = forwardSuccessors.get(hostId) || [];
+      list.push(be.id);
+      forwardSuccessors.set(hostId, list);
     }
   }
 
@@ -206,6 +221,32 @@ function collectInterPoolMessagePairs(
   return pairs;
 }
 
+function findElementInScope(scope: any, id: string): any {
+  for (const el of scope.flowElements || []) {
+    if (el.id === id) {
+      return el;
+    }
+    if (el.$type === 'bpmn:SubProcess') {
+      const found = findElementInScope(el, id);
+      if (found) {
+        return found;
+      }
+    }
+  }
+  return undefined;
+}
+
+function getEffectiveShiftRoot(nodeId: string, process: any): string {
+  const el = findElementInScope(process, nodeId);
+  if (el?.$type === 'bpmn:BoundaryEvent' || el?.attachedToRef) {
+    const hostId = getRefId(el.attachedToRef);
+    if (hostId) {
+      return hostId;
+    }
+  }
+  return nodeId;
+}
+
 function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
   const srcBounds = ctx.allShapesMap.get(pair.srcId);
   const tgtBounds = ctx.allShapesMap.get(pair.tgtId);
@@ -221,7 +262,8 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
   if (srcCenter > tgtCenter) {
     const delta = srcCenter - tgtCenter;
     const tgtInfo = ctx.procInfos.get(pair.tgtProc.id)!;
-    shiftSubtreeNodes(pair.tgtId, delta, {
+    const shiftRoot = getEffectiveShiftRoot(pair.tgtId, pair.tgtProc);
+    shiftSubtreeNodes(shiftRoot, delta, {
       allShapesMap: ctx.allShapesMap,
       allEdges: ctx.allEdges,
       forwardSuccessors: tgtInfo.forwardSuccessors,
@@ -233,7 +275,8 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
 
   const delta = tgtCenter - srcCenter;
   const srcInfo = ctx.procInfos.get(pair.srcProc.id)!;
-  shiftSubtreeNodes(pair.srcId, delta, {
+  const shiftRoot = getEffectiveShiftRoot(pair.srcId, pair.srcProc);
+  shiftSubtreeNodes(shiftRoot, delta, {
     allShapesMap: ctx.allShapesMap,
     allEdges: ctx.allEdges,
     forwardSuccessors: srcInfo.forwardSuccessors,
@@ -606,7 +649,12 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
   }
 
   const nodesToShift = [candidate.candidateGateway, ...candidate.nonJoinNodes];
-  for (const n of nodesToShift) {
+  const { boundaryEvents } = partitionScopeElements(process);
+  const boundaryEventsToShift = boundaryEvents.filter((be: any) => {
+    const hostId = getRefId(be.attachedToRef);
+    return hostId && nodesToShift.some((n) => n.id === hostId);
+  });
+  for (const n of [...nodesToShift, ...boundaryEventsToShift]) {
     const b = boundsMap.get(n.id);
     if (b) {
       b.x += candidate.deltaX;

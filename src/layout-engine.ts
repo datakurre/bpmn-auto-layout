@@ -11,6 +11,7 @@ import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
 import { alignVerticallyStackedPaths, alignIntraProcessBranches } from './hierarchy/path-alignment';
+import { ensureBoundariesAttached } from './hierarchy/boundary-events';
 import type { AutoLayoutOptions, Bounds, Point } from './types';
 
 interface PoolEntry {
@@ -110,6 +111,7 @@ export class LayoutEngine {
     for (const process of processes) {
       const result = layoutScope(process, this.options);
       alignIntraProcessBranches({ process, result, options: this.options });
+      ensureBoundariesAttached(result.shapes);
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: 100,
         startY,
@@ -184,6 +186,8 @@ export class LayoutEngine {
       allLanes,
       allPools,
     });
+
+    ensureBoundariesAttached(allShapes);
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,

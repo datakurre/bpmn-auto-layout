@@ -9,7 +9,8 @@ export type LayoutWarningCode =
   | 'ROUTE_NOT_ORTHOGONAL'
   | 'SHAPE_OVERLAPS_SHAPE'
   | 'LABEL_OVERLAPS_ELEMENT'
-  | 'CONTAINER_OVERFLOW';
+  | 'CONTAINER_OVERFLOW'
+  | 'DETACHED_BOUNDARY_EVENT';
 
 export interface LayoutWarning {
   code: LayoutWarningCode;
@@ -151,6 +152,43 @@ function checkEdgeObstacles(edges: any[], flowShapes: any[], warnings: LayoutWar
   }
 }
 
+function checkSingleBoundaryAttachment(
+  s: any,
+  shapesMap: Map<string, any>,
+  warnings: LayoutWarning[]
+): void {
+  const hostId = s.bpmnElement.attachedToRef?.id || s.bpmnElement.attachedToRef;
+  const elementId = s.bpmnElement.id;
+  if (!hostId) {
+    addWarning(warnings, {
+      code: 'DETACHED_BOUNDARY_EVENT',
+      elementId,
+      message: `Boundary event "${elementId}" has no attachedToRef`,
+    });
+    return;
+  }
+  const hostShape = shapesMap.get(hostId);
+  if (!hostShape?.bounds || !boxesOverlap(s.bounds, hostShape.bounds)) {
+    addWarning(warnings, {
+      code: 'DETACHED_BOUNDARY_EVENT',
+      elementId,
+      message: `Boundary event "${elementId}" is detached from host element "${hostId}"`,
+    });
+  }
+}
+
+function checkBoundaryEventAttachment(
+  flowShapes: any[],
+  shapesMap: Map<string, any>,
+  warnings: LayoutWarning[]
+): void {
+  for (const s of flowShapes) {
+    if (s.bpmnElement?.$type === 'bpmn:BoundaryEvent') {
+      checkSingleBoundaryAttachment(s, shapesMap, warnings);
+    }
+  }
+}
+
 export function collectPlaneDiagnostics(plane: any, warnings: LayoutWarning[]): void {
   const elements = plane?.planeElement || [];
   const flowShapes: any[] = [];
@@ -175,4 +213,5 @@ export function collectPlaneDiagnostics(plane: any, warnings: LayoutWarning[]): 
   checkContainerEnclosure(containers, shapesMap, warnings);
   checkEdgeOrthogonality(edges, warnings);
   checkEdgeObstacles(edges, flowShapes, warnings);
+  checkBoundaryEventAttachment(flowShapes, shapesMap, warnings);
 }

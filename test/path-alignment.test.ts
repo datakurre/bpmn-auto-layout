@@ -6,6 +6,7 @@ import {
   unifyCollaborationPoolWidths,
 } from '../src/hierarchy/path-alignment';
 import type { ScopeLayoutResult } from '../src/hierarchy/subprocess-layout';
+import { boxesOverlap } from '../src/layout-metrics';
 
 describe('path-alignment unit tests', () => {
   describe('unifyCollaborationPoolWidths', () => {
@@ -406,6 +407,198 @@ describe('path-alignment unit tests', () => {
       alignCollaborationPaths(ctx);
       expect(shapesMap.get('S1')?.x).toBe(300);
     });
+
+    it('shifts host activity and attached boundary event when target is a boundary event', () => {
+      const boundaryTgt = {
+        id: 'BE_Tgt',
+        $type: 'bpmn:BoundaryEvent',
+        attachedToRef: 'Task_Host',
+      };
+      const taskHost = { id: 'Task_Host', $type: 'bpmn:Task' };
+      const sender = { id: 'T_Sender', $type: 'bpmn:Task' };
+
+      const proc1 = {
+        id: 'P1',
+        $type: 'bpmn:Process',
+        flowElements: [sender],
+      };
+      const proc2 = {
+        id: 'P2',
+        $type: 'bpmn:Process',
+        flowElements: [taskHost, boundaryTgt],
+      };
+
+      const shapesMap = new Map<string, any>([
+        ['T_Sender', { x: 300, y: 100, width: 100, height: 80 }],
+        ['Task_Host', { x: 100, y: 300, width: 100, height: 80 }],
+        ['BE_Tgt', { x: 132, y: 362, width: 36, height: 36 }],
+      ]);
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [
+            {
+              $type: 'bpmn:MessageFlow',
+              id: 'MF_1',
+              sourceRef: 'T_Sender',
+              targetRef: 'BE_Tgt',
+            },
+          ],
+        },
+        allPools: [],
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [],
+      };
+
+      alignCollaborationPaths(ctx);
+      expect(shapesMap.get('Task_Host')?.x).toBe(300);
+      expect(shapesMap.get('BE_Tgt')?.x).toBe(332);
+      expect(boxesOverlap(shapesMap.get('Task_Host'), shapesMap.get('BE_Tgt'))).toBe(true);
+    });
+
+    it('shifts host activity and attached boundary event when sender is a boundary event', () => {
+      const boundarySrc = {
+        id: 'BE_Src',
+        $type: 'bpmn:BoundaryEvent',
+        attachedToRef: 'Task_HostSrc',
+      };
+      const taskHost = { id: 'Task_HostSrc', $type: 'bpmn:Task' };
+      const receiver = { id: 'T_Recv', $type: 'bpmn:Task' };
+
+      const proc1 = {
+        id: 'P1',
+        $type: 'bpmn:Process',
+        flowElements: [taskHost, boundarySrc],
+      };
+      const proc2 = {
+        id: 'P2',
+        $type: 'bpmn:Process',
+        flowElements: [receiver],
+      };
+
+      const shapesMap = new Map<string, any>([
+        ['Task_HostSrc', { x: 100, y: 100, width: 100, height: 80 }],
+        ['BE_Src', { x: 132, y: 162, width: 36, height: 36 }],
+        ['T_Recv', { x: 300, y: 300, width: 100, height: 80 }],
+      ]);
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [
+            {
+              $type: 'bpmn:MessageFlow',
+              id: 'MF_2',
+              sourceRef: 'BE_Src',
+              targetRef: 'T_Recv',
+            },
+          ],
+        },
+        allPools: [],
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [],
+      };
+
+      alignCollaborationPaths(ctx);
+      expect(shapesMap.get('Task_HostSrc')?.x).toBe(300);
+      expect(shapesMap.get('BE_Src')?.x).toBe(332);
+      expect(boxesOverlap(shapesMap.get('Task_HostSrc'), shapesMap.get('BE_Src'))).toBe(true);
+    });
+
+    it('shifts host activity when boundary event is inside a subprocess', () => {
+      const boundarySub = {
+        id: 'BE_Sub',
+        $type: 'bpmn:BoundaryEvent',
+        attachedToRef: 'Task_InSub',
+      };
+      const taskInSub = { id: 'Task_InSub', $type: 'bpmn:Task' };
+      const emptySub = {
+        id: 'Sub_Empty',
+        $type: 'bpmn:SubProcess',
+      };
+      const subProc = {
+        id: 'Sub_1',
+        $type: 'bpmn:SubProcess',
+        flowElements: [taskInSub, boundarySub],
+      };
+      const sender = { id: 'T_Send2', $type: 'bpmn:Task' };
+
+      const proc1 = {
+        id: 'P1',
+        $type: 'bpmn:Process',
+        flowElements: [sender],
+      };
+      const proc2 = {
+        id: 'P2',
+        $type: 'bpmn:Process',
+        flowElements: [emptySub, subProc],
+      };
+
+      const shapesMap = new Map<string, any>([
+        ['T_Send2', { x: 300, y: 100, width: 100, height: 80 }],
+        ['Task_InSub', { x: 100, y: 300, width: 100, height: 80 }],
+        ['BE_Sub', { x: 132, y: 362, width: 36, height: 36 }],
+      ]);
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [
+            {
+              $type: 'bpmn:MessageFlow',
+              id: 'MF_Sub',
+              sourceRef: 'T_Send2',
+              targetRef: 'BE_Sub',
+            },
+          ],
+        },
+        allPools: [],
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [],
+      };
+
+      alignCollaborationPaths(ctx);
+      expect(shapesMap.get('Task_InSub')?.x).toBe(300);
+      expect(shapesMap.get('BE_Sub')?.x).toBe(332);
+      expect(boxesOverlap(shapesMap.get('Task_InSub'), shapesMap.get('BE_Sub'))).toBe(true);
+    });
+
+    it('handles boundary event without attachedToRef when shifting collaboration pair', () => {
+      const sender = { id: 'T_SendOrphan', $type: 'bpmn:Task' };
+      const orphan = { id: 'BE_Orphan', $type: 'bpmn:BoundaryEvent' };
+      const proc1 = { id: 'P1', $type: 'bpmn:Process', flowElements: [sender] };
+      const proc2 = { id: 'P2', $type: 'bpmn:Process', flowElements: [orphan] };
+
+      const shapesMap = new Map<string, any>([
+        ['T_SendOrphan', { x: 300, y: 100, width: 100, height: 80 }],
+        ['BE_Orphan', { x: 100, y: 300, width: 36, height: 36 }],
+      ]);
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [
+            {
+              $type: 'bpmn:MessageFlow',
+              id: 'MF_Orphan',
+              sourceRef: 'T_SendOrphan',
+              targetRef: 'BE_Orphan',
+            },
+          ],
+        },
+        allPools: [],
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [],
+      };
+
+      alignCollaborationPaths(ctx);
+      expect(shapesMap.get('BE_Orphan')?.x).toBe(332);
+    });
   });
 
   describe('alignIntraProcessBranches', () => {
@@ -552,6 +745,7 @@ describe('path-alignment unit tests', () => {
       const col2 = { id: 'Col2', $type: 'bpmn:Task' };
       const noBoundsNode = { id: 'NoBounds', $type: 'bpmn:Task' };
       const fail = { id: 'Fail', $type: 'bpmn:Task' };
+      const beFail = { id: 'BE_Fail', $type: 'bpmn:BoundaryEvent', attachedToRef: 'Fail' };
       const failEnd = { id: 'FailEnd', $type: 'bpmn:EndEvent' };
 
       const flowJoin = {
@@ -636,6 +830,7 @@ describe('path-alignment unit tests', () => {
           col2,
           noBoundsNode,
           fail,
+          beFail,
           failEnd,
           flowJoin,
           flowJoinObs,
@@ -664,6 +859,7 @@ describe('path-alignment unit tests', () => {
           { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
           { element: col2, bounds: { x: 350, y: 160, width: 100, height: 80 } },
           { element: fail, bounds: { x: 180, y: 100, width: 100, height: 50 } },
+          { element: beFail, bounds: { x: 212, y: 132, width: 36, height: 36 } },
           { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
         ],
         edges: [
@@ -687,6 +883,13 @@ describe('path-alignment unit tests', () => {
       const res = alignIntraProcessBranches({ process, result });
       expect(res).toBe(true);
       expect(result.shapes[0].bounds.x).toBe(300);
+
+      const shapeMap = new Map<string, any>();
+      for (const s of result.shapes) {
+        shapeMap.set(s.element.id, s.bounds);
+      }
+      expect(shapeMap.get('BE_Fail')?.x).toBe(412);
+      expect(boxesOverlap(shapeMap.get('BE_Fail'), shapeMap.get('Fail'))).toBe(true);
     });
 
     it('returns false when candidate gateway shift causes overlap with an existing node', () => {
