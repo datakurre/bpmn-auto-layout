@@ -12,7 +12,7 @@ buildNpmPackage {
 
   src = ../.;
 
-  npmDepsHash = "sha256-NH3nA+r0O3+CHLZgbGhWzuDhiPpnyKVV0BtPqB+ecRQ=";
+  npmDepsHash = "sha256-AFjgUvt6n8kskaG/Lzr/lPHIiMNGkLK+49Rg8+LYBxE=";
 
   npmBuildScript = "build";
 
