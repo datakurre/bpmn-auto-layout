@@ -1,5 +1,10 @@
 import { describe, it, expect } from 'vitest';
-import defaultLayoutProcess, { layoutProcess, BpmnModdle, BpmnViewer } from '../src/index';
+import defaultLayoutProcess, {
+  layoutProcess,
+  BpmnModdle,
+  BpmnViewer,
+  type AutoLayoutOptions,
+} from '../src/index';
 
 const sampleBpmn = `<?xml version="1.0" encoding="UTF-8"?>
 <bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
@@ -34,5 +39,14 @@ describe('bpmn-auto-layout', () => {
     const result = await layoutProcessWithDiagnostics(sampleBpmn);
     expect(result.xml).toContain('bpmn:definitions');
     expect(result.warnings).toEqual([]);
+  });
+
+  it('no longer accepts the dead direction option', async () => {
+    const optionsWithDirection: AutoLayoutOptions = {
+      // @ts-expect-error direction was removed because it was never read (see #93)
+      direction: 'vertical',
+    };
+    const result = await layoutProcess(sampleBpmn, optionsWithDirection);
+    expect(result).toContain('Process_1');
   });
 });

@@ -17,11 +17,6 @@ export interface ElementDimension {
 
 export interface AutoLayoutOptions {
   /**
-   * Primary flow direction. Defaults to 'horizontal' (left-to-right).
-   */
-  direction?: 'horizontal' | 'vertical';
-
-  /**
    * Grid channel spacing between nodes. Defaults to 60.
    */
   gridSpacing?: number;
