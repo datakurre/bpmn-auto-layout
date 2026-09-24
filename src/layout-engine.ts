@@ -106,12 +106,26 @@ export class LayoutEngine {
 
   private layoutSingleProcesses(definitions: any, plane: any): void {
     const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
-    let startY = 100;
+    const FIRST_PROCESS_Y = 100;
+    let nextTop: number | null = null;
 
     for (const process of processes) {
       const result = layoutScope(process, this.options);
       alignIntraProcessBranches({ process, result, options: this.options });
       ensureBoundariesAttached(result.shapes);
+
+      // layoutScope always positions a process as if it were the only one, so every
+      // process after the first is translated down. minContentY/maxContentY include
+      // edge waypoints, so a loop channel routed above or below the nodes is counted
+      // too. The first process is untouched and keeps byte-identical output.
+      const { minContentY, maxContentY } = computeScopeContentYExtents(result);
+      let startY = FIRST_PROCESS_Y;
+      if (nextTop !== null) {
+        const top = Math.min(FIRST_PROCESS_Y, minContentY);
+        translateScopeResult(result, 0, nextTop - top);
+        startY = FIRST_PROCESS_Y + (nextTop - top);
+      }
+
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: 100,
         startY,
@@ -143,7 +157,8 @@ export class LayoutEngine {
         });
       }
 
-      startY += Math.max(result.height, laneResult.totalHeight) + 60;
+      const translatedMaxContentY = maxContentY + (startY - FIRST_PROCESS_Y);
+      nextTop = Math.max(translatedMaxContentY, startY + laneResult.totalHeight) + 60;
     }
   }
 
@@ -257,16 +272,7 @@ export class LayoutEngine {
       : Math.max(POOL_PADDING_Y, Math.round((120 - contentHeight) / 2));
     const deltaY = currentY + padY - minContentY;
 
-    for (const s of result.shapes) {
-      s.bounds.x += deltaX;
-      s.bounds.y += deltaY;
-    }
-    for (const e of result.edges) {
-      for (const wp of e.waypoints) {
-        wp.x += deltaX;
-        wp.y += deltaY;
-      }
-    }
+    translateScopeResult(result, deltaX, deltaY);
 
     const poolBounds = this.createPoolAndLanes({
       participant,
@@ -398,6 +404,26 @@ export class LayoutEngine {
         });
         options.edges.push({ element: flow, waypoints });
       }
+    }
+  }
+}
+
+export function translateScopeResult(
+  result: {
+    shapes: Array<{ bounds: Bounds }>;
+    edges: Array<{ waypoints: Point[] }>;
+  },
+  deltaX: number,
+  deltaY: number
+): void {
+  for (const s of result.shapes) {
+    s.bounds.x += deltaX;
+    s.bounds.y += deltaY;
+  }
+  for (const e of result.edges) {
+    for (const wp of e.waypoints) {
+      wp.x += deltaX;
+      wp.y += deltaY;
     }
   }
 }
