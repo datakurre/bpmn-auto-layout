@@ -1,5 +1,11 @@
 import type { Bounds, Point } from '../types';
 import { routeOrthogonalEdge } from './orthogonal-router';
+import {
+  type AxisSpan,
+  verticalSegmentHitsBox,
+  isVerticalSpanBlocked,
+  isHorizontalSpanBlocked,
+} from './obstacles';
 
 export interface GatewayFlowInfo {
   flow: any;
@@ -31,10 +37,7 @@ export interface GatewayIncomingRouteOptions {
   usedPorts?: Set<'top' | 'bottom' | 'left' | 'right'>;
 }
 
-export interface LinearSpan {
-  start: number;
-  end: number;
-}
+export type LinearSpan = AxisSpan;
 
 interface CorridorEndpoints {
   vStart: number;
@@ -50,20 +53,7 @@ export function isVerticalCorridorClear(
   span: LinearSpan,
   obstacles?: Bounds[]
 ): boolean {
-  if (!obstacles || obstacles.length === 0) {
-    return true;
-  }
-  const minY = Math.min(span.start, span.end);
-  const maxY = Math.max(span.start, span.end);
-
-  for (const b of obstacles) {
-    if (x > b.x && x < b.x + b.width) {
-      if (Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)) {
-        return false;
-      }
-    }
-  }
-  return true;
+  return !isVerticalSpanBlocked(x, span, { obstacles });
 }
 
 export function isHorizontalCorridorClear(
@@ -71,20 +61,7 @@ export function isHorizontalCorridorClear(
   span: LinearSpan,
   obstacles?: Bounds[]
 ): boolean {
-  if (!obstacles || obstacles.length === 0) {
-    return true;
-  }
-  const minX = Math.min(span.start, span.end);
-  const maxX = Math.max(span.start, span.end);
-
-  for (const b of obstacles) {
-    if (y > b.y && y < b.y + b.height) {
-      if (Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)) {
-        return false;
-      }
-    }
-  }
-  return true;
+  return !isHorizontalSpanBlocked(y, span, { obstacles });
 }
 
 function checkDirectPortClear(endpoints: CorridorEndpoints, obstacles?: Bounds[]): boolean {
@@ -241,14 +218,7 @@ export function findClearStepX(
   if (isVerticalCorridorClear(baseStepX, span, obstacles)) {
     return baseStepX;
   }
-  const minY = Math.min(span.start, span.end);
-  const maxY = Math.max(span.start, span.end);
-  const blockers = obstacles.filter(
-    (b) =>
-      baseStepX > b.x &&
-      baseStepX < b.x + b.width &&
-      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
-  );
+  const blockers = obstacles.filter((b) => verticalSegmentHitsBox(baseStepX, span, b));
   const minObstacleX = Math.min(...blockers.map((b) => b.x));
   const maxObstacleX = Math.max(...blockers.map((b) => b.x + b.width));
 
@@ -419,15 +389,9 @@ function resolveBlockedVerticalStepX(stepX: number, ctx: IncomingStepContext): n
   if (isVerticalCorridorClear(stepX, span, ctx.obstacles)) {
     return stepX;
   }
-  const minY = Math.min(span.start, span.end);
-  const maxY = Math.max(span.start, span.end);
   let vBlockX = Infinity;
   for (const b of ctx.obstacles) {
-    if (
-      stepX > b.x &&
-      stepX < b.x + b.width &&
-      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
-    ) {
+    if (verticalSegmentHitsBox(stepX, span, b)) {
       vBlockX = Math.min(vBlockX, b.x);
     }
   }

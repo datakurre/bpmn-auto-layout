@@ -1,4 +1,10 @@
 import type { Bounds, Point } from '../types';
+import {
+  axisIntervalsOverlap,
+  verticalSegmentHitsBox,
+  isVerticalSpanBlocked,
+  isHorizontalSpanBlocked,
+} from './obstacles';
 
 interface ObstacleCheckContext {
   ignore: Bounds;
@@ -174,7 +180,7 @@ function getClearSourceStepX(src: Bounds, channelY: number, obstacles: Bounds[])
       continue;
     }
     if (b.x + b.width >= stepX && b.x >= src.x) {
-      if (Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)) {
+      if (axisIntervalsOverlap({ start: minY, end: maxY }, { start: b.y, end: b.y + b.height })) {
         stepX = Math.max(stepX, b.x + b.width + 20);
       }
     }
@@ -193,10 +199,8 @@ function getClearTargetStepX(tgt: Bounds, channelY: number, obstacles: Bounds[])
     if (b === tgt) {
       continue;
     }
-    if (stepX > b.x && stepX < b.x + b.width) {
-      if (Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)) {
-        minObstacleX = Math.min(minObstacleX, b.x);
-      }
+    if (verticalSegmentHitsBox(stepX, { start: minY, end: maxY }, b)) {
+      minObstacleX = Math.min(minObstacleX, b.x);
     }
   }
 
@@ -312,18 +316,13 @@ interface ForwardStepBlockerContext {
  * y-span, if any.
  */
 function findForwardStepBlockerX(stepX: number, ctx: ForwardStepBlockerContext): number {
-  const minY = Math.min(ctx.yStart, ctx.yEnd);
-  const maxY = Math.max(ctx.yStart, ctx.yEnd);
+  const span = { start: ctx.yStart, end: ctx.yEnd };
   let blockingX = Infinity;
   for (const b of ctx.obstacles) {
     if (ctx.ignore.includes(b)) {
       continue;
     }
-    if (
-      stepX > b.x &&
-      stepX < b.x + b.width &&
-      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
-    ) {
+    if (verticalSegmentHitsBox(stepX, span, b)) {
       blockingX = Math.min(blockingX, b.x);
     }
   }
@@ -404,14 +403,10 @@ interface CollinearSpan {
  * multi-rank bypass edge jumps over.
  */
 function isCollinearPathBlocked(y: number, span: CollinearSpan, obstacles: Bounds[]): boolean {
-  const minX = Math.min(span.xStart, span.xEnd);
-  const maxX = Math.max(span.xStart, span.xEnd);
-  return obstacles.some(
-    (b) =>
-      !span.ignore.includes(b) &&
-      y > b.y &&
-      y < b.y + b.height &&
-      Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)
+  return isHorizontalSpanBlocked(
+    y,
+    { start: span.xStart, end: span.xEnd },
+    { obstacles, ignore: span.ignore }
   );
 }
 
@@ -422,17 +417,10 @@ interface VerticalSpan {
 }
 
 function isVerticalPathBlocked(x: number, span: VerticalSpan, obstacles?: Bounds[]): boolean {
-  if (!obstacles) {
-    return false;
-  }
-  const minY = Math.min(span.yStart, span.yEnd);
-  const maxY = Math.max(span.yStart, span.yEnd);
-  return obstacles.some(
-    (b) =>
-      !span.ignore.includes(b) &&
-      x > b.x &&
-      x < b.x + b.width &&
-      Math.max(minY, b.y) < Math.min(maxY, b.y + b.height)
+  return isVerticalSpanBlocked(
+    x,
+    { start: span.yStart, end: span.yEnd },
+    { obstacles, ignore: span.ignore }
   );
 }
 

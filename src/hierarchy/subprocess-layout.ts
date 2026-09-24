@@ -3,6 +3,7 @@ import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
 import { alignReturnPathLayers } from '../graph/return-path-layout';
 import { assignCoordinates } from '../graph/coordinate-assignment';
+import { type AxisSpan, isHorizontalSpanBlocked } from '../graph/obstacles';
 import { routeOrthogonalEdge } from '../graph/orthogonal-router';
 import {
   routeGatewayOutgoingEdges,
@@ -196,16 +197,8 @@ export interface IncomingFlowCandidate {
   isReturnGateway?: boolean;
 }
 
-function isCorridorBlocked(
-  y: number,
-  xSpan: { start: number; end: number },
-  obstacles: Bounds[]
-): boolean {
-  const minX = Math.min(xSpan.start, xSpan.end);
-  const maxX = Math.max(xSpan.start, xSpan.end);
-  return obstacles.some(
-    (b) => y > b.y && y < b.y + b.height && Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)
-  );
+function isCorridorBlocked(y: number, xSpan: AxisSpan, obstacles: Bounds[]): boolean {
+  return isHorizontalSpanBlocked(y, xSpan, { obstacles });
 }
 
 function assignMergeBottomPort(
