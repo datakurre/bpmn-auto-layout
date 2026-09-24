@@ -28,6 +28,12 @@ jobs:
       - name: Cache Nix Flake inputs
         uses: DeterminateSystems/magic-nix-cache-action@main
 
+      - name: Configure Cachix
+        uses: cachix/cachix-action@v15
+        with:
+          name: datakurre
+          authToken: ${{ secrets.CACHIX_AUTH_TOKEN }}
+
       - name: Verify code quality & tests (100% coverage)
         run: nix develop --command sh -c "npm ci && npm run typecheck && npm run build && npm test && npm run lint && npm run format:check"
 
