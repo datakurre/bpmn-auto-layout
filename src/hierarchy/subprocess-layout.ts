@@ -11,7 +11,16 @@ import {
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
 import { insertDummyNodes } from '../graph/dummy-nodes';
-import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT, isSubProcessType } from '../di-constants';
+import {
+  SUBPROCESS_MIN_WIDTH,
+  SUBPROCESS_MIN_HEIGHT,
+  SUBPROCESS_PADDING,
+  SUBPROCESS_HEADER_HEIGHT,
+  SUBPROCESS_CONTAINER_PADDING_X,
+  SUBPROCESS_CONTAINER_PADDING_Y,
+  SUBPROCESS_WIDTH_BUDGET_FLOOR,
+  isSubProcessType,
+} from '../di-constants';
 import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
 import {
   isArtifact,
@@ -133,9 +142,10 @@ export function layoutScope(
   }
 
   const bounding = computeScopeBoundingBox(shapes);
+  const { width, height } = computeScopeContainerDimensions(bounding);
   return {
-    width: Math.max(SUBPROCESS_MIN_WIDTH, bounding.maxX - bounding.minX + 60),
-    height: Math.max(SUBPROCESS_MIN_HEIGHT, bounding.maxY - bounding.minY + 70),
+    width,
+    height,
     minX: bounding.minX,
     minY: bounding.minY,
     shapes,
@@ -679,8 +689,8 @@ export function offsetAndCollectChildren(
     edges: Array<{ element: any; waypoints: Point[] }>;
   }
 ): void {
-  const offsetX = parentBounds.x + 30 - child.minX;
-  const offsetY = parentBounds.y + 35 - child.minY;
+  const offsetX = parentBounds.x + SUBPROCESS_PADDING - child.minX;
+  const offsetY = parentBounds.y + SUBPROCESS_HEADER_HEIGHT - child.minY;
 
   for (const s of child.shapes) {
     collector.shapes.push({
@@ -725,6 +735,24 @@ function computeScopeBoundingBox(shapes: Array<{ bounds: Bounds }>): {
   }
 
   return { minX, minY, maxX, maxY };
+}
+
+function computeScopeContainerDimensions(bounding: {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}): { width: number; height: number } {
+  return {
+    width: Math.max(
+      SUBPROCESS_MIN_WIDTH,
+      bounding.maxX - bounding.minX + SUBPROCESS_CONTAINER_PADDING_X
+    ),
+    height: Math.max(
+      SUBPROCESS_MIN_HEIGHT,
+      bounding.maxY - bounding.minY + SUBPROCESS_CONTAINER_PADDING_Y
+    ),
+  };
 }
 
 function isNonVisual(el: any): boolean {
@@ -911,7 +939,10 @@ function layoutChildSubProcesses(
     const containerRatio = childResult.width / childResult.height;
     if (containerRatio > SUBPROCESS_MAX_ASPECT_RATIO) {
       const area = childResult.width * childResult.height;
-      const widthBudget = Math.max(600, Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO));
+      const widthBudget = Math.max(
+        SUBPROCESS_WIDTH_BUDGET_FLOOR,
+        Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO)
+      );
       childResult = layoutScope(sub, { ...options, widthBudget }, subDimensions);
     }
     childScopeResults.set(sub.id, childResult);

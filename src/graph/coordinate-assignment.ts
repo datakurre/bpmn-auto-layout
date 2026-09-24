@@ -1,5 +1,13 @@
 import type { DirectedGraph } from './graph';
-import { getElementDimensions, DEFAULT_GRID_SPACING } from '../di-constants';
+import {
+  getElementDimensions,
+  DEFAULT_GRID_SPACING,
+  POOL_X,
+  GRID_START_X_WITH_LANES,
+  MIN_COLUMN_WIDTH,
+  MIN_TRACK_HALF_HEIGHT,
+  BOUNDARY_TRACK_PADDING,
+} from '../di-constants';
 import { alignMergeNodeTrack } from './dummy-nodes';
 import type { AutoLayoutOptions, Bounds } from '../types';
 
@@ -30,7 +38,7 @@ export function assignCoordinates(
   const nodes = graph.getNodes();
   const gridSpacing = options?.gridSpacing ?? DEFAULT_GRID_SPACING;
   const hasLanes = Boolean(options?.nodeToLane && options.nodeToLane.size > 0);
-  const startX = hasLanes ? 180 : 100;
+  const startX = hasLanes ? GRID_START_X_WITH_LANES : POOL_X;
 
   const { rankGroups, maxRank } = groupNodesByRank(nodes, ranks);
   const { colWidths, colX, rankRows } = computeColumnPositions(graph, rankGroups, {
@@ -101,8 +109,11 @@ function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
     const hasBottomBoundary = Boolean(
       graph && graph.outEdges(node.id).some((e) => e.id.startsWith('_attach_'))
     );
-    const topHalf = Math.max(40, Math.ceil(h / 2));
-    const bottomHalf = Math.max(40, Math.ceil(h / 2) + (hasBottomBoundary ? 20 : 0));
+    const topHalf = Math.max(MIN_TRACK_HALF_HEIGHT, Math.ceil(h / 2));
+    const bottomHalf = Math.max(
+      MIN_TRACK_HALF_HEIGHT,
+      Math.ceil(h / 2) + (hasBottomBoundary ? BOUNDARY_TRACK_PADDING : 0)
+    );
 
     const existing = extents.get(track);
     if (!existing) {
@@ -232,7 +243,7 @@ function computeColumnPositions(
       const w = node.data?.customWidth ?? dim.width;
       maxWidth = Math.max(maxWidth, w);
     }
-    colWidths.set(r, Math.max(36, maxWidth));
+    colWidths.set(r, Math.max(MIN_COLUMN_WIDTH, maxWidth));
   }
 
   const colX = new Map<number, number>();

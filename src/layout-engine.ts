@@ -12,6 +12,26 @@ import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
 import { alignVerticallyStackedPaths, alignIntraProcessBranches } from './hierarchy/path-alignment';
 import { ensureBoundariesAttached } from './hierarchy/boundary-events';
+import {
+  POOL_X,
+  PROCESS_START_Y,
+  POOL_START_Y,
+  INTER_ELEMENT_GAP_Y,
+  BLACKBOX_POOL_WIDTH,
+  BLACKBOX_POOL_HEIGHT,
+  PARTICIPANT_CONTENT_X,
+  POOL_CONTENT_PADDING_Y,
+  MIN_POOL_WIDTH,
+  MIN_POOL_HEIGHT,
+  POOL_WIDTH_MARGIN,
+  POOL_HEIGHT_MARGIN,
+  LANE_CONTENT_MARGIN_X,
+  LANE_MIN_WIDTH,
+  LANE_X,
+  LANE_HEADER_WIDTH,
+  MIN_PORT_SPACING,
+  PORT_INSET,
+} from './di-constants';
 import type { AutoLayoutOptions, Bounds, Point } from './types';
 
 interface PoolEntry {
@@ -106,7 +126,7 @@ export class LayoutEngine {
 
   private layoutSingleProcesses(definitions: any, plane: any): void {
     const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
-    const FIRST_PROCESS_Y = 100;
+    const FIRST_PROCESS_Y = PROCESS_START_Y;
     let nextTop: number | null = null;
 
     for (const process of processes) {
@@ -127,7 +147,7 @@ export class LayoutEngine {
       }
 
       const laneResult = layoutProcessLanes(process, result.shapes, {
-        startX: 100,
+        startX: POOL_X,
         startY,
         totalWidth: result.width,
         edges: result.edges,
@@ -158,7 +178,8 @@ export class LayoutEngine {
       }
 
       const translatedMaxContentY = maxContentY + (startY - FIRST_PROCESS_Y);
-      nextTop = Math.max(translatedMaxContentY, startY + laneResult.totalHeight) + 60;
+      nextTop =
+        Math.max(translatedMaxContentY, startY + laneResult.totalHeight) + INTER_ELEMENT_GAP_Y;
     }
   }
 
@@ -175,7 +196,7 @@ export class LayoutEngine {
     const allEdges: PlacedEdge[] = [];
     const allLanes: Array<{ element: any; bounds: Bounds }> = [];
     const allPools: PoolEntry[] = [];
-    let currentY = 80;
+    let currentY = POOL_START_Y;
 
     for (const participant of participants) {
       const procRef = participant.processRef?.id || participant.processRef;
@@ -258,18 +279,17 @@ export class LayoutEngine {
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
       allShapesMap.set(participant.id, poolBounds);
-      return currentY + poolBounds.height + 60;
+      return currentY + poolBounds.height + INTER_ELEMENT_GAP_Y;
     }
 
     const result = layoutScope(process, this.options);
     const hasLanes = Boolean(process.laneSets && process.laneSets[0]?.lanes?.length > 0);
     const { minContentY, maxContentY } = computeScopeContentYExtents(result);
     const contentHeight = maxContentY - minContentY;
-    const POOL_PADDING_Y = 25;
-    const deltaX = hasLanes ? 0 : 150 - result.minX;
+    const deltaX = hasLanes ? 0 : PARTICIPANT_CONTENT_X - result.minX;
     const padY = hasLanes
-      ? POOL_PADDING_Y
-      : Math.max(POOL_PADDING_Y, Math.round((120 - contentHeight) / 2));
+      ? POOL_CONTENT_PADDING_Y
+      : Math.max(POOL_CONTENT_PADDING_Y, Math.round((MIN_POOL_HEIGHT - contentHeight) / 2));
     const deltaY = currentY + padY - minContentY;
 
     translateScopeResult(result, deltaX, deltaY);
@@ -292,11 +312,16 @@ export class LayoutEngine {
     allShapes.push(...result.shapes);
     allEdges.push(...result.edges);
 
-    return currentY + poolBounds.height + 60;
+    return currentY + poolBounds.height + INTER_ELEMENT_GAP_Y;
   }
 
   private layoutBlackBoxPool(participant: any, currentY: number, allPools?: PoolEntry[]): Bounds {
-    const poolBounds: Bounds = { x: 100, y: currentY, width: 400, height: 60 };
+    const poolBounds: Bounds = {
+      x: POOL_X,
+      y: currentY,
+      width: BLACKBOX_POOL_WIDTH,
+      height: BLACKBOX_POOL_HEIGHT,
+    };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
   }
@@ -313,8 +338,8 @@ export class LayoutEngine {
       allPools,
     } = params;
     if (hasLanes) {
-      const laneStartX = 130;
-      const laneWidth = Math.max(400, result.width + 30);
+      const laneStartX = LANE_X;
+      const laneWidth = Math.max(LANE_MIN_WIDTH, result.width + LANE_CONTENT_MARGIN_X);
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: laneStartX,
         startY: currentY,
@@ -323,9 +348,9 @@ export class LayoutEngine {
       });
 
       const poolBounds: Bounds = {
-        x: 100,
+        x: POOL_X,
         y: currentY,
-        width: laneWidth + 30,
+        width: laneWidth + LANE_HEADER_WIDTH,
         height: laneResult.totalHeight,
       };
 
@@ -335,10 +360,10 @@ export class LayoutEngine {
     }
 
     const poolBounds: Bounds = {
-      x: 100,
+      x: POOL_X,
       y: currentY,
-      width: Math.max(400, result.width + 100),
-      height: Math.max(120, contentHeight + 50),
+      width: Math.max(MIN_POOL_WIDTH, result.width + POOL_WIDTH_MARGIN),
+      height: Math.max(MIN_POOL_HEIGHT, contentHeight + POOL_HEIGHT_MARGIN),
     };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
@@ -524,7 +549,6 @@ export function layoutPoolConnectionPorts(
     return a.flowId.localeCompare(b.flowId);
   });
 
-  const MIN_PORT_SPACING = 30;
   const positions = sorted.map((e) => e.idealX);
   for (let i = 1; i < positions.length; i++) {
     if (positions[i] < positions[i - 1] + MIN_PORT_SPACING) {
@@ -532,11 +556,11 @@ export function layoutPoolConnectionPorts(
     }
   }
 
-  const maxAllowedX = poolBounds.x + poolBounds.width - 20;
+  const maxAllowedX = poolBounds.x + poolBounds.width - PORT_INSET;
   if (positions[positions.length - 1] > maxAllowedX) {
     const overflow = positions[positions.length - 1] - maxAllowedX;
     for (let i = positions.length - 1; i >= 0; i--) {
-      positions[i] = Math.max(poolBounds.x + 20, positions[i] - overflow);
+      positions[i] = Math.max(poolBounds.x + PORT_INSET, positions[i] - overflow);
     }
   }
 
@@ -565,8 +589,8 @@ export function collectPoolPortEntries(params: CollectPoolPortsParams): PoolPort
         ? Math.round(srcBounds.x + srcBounds.width / 2)
         : Math.round(poolBounds.x + poolBounds.width / 2);
       const idealX = Math.max(
-        poolBounds.x + 20,
-        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+        poolBounds.x + PORT_INSET,
+        Math.min(poolBounds.x + poolBounds.width - PORT_INSET, rawX)
       );
       entries.push({ flowId: flow.id, idealX });
     } else if (srcId === poolId) {
@@ -575,8 +599,8 @@ export function collectPoolPortEntries(params: CollectPoolPortsParams): PoolPort
         ? Math.round(tgtBounds.x + tgtBounds.width / 2)
         : Math.round(poolBounds.x + poolBounds.width / 2);
       const idealX = Math.max(
-        poolBounds.x + 20,
-        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+        poolBounds.x + PORT_INSET,
+        Math.min(poolBounds.x + poolBounds.width - PORT_INSET, rawX)
       );
       entries.push({ flowId: flow.id, idealX });
     }
@@ -660,7 +684,10 @@ export function computeTargetPortX(params: TargetPortParams): number | undefined
       const rawX = srcBounds
         ? Math.round(srcBounds.x + srcBounds.width / 2)
         : Math.round(tgtBounds.x + tgtBounds.width / 2);
-      const idealX = Math.max(tgtBounds.x + 20, Math.min(tgtBounds.x + tgtBounds.width - 20, rawX));
+      const idealX = Math.max(
+        tgtBounds.x + PORT_INSET,
+        Math.min(tgtBounds.x + tgtBounds.width - PORT_INSET, rawX)
+      );
       return { flowId: f.id, idealX };
     });
     const portMap = layoutPoolConnectionPorts(tgtBounds, entries);
