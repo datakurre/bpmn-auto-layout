@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { DirectedGraph } from '../src/graph/graph';
+import { DirectedGraph, type EdgeKind } from '../src/graph/graph';
 import {
   alignReturnPathLayers,
   canReachEndEvent,
@@ -11,14 +11,14 @@ import {
 
 function build(
   nodes: Array<[string, string]>,
-  edges: Array<[string, string, string]>
+  edges: Array<[string, string, string, EdgeKind?]>
 ): DirectedGraph {
   const g = new DirectedGraph();
   for (const [id, type] of nodes) {
     g.addNode(id, { $type: type });
   }
-  for (const [id, source, target] of edges) {
-    g.addEdge({ id, source, target, data: {} });
+  for (const [id, source, target, kind] of edges) {
+    g.addEdge({ id, source, target, data: {}, kind: kind ?? 'sequence' });
   }
   return g;
 }
@@ -48,7 +48,7 @@ function loopGraph(withEnd: boolean): DirectedGraph {
       ['r1b-r2', 'R1b', 'R2'],
       ['r2-rg', 'R2', 'RG'],
       ['fb', 'RG', 'T'],
-      ['_attach_x', 'R2', 'R1'],
+      ['attach_x', 'R2', 'R1', 'attach'],
     ]
   );
 }

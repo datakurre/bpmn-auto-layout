@@ -1,4 +1,4 @@
-import { DirectedGraph } from './graph';
+import { DirectedGraph, isAttachEdge } from './graph';
 import { routeOrthogonalEdge } from './orthogonal-router';
 import type { Bounds, Point } from '../types';
 
@@ -26,7 +26,7 @@ export function insertDummyNodes(
   }
 
   for (const edge of graph.getEdges()) {
-    if (ctx?.feedbackEdges?.has(edge.id) || edge.id.startsWith('_attach_')) {
+    if (ctx?.feedbackEdges?.has(edge.id) || isAttachEdge(edge)) {
       augmentedGraph.addEdge(edge);
       continue;
     }
@@ -51,21 +51,23 @@ export function insertDummyNodes(
       chain.push(dummyId);
 
       augmentedGraph.addEdge({
-        id: `_dummy_edge_${edge.id}_${r}`,
+        id: `#dummy:${edge.id}:${r}`,
         source: prevNodeId,
         target: dummyId,
         data: null,
         order: edge.order,
+        kind: 'dummy',
       });
       prevNodeId = dummyId;
     }
 
     augmentedGraph.addEdge({
-      id: `_dummy_edge_${edge.id}_${rV}`,
+      id: `#dummy:${edge.id}:${rV}`,
       source: prevNodeId,
       target: edge.target,
       data: null,
       order: edge.order,
+      kind: 'dummy',
     });
 
     edgeDummyChains.set(edge.id, chain);

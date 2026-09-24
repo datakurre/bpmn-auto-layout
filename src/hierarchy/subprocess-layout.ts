@@ -1,4 +1,4 @@
-import { DirectedGraph } from '../graph/graph';
+import { DirectedGraph, isAttachEdge } from '../graph/graph';
 import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
 import { alignReturnPathLayers } from '../graph/return-path-layout';
@@ -657,6 +657,7 @@ function addSequenceFlowEdges(graph: DirectedGraph, sequenceFlows: any[]): void 
         target: tgtId,
         data: flow,
         order,
+        kind: 'sequence',
       });
     }
   }
@@ -786,7 +787,7 @@ function alignTerminalBoundaryRanks(
     if (isSubProcessType(hostNode?.data?.$type)) {
       continue;
     }
-    const hostBoundaries = graph.outEdges(hostId).filter((e) => e.id.startsWith('_attach_'));
+    const hostBoundaries = graph.outEdges(hostId).filter(isAttachEdge);
     if (hostBoundaries.length !== 1) {
       continue;
     }
@@ -810,7 +811,7 @@ function alignTerminalBoundaryRanks(
 
 function clearMergeCorridorObstacles(graph: DirectedGraph, ranks: Map<string, number>): void {
   for (const node of graph.getNodes()) {
-    const inEdges = graph.inEdges(node.id).filter((e) => !e.id.startsWith('_attach_'));
+    const inEdges = graph.inEdges(node.id).filter((e) => !isAttachEdge(e));
     if (inEdges.length < 2) {
       continue;
     }

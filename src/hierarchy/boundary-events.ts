@@ -19,11 +19,12 @@ export function addBoundaryEventEdges(
     const hostId = getRefId(bEvent.attachedToRef);
     if (hostId && graph.getNode(hostId)) {
       graph.addEdge({
-        id: `_attach_${bEvent.id}`,
+        id: `#attach:${bEvent.id}`,
         source: hostId,
         target: bEvent.id,
         data: null,
         order: startOrder + i,
+        kind: 'attach',
       });
     }
   }

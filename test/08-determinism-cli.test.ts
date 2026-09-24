@@ -200,14 +200,20 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
     graph.addNode('N1', {});
     graph.addNode('N1', {});
     graph.addNode('N2', {});
-    graph.addEdge({ id: 'E2', source: 'N1', target: 'N2', data: null });
-    graph.addEdge({ id: 'E1', source: 'N1', target: 'N2', data: null });
+    graph.addEdge({ id: 'E2', source: 'N1', target: 'N2', data: null, kind: 'sequence' });
+    graph.addEdge({ id: 'E1', source: 'N1', target: 'N2', data: null, kind: 'sequence' });
 
     const edges = graph.getEdges();
     expect(edges.length).toBe(2);
     expect(edges[0].id).toBe('E1');
 
-    graph.addEdge({ id: 'E3', source: 'GhostSrc', target: 'GhostTgt', data: null });
+    graph.addEdge({
+      id: 'E3',
+      source: 'GhostSrc',
+      target: 'GhostTgt',
+      data: null,
+      kind: 'sequence',
+    });
     expect(graph.outEdges('NonExistent')).toEqual([]);
     expect(graph.inEdges('NonExistent')).toEqual([]);
 
@@ -227,8 +233,8 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
     graph.addNode('Root_B', {});
     graph.addNode('Root_A', {});
     graph.addNode('Child', {});
-    graph.addEdge({ id: 'F1', source: 'Root_B', target: 'Child', data: null });
-    graph.addEdge({ id: 'F2', source: 'Root_A', target: 'Child', data: null });
+    graph.addEdge({ id: 'F1', source: 'Root_B', target: 'Child', data: null, kind: 'sequence' });
+    graph.addEdge({ id: 'F2', source: 'Root_A', target: 'Child', data: null, kind: 'sequence' });
 
     const layers = assignLayers(graph);
     expect(layers.get('Root_A')).toBe(0);
@@ -266,6 +272,7 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
       source: 'Node_Unassigned',
       target: 'Node_Lane0',
       data: null,
+      kind: 'sequence',
     });
     graph.addNode('Node_Lane2', { $type: 'bpmn:Task' });
 
@@ -289,8 +296,20 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
     graph.addNode('Host_Task', { $type: 'bpmn:Task' });
     graph.addNode('B_Event', { $type: 'bpmn:BoundaryEvent', attachedToRef: 'Host_Task' });
     graph.addNode('Target_Task', { $type: 'bpmn:Task' });
-    graph.addEdge({ id: 'Flow_Attach', source: 'Host_Task', target: 'B_Event', data: null });
-    graph.addEdge({ id: 'Flow_Boundary', source: 'B_Event', target: 'Target_Task', data: null });
+    graph.addEdge({
+      id: 'Flow_Attach',
+      source: 'Host_Task',
+      target: 'B_Event',
+      data: null,
+      kind: 'sequence',
+    });
+    graph.addEdge({
+      id: 'Flow_Boundary',
+      source: 'B_Event',
+      target: 'Target_Task',
+      data: null,
+      kind: 'sequence',
+    });
 
     const ranks = new Map<string, number>([
       ['Host_Task', 0],

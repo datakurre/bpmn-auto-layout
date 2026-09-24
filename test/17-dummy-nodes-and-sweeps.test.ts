@@ -19,11 +19,32 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     graph.addNode('N3', null, 3);
 
     // Edge spanning 3 ranks (0 -> 3)
-    graph.addEdge({ id: 'long_flow', source: 'N0', target: 'N3', data: null, order: 0 });
+    graph.addEdge({
+      id: 'long_flow',
+      source: 'N0',
+      target: 'N3',
+      data: null,
+      order: 0,
+      kind: 'sequence',
+    });
     // Edge spanning 1 rank (0 -> 1)
-    graph.addEdge({ id: 'short_flow', source: 'N0', target: 'N1', data: null, order: 1 });
+    graph.addEdge({
+      id: 'short_flow',
+      source: 'N0',
+      target: 'N1',
+      data: null,
+      order: 1,
+      kind: 'sequence',
+    });
     // Edge spanning 1 rank (1 -> 2)
-    graph.addEdge({ id: 'step_flow', source: 'N1', target: 'N2', data: null, order: 2 });
+    graph.addEdge({
+      id: 'step_flow',
+      source: 'N1',
+      target: 'N2',
+      data: null,
+      order: 2,
+      kind: 'sequence',
+    });
 
     const ranks = new Map<string, number>([
       ['N0', 0],
@@ -63,8 +84,22 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     graph.addNode('N2', null, 2);
     graph.addNode('N3', null, 3);
 
-    graph.addEdge({ id: 'long_flow', source: 'N0', target: 'N3', data: null, order: 0 });
-    graph.addEdge({ id: 'short_flow', source: 'N0', target: 'N1', data: null, order: 1 });
+    graph.addEdge({
+      id: 'long_flow',
+      source: 'N0',
+      target: 'N3',
+      data: null,
+      order: 0,
+      kind: 'sequence',
+    });
+    graph.addEdge({
+      id: 'short_flow',
+      source: 'N0',
+      target: 'N1',
+      data: null,
+      order: 1,
+      kind: 'sequence',
+    });
 
     const ranks = new Map<string, number>([
       ['N0', 0],
@@ -85,8 +120,22 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
     graph.addNode('N0', null, 0);
     graph.addNode('N2', null, 2);
 
-    graph.addEdge({ id: 'feedback_flow', source: 'N0', target: 'N2', data: null, order: 0 });
-    graph.addEdge({ id: '_attach_boundary', source: 'N0', target: 'N2', data: null, order: 1 });
+    graph.addEdge({
+      id: 'feedback_flow',
+      source: 'N0',
+      target: 'N2',
+      data: null,
+      order: 0,
+      kind: 'sequence',
+    });
+    graph.addEdge({
+      id: 'boundary_attach',
+      source: 'N0',
+      target: 'N2',
+      data: null,
+      order: 1,
+      kind: 'attach',
+    });
 
     const ranks = new Map<string, number>([
       ['N0', 0],
@@ -96,14 +145,14 @@ describe('Issue #81: Dummy Nodes and Merge Track Alignment', () => {
 
     const { augmentedRanks } = insertDummyNodes(graph, ranks, { feedbackEdges });
     expect(augmentedRanks.has('_dummy_feedback_flow_1')).toBe(false);
-    expect(augmentedRanks.has('_dummy__attach_boundary_1')).toBe(false);
+    expect(augmentedRanks.has('_dummy_boundary_attach_1')).toBe(false);
   });
 
   it('handles missing ranks gracefully in insertDummyNodes', () => {
     const graph = new DirectedGraph();
     graph.addNode('A', null);
     graph.addNode('B', null);
-    graph.addEdge({ id: 'edge_ab', source: 'A', target: 'B', data: null });
+    graph.addEdge({ id: 'edge_ab', source: 'A', target: 'B', data: null, kind: 'sequence' });
 
     const ranks = new Map<string, number>([['A', 0]]); // B missing rank
     const { augmentedGraph } = insertDummyNodes(graph, ranks);
