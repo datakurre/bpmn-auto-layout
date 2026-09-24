@@ -5,8 +5,69 @@ import {
   alignVerticallyStackedPaths,
   unifyCollaborationPoolWidths,
 } from '../src/hierarchy/path-alignment';
-import type { ScopeLayoutResult } from '../src/hierarchy/subprocess-layout';
+import {
+  layoutScope,
+  type ScopeAnalysis,
+  type ScopeLayoutResult,
+} from '../src/hierarchy/subprocess-layout';
 import { boxesOverlap } from '../src/layout-metrics';
+import { BpmnBuilder } from '../src/bpmn-builder';
+
+function buildOrderFulfillmentProcess(): any {
+  const builder = new BpmnBuilder('Proc_Order');
+  builder
+    .addStartEvent('Start_Order', 'Order Received')
+    .addTask('Task_Validate', 'Validate Order Data')
+    .addParallelGateway('Split_Parallel', 'Split Checks')
+    .addTask('Task_Auth_Payment', 'Authorize Payment')
+    .addExclusiveGateway('Gateway_Payment', 'Payment OK?')
+    .addTask('Task_Payment_Failed', 'Notify Payment Failed')
+    .addEndEvent('End_Order_Cancelled', 'Order Cancelled')
+    .addExclusiveGateway('Gateway_Stock_Merge', 'Stock Evaluation')
+    .addTask('Task_Check_Stock', 'Check Inventory')
+    .addExclusiveGateway('Gateway_Stock', 'In Stock?')
+    .addTask('Task_Backorder', 'Request Backorder')
+    .addTask('Task_Reserve_Stock', 'Reserve Items')
+    .addParallelGateway('Join_Parallel', 'Sync Checks')
+    .addSubProcess('Sub_Fulfillment', 'Fulfillment & Packing', (sub) => {
+      sub
+        .addStartEvent('Sub_Start', 'Fulfillment Start')
+        .addTask('Sub_Pick', 'Pick Items from Warehouse')
+        .addTask('Sub_Pack', 'Package Goods')
+        .addTask('Sub_Label', 'Print Shipping Label')
+        .addEndEvent('Sub_End', 'Ready to Ship')
+        .addSequenceFlow('SF1', 'Sub_Start', 'Sub_Pick')
+        .addSequenceFlow('SF2', 'Sub_Pick', 'Sub_Pack')
+        .addSequenceFlow('SF3', 'Sub_Pack', 'Sub_Label')
+        .addSequenceFlow('SF4', 'Sub_Label', 'Sub_End');
+    })
+    .addTask('Task_Update_ERP', 'Update ERP & Tracking')
+    .addTask('Task_Notify_Customer', 'Send Shipment Notice')
+    .addEndEvent('End_Order_Fulfilled', 'Order Delivered')
+    .addSequenceFlow('F1', 'Start_Order', 'Task_Validate')
+    .addSequenceFlow('F2', 'Task_Validate', 'Split_Parallel')
+    .addSequenceFlow('F_Pay_1', 'Split_Parallel', 'Task_Auth_Payment')
+    .addSequenceFlow('F_Pay_2', 'Task_Auth_Payment', 'Gateway_Payment')
+    .addSequenceFlow('F_Pay_Fail', 'Gateway_Payment', 'Task_Payment_Failed')
+    .addSequenceFlow('F_Pay_Cancel', 'Task_Payment_Failed', 'End_Order_Cancelled')
+    .addSequenceFlow('F_Pay_OK', 'Gateway_Payment', 'Join_Parallel')
+    .addSequenceFlow('F_Stock_1', 'Split_Parallel', 'Gateway_Stock_Merge')
+    .addSequenceFlow('F_Stock_To_Check', 'Gateway_Stock_Merge', 'Task_Check_Stock')
+    .addSequenceFlow('F_Stock_2', 'Task_Check_Stock', 'Gateway_Stock')
+    .addSequenceFlow('F_Stock_Wait', 'Gateway_Stock', 'Task_Backorder')
+    .addSequenceFlow('F_Stock_Retry', 'Task_Backorder', 'Gateway_Stock_Merge')
+    .addSequenceFlow('F_Stock_OK', 'Gateway_Stock', 'Task_Reserve_Stock')
+    .addSequenceFlow('F_Stock_Join', 'Task_Reserve_Stock', 'Join_Parallel')
+    .addSequenceFlow('F_Sync', 'Join_Parallel', 'Sub_Fulfillment')
+    .addSequenceFlow('F_Post_Sub', 'Sub_Fulfillment', 'Task_Update_ERP')
+    .addSequenceFlow('F_ERP', 'Task_Update_ERP', 'Task_Notify_Customer')
+    .addSequenceFlow('F_Done', 'Task_Notify_Customer', 'End_Order_Fulfilled');
+  return builder.getProcess();
+}
+
+function emptyAnalysis(): ScopeAnalysis {
+  return { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() };
+}
 
 describe('path-alignment unit tests', () => {
   describe('unifyCollaborationPoolWidths', () => {
@@ -269,6 +330,66 @@ describe('path-alignment unit tests', () => {
       expect(shapesMap.get('B2')?.x).toBe(450);
       // Edge FB re-routed
       expect(edgeB.waypoints[0].x).toBe(400);
+    });
+
+    it('reroutes a modified process using the real per-process analysis instead of a recomputed feedback set (#94 defect B)', () => {
+      const proc1 = {
+        $type: 'bpmn:Process',
+        id: 'Proc1',
+        flowElements: [{ id: 'A1', $type: 'bpmn:Task' }],
+      };
+      const proc2 = {
+        $type: 'bpmn:Process',
+        id: 'Proc2',
+        flowElements: [
+          { id: 'B1', $type: 'bpmn:Task' },
+          { id: 'B2', $type: 'bpmn:Task' },
+          { $type: 'bpmn:SequenceFlow', id: 'FB', sourceRef: 'B1', targetRef: 'B2' },
+        ],
+      };
+
+      const shapesMap = new Map([
+        ['A1', { x: 300, y: 100, width: 100, height: 80 }],
+        ['B1', { x: 100, y: 300, width: 100, height: 80 }],
+        ['B2', { x: 250, y: 300, width: 100, height: 80 }],
+      ]);
+
+      // FB is a plain forward flow (no cycle), so recomputing feedback edges
+      // from scratch for Proc2 would find nothing. Supply the real analysis
+      // layoutScope would have produced -- as if a return-path pass had
+      // reclassified FB as feedback -- and check that the reroute honors it
+      // rather than the empty set a fresh recomputation would find.
+      const edgeFB = {
+        element: { id: 'FB', sourceRef: 'B1', targetRef: 'B2' },
+        waypoints: [
+          { x: 200, y: 340 },
+          { x: 250, y: 340 },
+        ],
+      };
+      const processAnalysis = new Map<string, ScopeAnalysis>([
+        [
+          'Proc2',
+          {
+            feedbackEdges: new Set(['FB']),
+            returnNodes: new Set<string>(),
+            returnGateways: new Map<string, string>(),
+          },
+        ],
+      ]);
+
+      const ctx: any = {
+        definitions: { rootElements: [proc1, proc2] },
+        collaboration: {
+          messageFlows: [{ sourceRef: 'A1', targetRef: 'B1' }],
+        },
+        allShapesMap: shapesMap,
+        allShapes: [],
+        allEdges: [edgeFB],
+        processAnalysis,
+      };
+
+      alignCollaborationPaths(ctx);
+      expect((edgeFB as any).isFeedback).toBe(true);
     });
 
     it('shifts nested subprocess descendants when host subprocess shifts', () => {
@@ -611,6 +732,7 @@ describe('path-alignment unit tests', () => {
         ],
       };
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 300,
         height: 100,
         minX: 100,
@@ -642,6 +764,7 @@ describe('path-alignment unit tests', () => {
         ],
       };
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 400,
         height: 200,
         minX: 100,
@@ -681,6 +804,7 @@ describe('path-alignment unit tests', () => {
       // Join1 is at x: 250
       // No parallel node exists with x >= 200 and < 250, so targetX is undefined
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 400,
         height: 300,
         minX: 100,
@@ -719,6 +843,7 @@ describe('path-alignment unit tests', () => {
       // targetX will be 240, but Join1 is at 250.
       // gBounds.x (100) + deltaX (140) + width (50) + 60 = 350 > 250 -> exceeds slack!
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 400,
         height: 300,
         minX: 100,
@@ -848,6 +973,7 @@ describe('path-alignment unit tests', () => {
       };
 
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 800,
         height: 400,
         minX: 100,
@@ -892,6 +1018,125 @@ describe('path-alignment unit tests', () => {
       expect(boxesOverlap(shapeMap.get('BE_Fail'), shapeMap.get('Fail'))).toBe(true);
     });
 
+    it("shifts a shifted subprocess's descendant shapes and internal edges along with it", () => {
+      const gw = { id: 'GW1', $type: 'bpmn:ExclusiveGateway' };
+      const join = { id: 'Join1', $type: 'bpmn:ExclusiveGateway' };
+      const obs = { id: 'Obs', $type: 'bpmn:Task' };
+      const col1 = { id: 'Col1', $type: 'bpmn:Task' };
+      const col2 = { id: 'Col2', $type: 'bpmn:Task' };
+      const child = { id: 'Sub_Child', $type: 'bpmn:Task' };
+      const childFlow = {
+        id: 'Sub_Flow',
+        $type: 'bpmn:SequenceFlow',
+        sourceRef: 'Sub_Child',
+        targetRef: 'Sub_Child',
+      };
+      const sub = { id: 'Fail', $type: 'bpmn:SubProcess', flowElements: [child, childFlow] };
+      const failEnd = { id: 'FailEnd', $type: 'bpmn:EndEvent' };
+
+      const flowJoin = {
+        $type: 'bpmn:SequenceFlow',
+        id: 'F_Join',
+        sourceRef: 'GW1',
+        targetRef: 'Join1',
+      };
+      const flowJoinObs = {
+        $type: 'bpmn:SequenceFlow',
+        id: 'F_JoinObs',
+        sourceRef: 'Obs',
+        targetRef: 'Join1',
+      };
+      const flowFail = {
+        $type: 'bpmn:SequenceFlow',
+        id: 'F_Fail',
+        sourceRef: 'GW1',
+        targetRef: 'Fail',
+      };
+      const flowDownstream = {
+        $type: 'bpmn:SequenceFlow',
+        id: 'F_Downstream',
+        sourceRef: 'Fail',
+        targetRef: 'FailEnd',
+      };
+
+      const process = {
+        flowElements: [
+          gw,
+          join,
+          obs,
+          col1,
+          col2,
+          sub,
+          failEnd,
+          flowJoin,
+          flowJoinObs,
+          flowFail,
+          flowDownstream,
+        ],
+      };
+
+      const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
+        width: 800,
+        height: 400,
+        minX: 100,
+        minY: 100,
+        shapes: [
+          { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
+          { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
+          { element: obs, bounds: { x: 100, y: 160, width: 100, height: 80 } },
+          { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
+          { element: col2, bounds: { x: 350, y: 160, width: 100, height: 80 } },
+          { element: sub, bounds: { x: 180, y: 100, width: 100, height: 50 }, isExpanded: true },
+          { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
+          { element: child, bounds: { x: 200, y: 110, width: 40, height: 30 } },
+        ],
+        edges: [
+          {
+            element: flowJoin,
+            waypoints: [
+              { x: 125, y: 150 },
+              { x: 600, y: 225 },
+            ],
+          },
+          {
+            element: flowFail,
+            waypoints: [
+              { x: 150, y: 125 },
+              { x: 180, y: 125 },
+            ],
+          },
+          {
+            element: childFlow,
+            waypoints: [
+              { x: 220, y: 125 },
+              { x: 230, y: 125 },
+            ],
+          },
+        ],
+      };
+
+      const res = alignIntraProcessBranches({ process, result });
+      expect(res).toBe(true);
+
+      const shapeMap = new Map<string, any>();
+      for (const s of result.shapes) {
+        shapeMap.set(s.element.id, s.bounds);
+      }
+      const edgeMap = new Map<string, any>();
+      for (const e of result.edges) {
+        edgeMap.set(e.element.id, e);
+      }
+
+      const deltaX = shapeMap.get('GW1').x - 100;
+      expect(deltaX).toBeGreaterThan(0);
+      expect(shapeMap.get('Sub_Child')?.x).toBe(200 + deltaX);
+
+      const childEdge = edgeMap.get('Sub_Flow');
+      expect(childEdge.waypoints[0].x).toBe(220 + deltaX);
+      expect(childEdge.waypoints[1].x).toBe(230 + deltaX);
+    });
+
     it('returns false when candidate gateway shift causes overlap with an existing node', () => {
       const gw = { id: 'G1', $type: 'bpmn:ExclusiveGateway' };
       const join = { id: 'G2', $type: 'bpmn:ExclusiveGateway' };
@@ -912,6 +1157,7 @@ describe('path-alignment unit tests', () => {
       };
 
       const result: ScopeLayoutResult = {
+        analysis: emptyAnalysis(),
         width: 1000,
         height: 600,
         minX: 100,
@@ -936,6 +1182,20 @@ describe('path-alignment unit tests', () => {
 
       const res = alignIntraProcessBranches({ process, result });
       expect(res).toBe(false);
+    });
+
+    it('keeps a loop edge marked as feedback after shifting the candidate gateway (#94 defect A)', () => {
+      const process = buildOrderFulfillmentProcess();
+      const result = layoutScope(process);
+
+      const res = alignIntraProcessBranches({ process, result });
+      expect(res).toBe(true);
+
+      const edgeMap = new Map<string, any>();
+      for (const e of result.edges) {
+        edgeMap.set(e.element.id, e);
+      }
+      expect(edgeMap.get('F_Stock_Retry')?.isFeedback).toBe(true);
     });
   });
 

@@ -1,6 +1,6 @@
 import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 import { DiGenerator } from './di-generator';
-import { layoutScope } from './hierarchy/subprocess-layout';
+import { layoutScope, type ScopeAnalysis } from './hierarchy/subprocess-layout';
 import {
   layoutProcessLanes,
   routeMessageFlow,
@@ -49,6 +49,7 @@ interface ParticipantLayoutParams {
   allEdges: PlacedEdge[];
   allLanes: Array<{ element: any; bounds: Bounds }>;
   allPools: PoolEntry[];
+  processAnalysis: Map<string, ScopeAnalysis>;
 }
 
 interface PoolAndLanesParams {
@@ -196,6 +197,7 @@ export class LayoutEngine {
     const allEdges: PlacedEdge[] = [];
     const allLanes: Array<{ element: any; bounds: Bounds }> = [];
     const allPools: PoolEntry[] = [];
+    const processAnalysis = new Map<string, ScopeAnalysis>();
     let currentY = POOL_START_Y;
 
     for (const participant of participants) {
@@ -210,6 +212,7 @@ export class LayoutEngine {
         allEdges,
         allLanes,
         allPools,
+        processAnalysis,
       });
     }
 
@@ -221,6 +224,7 @@ export class LayoutEngine {
       allEdges,
       allLanes,
       allPools,
+      processAnalysis,
     });
 
     ensureBoundariesAttached(allShapes);
@@ -275,6 +279,7 @@ export class LayoutEngine {
       allEdges,
       allLanes,
       allPools,
+      processAnalysis,
     } = params;
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
@@ -283,6 +288,7 @@ export class LayoutEngine {
     }
 
     const result = layoutScope(process, this.options);
+    processAnalysis.set(process.id, result.analysis);
     const hasLanes = Boolean(process.laneSets && process.laneSets[0]?.lanes?.length > 0);
     const { minContentY, maxContentY } = computeScopeContentYExtents(result);
     const contentHeight = maxContentY - minContentY;

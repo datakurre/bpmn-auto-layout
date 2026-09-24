@@ -4,6 +4,7 @@ import {
   getRefId,
   partitionScopeElements,
   rerouteProcessEdges,
+  type ScopeAnalysis,
   type ScopeLayoutResult,
 } from './subprocess-layout';
 import { findFeedbackEdges } from '../graph/cycle-removal';
@@ -17,13 +18,13 @@ export interface CollaborationAlignmentContext {
   allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean; labelBounds?: Bounds }>;
   allLanes?: Array<{ element: any; bounds: Bounds }>;
   allPools?: Array<{ element: any; bounds: Bounds }>;
+  processAnalysis?: Map<string, ScopeAnalysis>;
 }
 
 export interface IntraProcessAlignmentContext {
   process: any;
   result: ScopeLayoutResult;
   options?: AutoLayoutOptions;
-  feedbackEdges?: Set<string>;
 }
 
 interface MessagePair {
@@ -288,9 +289,14 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
 
 function updateProcessEdges(
   process: any,
-  feedbackEdges: Set<string>,
+  fallbackFeedbackEdges: Set<string>,
   ctx: CollaborationAlignmentContext
 ): void {
+  const analysis: ScopeAnalysis = ctx.processAnalysis?.get(process.id) ?? {
+    feedbackEdges: fallbackFeedbackEdges,
+    returnNodes: new Set<string>(),
+    returnGateways: new Map<string, string>(),
+  };
   const { regularNodes, boundaryEvents } = partitionScopeElements(process);
   const processBoundsMap = new Map<string, Bounds>();
   for (const n of [...regularNodes, ...boundaryEvents]) {
@@ -299,7 +305,7 @@ function updateProcessEdges(
       processBoundsMap.set(n.id, b);
     }
   }
-  const rerouted = rerouteProcessEdges(process, processBoundsMap, feedbackEdges);
+  const rerouted = rerouteProcessEdges(process, processBoundsMap, analysis);
   const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
   for (const edge of ctx.allEdges) {
     const newRoute = reroutedMap.get(edge.element.id);
@@ -654,14 +660,39 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
     const hostId = getRefId(be.attachedToRef);
     return hostId && nodesToShift.some((n) => n.id === hostId);
   });
+
+  const shapeIdsToShift = new Set<string>();
+  const descendantEdgeIds = new Set<string>();
   for (const n of [...nodesToShift, ...boundaryEventsToShift]) {
-    const b = boundsMap.get(n.id);
+    shapeIdsToShift.add(n.id);
+    if (n.$type === 'bpmn:SubProcess') {
+      const descendants = { shapes: [], edges: [] };
+      collectSubProcessDescendants(n, descendants);
+      for (const sId of descendants.shapes) {
+        shapeIdsToShift.add(sId);
+      }
+      for (const eId of descendants.edges) {
+        descendantEdgeIds.add(eId);
+      }
+    }
+  }
+  for (const id of shapeIdsToShift) {
+    const b = boundsMap.get(id);
     if (b) {
       b.x += candidate.deltaX;
     }
   }
+  if (descendantEdgeIds.size > 0) {
+    for (const e of result.edges) {
+      if (descendantEdgeIds.has(e.element.id)) {
+        for (const wp of e.waypoints) {
+          wp.x += candidate.deltaX;
+        }
+      }
+    }
+  }
 
-  const rerouted = rerouteProcessEdges(process, boundsMap, ctx.feedbackEdges);
+  const rerouted = rerouteProcessEdges(process, boundsMap, result.analysis);
   const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
   for (const e of result.edges) {
     const newRoute = reroutedMap.get(e.element.id);
@@ -700,6 +731,11 @@ export function alignVerticallyStackedPaths(opts: CollaborationAlignmentContext)
         minY: Math.min(...partShapes.map((s) => s.bounds.y), 100),
         shapes: partShapes,
         edges: partEdges,
+        analysis: opts.processAnalysis?.get(process.id) ?? {
+          feedbackEdges: new Set<string>(),
+          returnNodes: new Set<string>(),
+          returnGateways: new Map<string, string>(),
+        },
       };
       alignIntraProcessBranches({ process, result: fakeResult });
     }

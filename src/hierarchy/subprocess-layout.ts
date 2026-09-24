@@ -40,6 +40,16 @@ import type { AutoLayoutOptions, Bounds, Point } from '../types';
 
 export { routeAssociationEdge } from './artifact-layout';
 
+export interface ScopeAnalysis {
+  feedbackEdges: Set<string>;
+  returnNodes: Set<string>;
+  returnGateways: Map<string, string>;
+}
+
+function emptyScopeAnalysis(): ScopeAnalysis {
+  return { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() };
+}
+
 export interface ScopeLayoutResult {
   width: number;
   height: number;
@@ -57,6 +67,7 @@ export interface ScopeLayoutResult {
     isFeedback?: boolean;
     labelBounds?: Bounds;
   }>;
+  analysis: ScopeAnalysis;
 }
 
 interface LayoutContext {
@@ -90,6 +101,11 @@ function cloneScopeResult(result: ScopeLayoutResult): ScopeLayoutResult {
       isFeedback: e.isFeedback,
       labelBounds: e.labelBounds,
     })),
+    analysis: {
+      feedbackEdges: new Set(result.analysis.feedbackEdges),
+      returnNodes: new Set(result.analysis.returnNodes),
+      returnGateways: new Map(result.analysis.returnGateways),
+    },
   };
 }
 
@@ -139,15 +155,24 @@ export function layoutScope(
     compensationHandlers.length === 0 &&
     allArtifacts.length === 0
   ) {
-    return { width: 100, height: 80, minX: 0, minY: 0, shapes: [], edges: [] };
+    return {
+      width: 100,
+      height: 80,
+      minX: 0,
+      minY: 0,
+      shapes: [],
+      edges: [],
+      analysis: emptyScopeAnalysis(),
+    };
   }
 
   const boundsMap = new Map<string, Bounds>();
   const shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }> = [];
   const edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> = [];
 
+  let analysis = emptyScopeAnalysis();
   if (regularNodes.length > 0 || boundaryEvents.length > 0) {
-    layoutRegularFlowNodes({
+    analysis = layoutRegularFlowNodes({
       scopeElement,
       regularNodes,
       boundaryEvents,
@@ -160,6 +185,47 @@ export function layoutScope(
       edges,
     });
   }
+
+  layoutRemainingArtifacts(
+    { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes },
+    { childScopeResults, boundsMap, shapes, edges }
+  );
+
+  const bounding = computeScopeBoundingBox(shapes);
+  const { width, height } = computeScopeContainerDimensions(bounding);
+  return {
+    width,
+    height,
+    minX: bounding.minX,
+    minY: bounding.minY,
+    shapes,
+    edges,
+    analysis,
+  };
+}
+
+interface ScopeArtifactPartition {
+  allArtifacts: any[];
+  allAssociations: any[];
+  eventSubProcesses: any[];
+  compensationHandlers: any[];
+  regularNodes: any[];
+}
+
+interface ScopeArtifactContext {
+  childScopeResults: Map<string, ScopeLayoutResult>;
+  boundsMap: Map<string, Bounds>;
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+}
+
+function layoutRemainingArtifacts(
+  partition: ScopeArtifactPartition,
+  ctx: ScopeArtifactContext
+): void {
+  const { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes } =
+    partition;
+  const { childScopeResults, boundsMap, shapes, edges } = ctx;
 
   const regularNodeIds = new Set<string>(regularNodes.map((n: any) => n.id));
   const { connected, unconnected } = partitionArtifacts(
@@ -183,17 +249,6 @@ export function layoutScope(
     });
     routeAssociations(allAssociations, boundsMap, edges);
   }
-
-  const bounding = computeScopeBoundingBox(shapes);
-  const { width, height } = computeScopeContainerDimensions(bounding);
-  return {
-    width,
-    height,
-    minX: bounding.minX,
-    minY: bounding.minY,
-    shapes,
-    edges,
-  };
 }
 
 function extractNodeToLaneMap(scopeElement: any): Map<string, number> | undefined {
@@ -883,7 +938,7 @@ function alignScopeEndEvents(graph: DirectedGraph, ranks: Map<string, number>): 
   }
 }
 
-function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
+function layoutRegularFlowNodes(ctx: RegularFlowContext): ScopeAnalysis {
   const {
     scopeElement,
     regularNodes,
@@ -954,6 +1009,12 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
       isFeedback: feedbackEdges.has(e.element.id),
     });
   }
+
+  return {
+    feedbackEdges,
+    returnNodes: returnPathAnalysis.returnNodes,
+    returnGateways: returnPathAnalysis.returnGateways,
+  };
 }
 
 const SUBPROCESS_MAX_ASPECT_RATIO = 6;
@@ -1076,17 +1137,19 @@ export function partitionScopeElements(scopeElement: any): ScopeElementsPartitio
 export function rerouteProcessEdges(
   process: any,
   boundsMap: Map<string, Bounds>,
-  feedbackEdges?: Set<string>
+  analysis?: ScopeAnalysis
 ): Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> {
   const { regularNodes, boundaryEvents, sequenceFlows } = partitionScopeElements(process);
   const routed = routeScopeEdges(sequenceFlows, {
     regularNodes,
     boundaryEvents,
     boundsMap,
-    feedbackEdges,
+    feedbackEdges: analysis?.feedbackEdges,
+    returnNodes: analysis?.returnNodes,
+    returnGateways: analysis?.returnGateways,
   });
   return routed.map((e) => ({
     ...e,
-    isFeedback: feedbackEdges?.has(e.element.id),
+    isFeedback: analysis?.feedbackEdges?.has(e.element.id),
   }));
 }
