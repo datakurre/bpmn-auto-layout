@@ -278,7 +278,7 @@ describe('path-alignment unit tests', () => {
       expect(shapesMap.get('T2')?.x).toBe(100);
     });
 
-    it('shifts target or sender forward to align centers and reroutes edges', () => {
+    it('shifts target or sender forward to align centers, leaving the edge for a later reroute', () => {
       const proc1 = {
         $type: 'bpmn:Process',
         id: 'Proc1',
@@ -328,68 +328,10 @@ describe('path-alignment unit tests', () => {
       alignCollaborationPaths(ctx);
       expect(shapesMap.get('B1')?.x).toBe(300);
       expect(shapesMap.get('B2')?.x).toBe(450);
-      // Edge FB re-routed
-      expect(edgeB.waypoints[0].x).toBe(400);
-    });
-
-    it('reroutes a modified process using the real per-process analysis instead of a recomputed feedback set (#94 defect B)', () => {
-      const proc1 = {
-        $type: 'bpmn:Process',
-        id: 'Proc1',
-        flowElements: [{ id: 'A1', $type: 'bpmn:Task' }],
-      };
-      const proc2 = {
-        $type: 'bpmn:Process',
-        id: 'Proc2',
-        flowElements: [
-          { id: 'B1', $type: 'bpmn:Task' },
-          { id: 'B2', $type: 'bpmn:Task' },
-          { $type: 'bpmn:SequenceFlow', id: 'FB', sourceRef: 'B1', targetRef: 'B2' },
-        ],
-      };
-
-      const shapesMap = new Map([
-        ['A1', { x: 300, y: 100, width: 100, height: 80 }],
-        ['B1', { x: 100, y: 300, width: 100, height: 80 }],
-        ['B2', { x: 250, y: 300, width: 100, height: 80 }],
-      ]);
-
-      // FB is a plain forward flow (no cycle), so recomputing feedback edges
-      // from scratch for Proc2 would find nothing. Supply the real analysis
-      // layoutScope would have produced -- as if a return-path pass had
-      // reclassified FB as feedback -- and check that the reroute honors it
-      // rather than the empty set a fresh recomputation would find.
-      const edgeFB = {
-        element: { id: 'FB', sourceRef: 'B1', targetRef: 'B2' },
-        waypoints: [
-          { x: 200, y: 340 },
-          { x: 250, y: 340 },
-        ],
-      };
-      const processAnalysis = new Map<string, ScopeAnalysis>([
-        [
-          'Proc2',
-          {
-            feedbackEdges: new Set(['FB']),
-            returnNodes: new Set<string>(),
-            returnGateways: new Map<string, string>(),
-          },
-        ],
-      ]);
-
-      const ctx: any = {
-        definitions: { rootElements: [proc1, proc2] },
-        collaboration: {
-          messageFlows: [{ sourceRef: 'A1', targetRef: 'B1' }],
-        },
-        allShapesMap: shapesMap,
-        allShapes: [],
-        allEdges: [edgeFB],
-        processAnalysis,
-      };
-
-      alignCollaborationPaths(ctx);
-      expect((edgeFB as any).isFeedback).toBe(true);
+      // alignCollaborationPaths only moves shapes now (#100 phase 1): FB's
+      // waypoints are left stale here and re-routed once, later, by
+      // LayoutEngine.layoutCollaboration.
+      expect(edgeB.waypoints[0].x).toBe(200);
     });
 
     it('shifts nested subprocess descendants when host subprocess shifts', () => {

@@ -1,6 +1,11 @@
 import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 import { DiGenerator } from './di-generator';
-import { layoutScope, type ScopeAnalysis } from './hierarchy/subprocess-layout';
+import {
+  layoutScope,
+  partitionScopeElements,
+  rerouteProcessEdges,
+  type ScopeAnalysis,
+} from './hierarchy/subprocess-layout';
 import {
   layoutProcessLanes,
   routeMessageFlow,
@@ -147,6 +152,14 @@ export class LayoutEngine {
         startY = FIRST_PROCESS_Y + (nextTop - top);
       }
 
+      const shapeBoundsById = new Map<string, Bounds>(
+        result.shapes.map((s) => [s.element.id, s.bounds])
+      );
+      rerouteTopLevelProcessFlows(process, shapeBoundsById, {
+        edges: result.edges,
+        analysis: result.analysis,
+      });
+
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: POOL_X,
         startY,
@@ -224,10 +237,10 @@ export class LayoutEngine {
       allEdges,
       allLanes,
       allPools,
-      processAnalysis,
     });
 
     ensureBoundariesAttached(allShapes);
+    rerouteAllProcesses(definitions, { allShapesMap, allEdges, processAnalysis });
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,
@@ -436,6 +449,60 @@ export class LayoutEngine {
         options.edges.push({ element: flow, waypoints });
       }
     }
+  }
+}
+
+interface RerouteTopLevelContext {
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+  analysis?: ScopeAnalysis;
+}
+
+/**
+ * Routes every top-level sequence flow of `process` exactly once, over its
+ * final (post-alignment) bounds, and writes the result back into `ctx.edges`.
+ * `shapeBoundsById` may contain more shapes than this process owns (e.g. an
+ * entire collaboration); only the process's own regular nodes and boundary
+ * events are looked up.
+ */
+export function rerouteTopLevelProcessFlows(
+  process: any,
+  shapeBoundsById: Map<string, Bounds>,
+  ctx: RerouteTopLevelContext
+): void {
+  const { regularNodes, boundaryEvents } = partitionScopeElements(process);
+  const boundsMap = new Map<string, Bounds>();
+  for (const n of [...regularNodes, ...boundaryEvents]) {
+    const b = shapeBoundsById.get(n.id);
+    if (b) {
+      boundsMap.set(n.id, b);
+    }
+  }
+
+  const rerouted = rerouteProcessEdges(process, boundsMap, ctx.analysis);
+  const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
+  for (const e of ctx.edges) {
+    const newRoute = reroutedMap.get(e.element.id);
+    if (newRoute) {
+      e.waypoints = newRoute.waypoints;
+      e.isFeedback = newRoute.isFeedback;
+    }
+  }
+}
+
+function rerouteAllProcesses(
+  definitions: any,
+  ctx: {
+    allShapesMap: Map<string, Bounds>;
+    allEdges: PlacedEdge[];
+    processAnalysis: Map<string, ScopeAnalysis>;
+  }
+): void {
+  const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
+  for (const process of processes) {
+    rerouteTopLevelProcessFlows(process, ctx.allShapesMap, {
+      edges: ctx.allEdges,
+      analysis: ctx.processAnalysis.get(process.id),
+    });
   }
 }
 
