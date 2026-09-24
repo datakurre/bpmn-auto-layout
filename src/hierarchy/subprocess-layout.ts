@@ -66,17 +66,59 @@ interface LayoutContext {
   nodeToLane?: Map<string, number>;
 }
 
+export interface ScopeCacheOptions {
+  customDimensions?: Map<string, { width: number; height: number }>;
+  scopeCache?: Map<string, ScopeLayoutResult>;
+  callCounter?: { count: number };
+}
+
+function cloneScopeResult(result: ScopeLayoutResult): ScopeLayoutResult {
+  return {
+    width: result.width,
+    height: result.height,
+    minX: result.minX,
+    minY: result.minY,
+    shapes: result.shapes.map((s) => ({
+      element: s.element,
+      bounds: { ...s.bounds },
+      isExpanded: s.isExpanded,
+      labelBounds: s.labelBounds,
+    })),
+    edges: result.edges.map((e) => ({
+      element: e.element,
+      waypoints: e.waypoints.map((wp) => ({ ...wp })),
+      isFeedback: e.isFeedback,
+      labelBounds: e.labelBounds,
+    })),
+  };
+}
+
+function resolveScopeCacheOptions(
+  cacheOptions: ScopeCacheOptions | undefined
+): ResolvedScopeCacheOptions {
+  const callCounter = cacheOptions?.callCounter;
+  if (callCounter) {
+    callCounter.count += 1;
+  }
+  return {
+    customDimensions: cacheOptions?.customDimensions,
+    scopeCache: cacheOptions?.scopeCache ?? new Map<string, ScopeLayoutResult>(),
+    callCounter,
+  };
+}
+
 export function layoutScope(
   scopeElement: any,
   options?: AutoLayoutOptions,
-  customDimensions?: Map<string, { width: number; height: number }>
+  cacheOptions?: ScopeCacheOptions
 ): ScopeLayoutResult {
+  const resolvedCacheOptions = resolveScopeCacheOptions(cacheOptions);
   const flowElements = scopeElement.flowElements || [];
   const subProcesses = flowElements.filter((el: any) => isSubProcessType(el.$type));
   const { childScopeResults, subDimensions } = layoutChildSubProcesses(
     subProcesses,
     options,
-    customDimensions
+    resolvedCacheOptions
   );
 
   const partition = partitionScopeElements(scopeElement);
@@ -917,19 +959,56 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
 const SUBPROCESS_MAX_ASPECT_RATIO = 6;
 const SUBPROCESS_TARGET_ASPECT_RATIO = 2;
 
+interface ScopeCacheContext {
+  cache: Map<string, ScopeLayoutResult>;
+  subDimensions: Map<string, { width: number; height: number }>;
+  callCounter?: { count: number };
+}
+
+function layoutScopeCached(
+  sub: any,
+  options: AutoLayoutOptions | undefined,
+  ctx: ScopeCacheContext
+): ScopeLayoutResult {
+  const key = `${sub.id}|${options?.widthBudget ?? ''}`;
+  const cached = ctx.cache.get(key);
+  if (cached) {
+    return cloneScopeResult(cached);
+  }
+  const result = layoutScope(sub, options, {
+    customDimensions: ctx.subDimensions,
+    scopeCache: ctx.cache,
+    callCounter: ctx.callCounter,
+  });
+  ctx.cache.set(key, result);
+  return cloneScopeResult(result);
+}
+
+interface ResolvedScopeCacheOptions {
+  customDimensions?: Map<string, { width: number; height: number }>;
+  scopeCache: Map<string, ScopeLayoutResult>;
+  callCounter?: { count: number };
+}
+
 function layoutChildSubProcesses(
   subProcesses: any[],
-  options?: AutoLayoutOptions,
-  customDimensions?: Map<string, { width: number; height: number }>
+  options: AutoLayoutOptions | undefined,
+  cacheOptions: ResolvedScopeCacheOptions
 ): {
   childScopeResults: Map<string, ScopeLayoutResult>;
   subDimensions: Map<string, { width: number; height: number }>;
 } {
   const childScopeResults = new Map<string, ScopeLayoutResult>();
-  const subDimensions = customDimensions ?? new Map<string, { width: number; height: number }>();
+  const subDimensions =
+    cacheOptions.customDimensions ?? new Map<string, { width: number; height: number }>();
+  const ctx: ScopeCacheContext = {
+    cache: cacheOptions.scopeCache,
+    subDimensions,
+    callCounter: cacheOptions.callCounter,
+  };
 
   for (const sub of subProcesses) {
-    let childResult = layoutScope(sub, options, subDimensions);
+    let childResult = layoutScopeCached(sub, options, ctx);
     const containerRatio = childResult.width / childResult.height;
     if (containerRatio > SUBPROCESS_MAX_ASPECT_RATIO) {
       const area = childResult.width * childResult.height;
@@ -937,7 +1016,7 @@ function layoutChildSubProcesses(
         SUBPROCESS_WIDTH_BUDGET_FLOOR,
         Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO)
       );
-      childResult = layoutScope(sub, { ...options, widthBudget }, subDimensions);
+      childResult = layoutScopeCached(sub, { ...options, widthBudget }, ctx);
     }
     childScopeResults.set(sub.id, childResult);
     subDimensions.set(sub.id, { width: childResult.width, height: childResult.height });

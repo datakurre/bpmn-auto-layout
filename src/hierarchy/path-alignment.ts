@@ -688,14 +688,11 @@ export function alignVerticallyStackedPaths(opts: CollaborationAlignmentContext)
     const procRef = part.processRef?.id || part.processRef;
     const process = (definitions.rootElements || []).find((el: any) => el.id === procRef);
     if (process) {
-      const partShapes = opts.allShapes.filter((s) => {
-        const p = process.flowElements?.find((fe: any) => fe.id === s.element.id);
-        return Boolean(p);
-      });
-      const partEdges = opts.allEdges.filter((e) => {
-        const p = process.flowElements?.find((fe: any) => fe.id === e.element.id);
-        return Boolean(p);
-      });
+      const flowElementIds = new Set<string>(
+        (process.flowElements as any[] | undefined)?.map((fe: any) => fe.id)
+      );
+      const partShapes = opts.allShapes.filter((s) => flowElementIds.has(s.element.id));
+      const partEdges = opts.allEdges.filter((e) => flowElementIds.has(e.element.id));
       const fakeResult: ScopeLayoutResult = {
         width: 0,
         height: 0,
