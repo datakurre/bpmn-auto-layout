@@ -214,18 +214,6 @@
         <di:waypoint x="1202" y="140" />
         <di:waypoint x="1262" y="140" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
-        <di:waypoint x="844" y="473" />
-        <di:waypoint x="904" y="473" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SubFlow_2_di" bpmnElement="SubFlow_2">
-        <di:waypoint x="1004" y="473" />
-        <di:waypoint x="1064" y="473" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SubFlow_3_di" bpmnElement="SubFlow_3">
-        <di:waypoint x="1164" y="473" />
-        <di:waypoint x="1224" y="473" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Assoc_Flight_di" bpmnElement="Assoc_Flight">
         <di:waypoint x="246" y="198" />
         <di:waypoint x="246" y="398" />
@@ -243,6 +231,18 @@
       <bpmndi:BPMNEdge id="Assoc_Payment_di" bpmnElement="Assoc_Payment">
         <di:waypoint x="791" y="198" />
         <di:waypoint x="791" y="398" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
+        <di:waypoint x="844" y="473" />
+        <di:waypoint x="904" y="473" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_2_di" bpmnElement="SubFlow_2">
+        <di:waypoint x="1004" y="473" />
+        <di:waypoint x="1064" y="473" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SubFlow_3_di" bpmnElement="SubFlow_3">
+        <di:waypoint x="1164" y="473" />
+        <di:waypoint x="1224" y="473" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

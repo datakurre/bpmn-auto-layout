@@ -108,22 +108,6 @@
           <dc:Bounds x="1588" y="208" width="116" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
-        <di:waypoint x="532" y="455" />
-        <di:waypoint x="592" y="455" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
-        <di:waypoint x="692" y="455" />
-        <di:waypoint x="752" y="455" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
-        <di:waypoint x="852" y="455" />
-        <di:waypoint x="912" y="455" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_4_di" bpmnElement="SF_4">
-        <di:waypoint x="1012" y="455" />
-        <di:waypoint x="1072" y="455" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_B1_In_di" bpmnElement="Flow_B1_In">
         <di:waypoint x="221" y="155" />
         <di:waypoint x="221" y="60" />
@@ -187,6 +171,22 @@
       <bpmndi:BPMNEdge id="Flow_B3_3_di" bpmnElement="Flow_B3_3">
         <di:waypoint x="1138" y="460" />
         <di:waypoint x="1198" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="532" y="455" />
+        <di:waypoint x="592" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="692" y="455" />
+        <di:waypoint x="752" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="852" y="455" />
+        <di:waypoint x="912" y="455" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_4_di" bpmnElement="SF_4">
+        <di:waypoint x="1012" y="455" />
+        <di:waypoint x="1072" y="455" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

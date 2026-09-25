@@ -8,7 +8,7 @@ import { scoreDiagram } from '../src/layout-metrics';
 import { DiGenerator } from '../src/di-generator';
 import { routeOrthogonalEdge } from '../src/graph/orthogonal-router';
 import { routeMessageFlow, layoutProcessLanes } from '../src/hierarchy/swimlane-layout';
-import { layoutScope } from '../src/hierarchy/subprocess-layout';
+import { layoutScope, routeScope } from '../src/hierarchy/subprocess-layout';
 import { DirectedGraph } from '../src/graph/graph';
 import { assignLayers } from '../src/graph/layer-assignment';
 import { assignCoordinates } from '../src/graph/coordinate-assignment';
@@ -349,7 +349,10 @@ describe('Iteration 8: Determinism, CLI & Full Coverage', () => {
 
     const res = layoutScope(mockScope);
     expect(res.shapes.length).toBeGreaterThan(0);
-    expect(res.edges.length).toBe(1);
+
+    const boundsMap = new Map(res.shapes.map((s) => [s.element.id, s.bounds]));
+    const edges = routeScope(mockScope, { boundsMap, analysisMap: new Map() });
+    expect(edges.length).toBe(1);
   });
 
   it('covers layout engine collaboration edge cases with empty participants and invalid message flows', async () => {

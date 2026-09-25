@@ -252,42 +252,6 @@
         <di:waypoint x="2030" y="265" />
         <di:waypoint x="2090" y="265" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_3_di" bpmnElement="AF_3">
-        <di:waypoint x="1140" y="588" />
-        <di:waypoint x="1200" y="588" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1147" y="564" width="46" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_4_di" bpmnElement="AF_4">
-        <di:waypoint x="1115" y="613" />
-        <di:waypoint x="1115" y="708" />
-        <di:waypoint x="1200" y="708" />
-        <bpmndi:BPMNLabel>
-          <dc:Bounds x="1125" y="654" width="32" height="14" />
-        </bpmndi:BPMNLabel>
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_7_di" bpmnElement="AF_7">
-        <di:waypoint x="1410" y="588" />
-        <di:waypoint x="1470" y="588" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_2_di" bpmnElement="AF_2">
-        <di:waypoint x="1030" y="588" />
-        <di:waypoint x="1090" y="588" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_5_di" bpmnElement="AF_5">
-        <di:waypoint x="1300" y="588" />
-        <di:waypoint x="1360" y="588" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_6_di" bpmnElement="AF_6">
-        <di:waypoint x="1300" y="708" />
-        <di:waypoint x="1385" y="708" />
-        <di:waypoint x="1385" y="613" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="AF_1_di" bpmnElement="AF_1">
-        <di:waypoint x="870" y="588" />
-        <di:waypoint x="930" y="588" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="IF_NoPolicy_di" bpmnElement="IF_NoPolicy">
         <di:waypoint x="584" y="433" />
         <di:waypoint x="644" y="433" />
@@ -345,6 +309,42 @@
       <bpmndi:BPMNEdge id="IF_Disbursed_di" bpmnElement="IF_Disbursed">
         <di:waypoint x="2062" y="1003" />
         <di:waypoint x="2122" y="1003" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_3_di" bpmnElement="AF_3">
+        <di:waypoint x="1140" y="588" />
+        <di:waypoint x="1200" y="588" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1147" y="564" width="46" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_4_di" bpmnElement="AF_4">
+        <di:waypoint x="1115" y="613" />
+        <di:waypoint x="1115" y="708" />
+        <di:waypoint x="1200" y="708" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1125" y="654" width="32" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_7_di" bpmnElement="AF_7">
+        <di:waypoint x="1410" y="588" />
+        <di:waypoint x="1470" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_2_di" bpmnElement="AF_2">
+        <di:waypoint x="1030" y="588" />
+        <di:waypoint x="1090" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_5_di" bpmnElement="AF_5">
+        <di:waypoint x="1300" y="588" />
+        <di:waypoint x="1360" y="588" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_6_di" bpmnElement="AF_6">
+        <di:waypoint x="1300" y="708" />
+        <di:waypoint x="1385" y="708" />
+        <di:waypoint x="1385" y="613" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="AF_1_di" bpmnElement="AF_1">
+        <di:waypoint x="870" y="588" />
+        <di:waypoint x="930" y="588" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_ClaimDoc_di" bpmnElement="MF_ClaimDoc">
         <di:waypoint x="296" y="185" />

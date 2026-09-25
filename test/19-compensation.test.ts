@@ -317,7 +317,6 @@ describe('Iteration 13: Compensation Handlers', () => {
         childScopeResults: new Map(),
         boundsMap,
         shapes,
-        edges: [],
         associations: [{ sourceRef: 'Missing_Host', targetRef: 'Handler_Orphan' }],
       }
     );

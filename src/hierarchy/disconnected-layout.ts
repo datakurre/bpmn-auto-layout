@@ -10,7 +10,11 @@ export function isEventSubProcess(el: any): boolean {
 export function computeCurrentDiagramBounds(
   shapes: Array<{ bounds: Bounds }>,
   edges: Array<{ waypoints: Point[] }>
-): { minX: number; maxX: number; maxY: number } {
+): {
+  minX: number;
+  maxX: number;
+  maxY: number;
+} {
   if (shapes.length === 0) {
     return { minX: 100, maxX: 500, maxY: 40 };
   }
@@ -23,6 +27,9 @@ export function computeCurrentDiagramBounds(
     maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
     maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
   }
+  // Waypoints too: a loop or gateway channel can extend past every shape's
+  // own bounds, and a disconnected item placed inside that channel would
+  // force the flow it belongs to into a detour around the item.
   for (const e of edges) {
     for (const wp of e.waypoints) {
       minX = Math.min(minX, wp.x);
@@ -37,7 +44,6 @@ export interface DisconnectedLayoutContext {
   childScopeResults: Map<string, ScopeLayoutResult>;
   boundsMap: Map<string, Bounds>;
   shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   associations?: any[];
 }
 
@@ -109,10 +115,7 @@ export function layoutDisconnectedElements(
 
     if (childResult) {
       ctx.shapes.push({ element: item, bounds, isExpanded: true });
-      offsetAndCollectChildren(childResult, bounds, {
-        shapes: ctx.shapes,
-        edges: ctx.edges,
-      });
+      offsetAndCollectChildren(childResult, bounds, ctx.shapes);
     } else {
       ctx.shapes.push({ element: item, bounds });
     }

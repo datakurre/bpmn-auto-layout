@@ -122,33 +122,21 @@
           <dc:Bounds x="2218" y="198" width="64" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="F3_1_di" bpmnElement="F3_1">
-        <di:waypoint x="994" y="165" />
-        <di:waypoint x="1054" y="165" />
+      <bpmndi:BPMNEdge id="FRoot_1_di" bpmnElement="FRoot_1">
+        <di:waypoint x="136" y="170" />
+        <di:waypoint x="196" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F3_2_di" bpmnElement="F3_2">
-        <di:waypoint x="1154" y="165" />
-        <di:waypoint x="1214" y="165" />
+      <bpmndi:BPMNEdge id="FRoot_2_di" bpmnElement="FRoot_2">
+        <di:waypoint x="296" y="170" />
+        <di:waypoint x="356" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F3_3_di" bpmnElement="F3_3">
-        <di:waypoint x="1314" y="165" />
-        <di:waypoint x="1374" y="165" />
+      <bpmndi:BPMNEdge id="FRoot_3_di" bpmnElement="FRoot_3">
+        <di:waypoint x="2012" y="170" />
+        <di:waypoint x="2072" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F2_1_di" bpmnElement="F2_1">
-        <di:waypoint x="708" y="170" />
-        <di:waypoint x="768" y="170" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F2_2_di" bpmnElement="F2_2">
-        <di:waypoint x="868" y="170" />
-        <di:waypoint x="928" y="170" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F2_3_di" bpmnElement="F2_3">
-        <di:waypoint x="1440" y="170" />
-        <di:waypoint x="1500" y="170" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="F2_4_di" bpmnElement="F2_4">
-        <di:waypoint x="1600" y="170" />
-        <di:waypoint x="1660" y="170" />
+      <bpmndi:BPMNEdge id="FRoot_4_di" bpmnElement="FRoot_4">
+        <di:waypoint x="2172" y="170" />
+        <di:waypoint x="2232" y="170" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F1_1_di" bpmnElement="F1_1">
         <di:waypoint x="422" y="170" />
@@ -166,21 +154,33 @@
         <di:waypoint x="1886" y="170" />
         <di:waypoint x="1946" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="FRoot_1_di" bpmnElement="FRoot_1">
-        <di:waypoint x="136" y="170" />
-        <di:waypoint x="196" y="170" />
+      <bpmndi:BPMNEdge id="F2_1_di" bpmnElement="F2_1">
+        <di:waypoint x="708" y="170" />
+        <di:waypoint x="768" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="FRoot_2_di" bpmnElement="FRoot_2">
-        <di:waypoint x="296" y="170" />
-        <di:waypoint x="356" y="170" />
+      <bpmndi:BPMNEdge id="F2_2_di" bpmnElement="F2_2">
+        <di:waypoint x="868" y="170" />
+        <di:waypoint x="928" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="FRoot_3_di" bpmnElement="FRoot_3">
-        <di:waypoint x="2012" y="170" />
-        <di:waypoint x="2072" y="170" />
+      <bpmndi:BPMNEdge id="F2_3_di" bpmnElement="F2_3">
+        <di:waypoint x="1440" y="170" />
+        <di:waypoint x="1500" y="170" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="FRoot_4_di" bpmnElement="FRoot_4">
-        <di:waypoint x="2172" y="170" />
-        <di:waypoint x="2232" y="170" />
+      <bpmndi:BPMNEdge id="F2_4_di" bpmnElement="F2_4">
+        <di:waypoint x="1600" y="170" />
+        <di:waypoint x="1660" y="170" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_1_di" bpmnElement="F3_1">
+        <di:waypoint x="994" y="165" />
+        <di:waypoint x="1054" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_2_di" bpmnElement="F3_2">
+        <di:waypoint x="1154" y="165" />
+        <di:waypoint x="1214" y="165" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="F3_3_di" bpmnElement="F3_3">
+        <di:waypoint x="1314" y="165" />
+        <di:waypoint x="1374" y="165" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

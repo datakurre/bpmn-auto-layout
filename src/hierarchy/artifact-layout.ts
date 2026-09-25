@@ -505,9 +505,6 @@ export function routeAssociations(
 ): void {
   const obstacles = [...boundsMap.values()];
   for (const assoc of associations) {
-    if (edges.some((e) => e.element.id === assoc.id)) {
-      continue;
-    }
     const srcId = getRefId(assoc.sourceRef);
     const tgtId = getRefId(assoc.targetRef);
     const srcBounds = boundsMap.get(srcId as string);
