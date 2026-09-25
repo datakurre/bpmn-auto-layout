@@ -1,5 +1,13 @@
-import type { DirectedGraph } from './graph';
-import { getElementDimensions, DEFAULT_GRID_SPACING } from '../di-constants';
+import { isAttachEdge, type DirectedGraph } from './graph';
+import {
+  getElementDimensions,
+  DEFAULT_GRID_SPACING,
+  GRID_START_X,
+  GRID_START_X_WITH_LANES,
+  MIN_COLUMN_WIDTH,
+  MIN_TRACK_HALF_HEIGHT,
+  BOUNDARY_TRACK_PADDING,
+} from '../di-constants';
 import { alignMergeNodeTrack } from './dummy-nodes';
 import type { AutoLayoutOptions, Bounds } from '../types';
 
@@ -30,7 +38,7 @@ export function assignCoordinates(
   const nodes = graph.getNodes();
   const gridSpacing = options?.gridSpacing ?? DEFAULT_GRID_SPACING;
   const hasLanes = Boolean(options?.nodeToLane && options.nodeToLane.size > 0);
-  const startX = hasLanes ? 180 : 100;
+  const startX = hasLanes ? GRID_START_X_WITH_LANES : GRID_START_X;
 
   const { rankGroups, maxRank } = groupNodesByRank(nodes, ranks);
   const { colWidths, colX, rankRows } = computeColumnPositions(graph, rankGroups, {
@@ -99,10 +107,13 @@ function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
       : getElementDimensions(node.data?.$type);
     const h = node.data?.customHeight ?? dim.height;
     const hasBottomBoundary = Boolean(
-      graph && graph.outEdges(node.id).some((e) => e.id.startsWith('_attach_'))
+      graph && graph.outEdges(node.id).some((e) => isAttachEdge(e))
     );
-    const topHalf = Math.max(40, Math.ceil(h / 2));
-    const bottomHalf = Math.max(40, Math.ceil(h / 2) + (hasBottomBoundary ? 20 : 0));
+    const topHalf = Math.max(MIN_TRACK_HALF_HEIGHT, Math.ceil(h / 2));
+    const bottomHalf = Math.max(
+      MIN_TRACK_HALF_HEIGHT,
+      Math.ceil(h / 2) + (hasBottomBoundary ? BOUNDARY_TRACK_PADDING : 0)
+    );
 
     const existing = extents.get(track);
     if (!existing) {
@@ -232,7 +243,7 @@ function computeColumnPositions(
       const w = node.data?.customWidth ?? dim.width;
       maxWidth = Math.max(maxWidth, w);
     }
-    colWidths.set(r, Math.max(36, maxWidth));
+    colWidths.set(r, Math.max(MIN_COLUMN_WIDTH, maxWidth));
   }
 
   const colX = new Map<number, number>();
@@ -268,7 +279,7 @@ function computeFlatTracks(
     for (const node of nodesInRank) {
       const inEdges = graph
         .inEdges(node.id)
-        .filter((e) => !feedbackEdges?.has(e.id) && !e.id.startsWith('_attach_'));
+        .filter((e) => !feedbackEdges?.has(e.id) && !isAttachEdge(e));
       tracks.set(node.id, calculateSingleNodeTrack(node, inEdges, ctx));
     }
     resolveRankCollisions(nodesInRank, tracks, graph);
@@ -366,9 +377,7 @@ function computeLaneAwareTracks(
           .inEdges(node.id)
           .filter(
             (e) =>
-              !feedbackEdges?.has(e.id) &&
-              !e.id.startsWith('_attach_') &&
-              (nodeToLane.get(e.source) ?? 0) === l
+              !feedbackEdges?.has(e.id) && !isAttachEdge(e) && (nodeToLane.get(e.source) ?? 0) === l
           );
         localTracks.set(node.id, calculateSingleNodeTrack(node, inEdges, ctx));
       }
@@ -427,11 +436,9 @@ function computeLaneStartOffsets(
 }
 
 function getReturnNodeTrack(nodeId: string, ctx: TrackContext): number {
-  const outEdges = ctx.graph.outEdges(nodeId).filter((e) => !e.id.startsWith('_attach_'));
+  const outEdges = ctx.graph.outEdges(nodeId).filter((e) => !isAttachEdge(e));
   for (const outEdge of outEdges) {
-    const targetInEdges = ctx.graph
-      .inEdges(outEdge.target)
-      .filter((e) => !e.id.startsWith('_attach_'));
+    const targetInEdges = ctx.graph.inEdges(outEdge.target).filter((e) => !isAttachEdge(e));
     const hasBoundarySibling = targetInEdges.some(
       (e) => ctx.graph.getNode(e.source)?.data?.$type === 'bpmn:BoundaryEvent'
     );
@@ -467,10 +474,10 @@ function calculateSingleNodeTrack(
 }
 
 function getBranchExtents(nodeId: string, graph: DirectedGraph): { up: number; down: number } {
-  const outEdges = graph.outEdges(nodeId).filter((e) => !e.id.startsWith('_attach_'));
+  const outEdges = graph.outEdges(nodeId).filter((e) => !isAttachEdge(e));
   const attachCount = graph
     .outEdges(nodeId)
-    .filter((e) => e.id.startsWith('_attach_') && graph.outEdges(e.target).length > 0).length;
+    .filter((e) => isAttachEdge(e) && graph.outEdges(e.target).length > 0).length;
 
   if (outEdges.length <= 1) {
     return { up: 0, down: attachCount };
@@ -488,8 +495,8 @@ function getSiblingBranchOffset(
   graph: DirectedGraph
 ): number {
   if (siblings.length === 2) {
-    const hasBottom0 = graph.outEdges(siblings[0].target).some((e) => e.id.startsWith('_attach_'));
-    const hasBottom1 = graph.outEdges(siblings[1].target).some((e) => e.id.startsWith('_attach_'));
+    const hasBottom0 = graph.outEdges(siblings[0].target).some((e) => isAttachEdge(e));
+    const hasBottom1 = graph.outEdges(siblings[1].target).some((e) => isAttachEdge(e));
     if (hasBottom0 && !hasBottom1) {
       return siblingIndex === 0 ? 0 : -1;
     }
@@ -516,7 +523,7 @@ function calculateSingleParentTrack(nodeId: string, parentId: string, ctx: Track
   const parentTrack = ctx.tracks.get(parentId) || 0;
   let siblings = ctx.graph
     .outEdges(parentId)
-    .filter((e) => !ctx.feedbackEdges?.has(e.id) && !e.id.startsWith('_attach_'));
+    .filter((e) => !ctx.feedbackEdges?.has(e.id) && !isAttachEdge(e));
 
   if (ctx.nodeToLane) {
     const currentLane = ctx.nodeToLane.get(nodeId);
@@ -559,7 +566,7 @@ function resolveRankCollisions(
     let currTrack = tracks.get(currId) || 0;
     const attachCount = graph
       .outEdges(prevId)
-      .filter((e) => e.id.startsWith('_attach_') && graph.outEdges(e.target).length > 0).length;
+      .filter((e) => isAttachEdge(e) && graph.outEdges(e.target).length > 0).length;
     const minSpacing = 1 + attachCount;
 
     if (currTrack < prevTrack + minSpacing) {

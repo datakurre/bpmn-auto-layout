@@ -3,7 +3,6 @@ import {
   buildScopeGraph,
   getRefId,
   partitionScopeElements,
-  rerouteProcessEdges,
   type ScopeLayoutResult,
 } from './subprocess-layout';
 import { findFeedbackEdges } from '../graph/cycle-removal';
@@ -23,7 +22,6 @@ export interface IntraProcessAlignmentContext {
   process: any;
   result: ScopeLayoutResult;
   options?: AutoLayoutOptions;
-  feedbackEdges?: Set<string>;
 }
 
 interface MessagePair {
@@ -35,7 +33,6 @@ interface MessagePair {
 
 interface ProcessForwardInfo {
   process: any;
-  feedbackEdges: Set<string>;
   forwardSuccessors: Map<string, string[]>;
   subProcessDescendants: Map<string, { shapes: string[]; edges: string[] }>;
 }
@@ -51,7 +48,6 @@ interface PairShiftContext {
   allShapesMap: Map<string, Bounds>;
   allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   procInfos: Map<string, ProcessForwardInfo>;
-  modifiedProcesses: Set<string>;
 }
 
 function mapProcessElements(elements: any[], process: any, map: Map<string, any>): void {
@@ -144,7 +140,7 @@ function buildProcessForwardInfo(process: any): ProcessForwardInfo {
     }
   }
 
-  return { process, feedbackEdges, forwardSuccessors, subProcessDescendants };
+  return { process, forwardSuccessors, subProcessDescendants };
 }
 
 function collectReachableNodes(
@@ -269,7 +265,6 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
       forwardSuccessors: tgtInfo.forwardSuccessors,
       subProcessDescendants: tgtInfo.subProcessDescendants,
     });
-    ctx.modifiedProcesses.add(pair.tgtProc.id);
     return true;
   }
 
@@ -282,32 +277,7 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
     forwardSuccessors: srcInfo.forwardSuccessors,
     subProcessDescendants: srcInfo.subProcessDescendants,
   });
-  ctx.modifiedProcesses.add(pair.srcProc.id);
   return true;
-}
-
-function updateProcessEdges(
-  process: any,
-  feedbackEdges: Set<string>,
-  ctx: CollaborationAlignmentContext
-): void {
-  const { regularNodes, boundaryEvents } = partitionScopeElements(process);
-  const processBoundsMap = new Map<string, Bounds>();
-  for (const n of [...regularNodes, ...boundaryEvents]) {
-    const b = ctx.allShapesMap.get(n.id);
-    if (b) {
-      processBoundsMap.set(n.id, b);
-    }
-  }
-  const rerouted = rerouteProcessEdges(process, processBoundsMap, feedbackEdges);
-  const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
-  for (const edge of ctx.allEdges) {
-    const newRoute = reroutedMap.get(edge.element.id);
-    if (newRoute) {
-      edge.waypoints = newRoute.waypoints;
-      edge.isFeedback = newRoute.isFeedback;
-    }
-  }
 }
 
 export function alignCollaborationPaths(opts: CollaborationAlignmentContext): void {
@@ -331,12 +301,10 @@ export function alignCollaborationPaths(opts: CollaborationAlignmentContext): vo
     procInfos.set(p.id, buildProcessForwardInfo(p));
   }
 
-  const modifiedProcesses = new Set<string>();
   const pairCtx: PairShiftContext = {
     allShapesMap: opts.allShapesMap,
     allEdges: opts.allEdges,
     procInfos,
-    modifiedProcesses,
   };
 
   const MAX_PASSES = 10;
@@ -350,11 +318,6 @@ export function alignCollaborationPaths(opts: CollaborationAlignmentContext): vo
     if (!shifted) {
       break;
     }
-  }
-
-  for (const procId of modifiedProcesses) {
-    const info = procInfos.get(procId)!;
-    updateProcessEdges(info.process, info.feedbackEdges, opts);
   }
 
   unifyCollaborationPoolWidths(opts);
@@ -654,23 +617,41 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
     const hostId = getRefId(be.attachedToRef);
     return hostId && nodesToShift.some((n) => n.id === hostId);
   });
+
+  const shapeIdsToShift = new Set<string>();
+  const descendantEdgeIds = new Set<string>();
   for (const n of [...nodesToShift, ...boundaryEventsToShift]) {
-    const b = boundsMap.get(n.id);
+    shapeIdsToShift.add(n.id);
+    if (n.$type === 'bpmn:SubProcess') {
+      const descendants = { shapes: [], edges: [] };
+      collectSubProcessDescendants(n, descendants);
+      for (const sId of descendants.shapes) {
+        shapeIdsToShift.add(sId);
+      }
+      for (const eId of descendants.edges) {
+        descendantEdgeIds.add(eId);
+      }
+    }
+  }
+  for (const id of shapeIdsToShift) {
+    const b = boundsMap.get(id);
     if (b) {
       b.x += candidate.deltaX;
     }
   }
-
-  const rerouted = rerouteProcessEdges(process, boundsMap, ctx.feedbackEdges);
-  const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
-  for (const e of result.edges) {
-    const newRoute = reroutedMap.get(e.element.id);
-    if (newRoute) {
-      e.waypoints = newRoute.waypoints;
-      e.isFeedback = newRoute.isFeedback;
+  if (descendantEdgeIds.size > 0) {
+    for (const e of result.edges) {
+      if (descendantEdgeIds.has(e.element.id)) {
+        for (const wp of e.waypoints) {
+          wp.x += candidate.deltaX;
+        }
+      }
     }
   }
 
+  // Node/shape movement only: routing happens once, after every alignment
+  // pass has finished moving nodes (see LayoutEngine.layoutSingleProcesses
+  // and layoutCollaboration).
   let maxRight = 0;
   for (const s of result.shapes) {
     maxRight = Math.max(maxRight, s.bounds.x + s.bounds.width);
@@ -688,14 +669,11 @@ export function alignVerticallyStackedPaths(opts: CollaborationAlignmentContext)
     const procRef = part.processRef?.id || part.processRef;
     const process = (definitions.rootElements || []).find((el: any) => el.id === procRef);
     if (process) {
-      const partShapes = opts.allShapes.filter((s) => {
-        const p = process.flowElements?.find((fe: any) => fe.id === s.element.id);
-        return Boolean(p);
-      });
-      const partEdges = opts.allEdges.filter((e) => {
-        const p = process.flowElements?.find((fe: any) => fe.id === e.element.id);
-        return Boolean(p);
-      });
+      const flowElementIds = new Set<string>(
+        (process.flowElements as any[] | undefined)?.map((fe: any) => fe.id)
+      );
+      const partShapes = opts.allShapes.filter((s) => flowElementIds.has(s.element.id));
+      const partEdges = opts.allEdges.filter((e) => flowElementIds.has(e.element.id));
       const fakeResult: ScopeLayoutResult = {
         width: 0,
         height: 0,
@@ -703,6 +681,10 @@ export function alignVerticallyStackedPaths(opts: CollaborationAlignmentContext)
         minY: Math.min(...partShapes.map((s) => s.bounds.y), 100),
         shapes: partShapes,
         edges: partEdges,
+        // alignIntraProcessBranches only moves nodes now; it doesn't read
+        // this beyond satisfying the type, since routing happens once, later,
+        // in LayoutEngine.layoutCollaboration.
+        analysis: { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() },
       };
       alignIntraProcessBranches({ process, result: fakeResult });
     }

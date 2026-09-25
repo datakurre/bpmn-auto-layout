@@ -1,4 +1,4 @@
-import type { DirectedGraph } from './graph';
+import { isAttachEdge, type DirectedGraph } from './graph';
 
 export interface ReturnPathAnalysis {
   returnGateways: Map<string, string>;
@@ -50,7 +50,7 @@ export function canReachEndEvent(
     }
 
     for (const e of graph.outEdges(curr)) {
-      if (!feedbackEdges.has(e.id) && !e.id.startsWith('_attach_') && !visited.has(e.target)) {
+      if (!feedbackEdges.has(e.id) && !isAttachEdge(e) && !visited.has(e.target)) {
         queue.push(e.target);
       }
     }
@@ -69,7 +69,7 @@ export function detectReturnPathElements(
     if (!node.data?.$type?.endsWith('Gateway')) {
       continue;
     }
-    const outEdges = graph.outEdges(node.id).filter((e) => !e.id.startsWith('_attach_'));
+    const outEdges = graph.outEdges(node.id).filter((e) => !isAttachEdge(e));
     if (outEdges.length === 1 && feedbackEdges.has(outEdges[0].id)) {
       returnGateways.set(node.id, outEdges[0].target);
     }
@@ -86,7 +86,7 @@ export function detectReturnPathElements(
     while (queue.length > 0) {
       const curr = queue.shift()!;
       for (const e of graph.inEdges(curr)) {
-        if (e.id.startsWith('_attach_')) {
+        if (isAttachEdge(e)) {
           continue;
         }
         const predId = e.source;
@@ -186,7 +186,7 @@ export function resolveReturnTargetId(
   let curr = rId;
   for (;;) {
     // Every return node was discovered through a non-attach outgoing edge.
-    const edge = graph.outEdges(curr).find((e) => !e.id.startsWith('_attach_'))!;
+    const edge = graph.outEdges(curr).find((e) => !isAttachEdge(e))!;
     if (ctx.returnNodes.has(edge.target) && !seen.has(edge.target)) {
       seen.add(edge.target);
       curr = edge.target;
@@ -213,7 +213,7 @@ function alignIntermediateReturnNodeRanks(
   }
 
   for (const rId of orderReturnNodes(returnNodes, graph)) {
-    const inEdges = graph.inEdges(rId).filter((e) => !e.id.startsWith('_attach_'));
+    const inEdges = graph.inEdges(rId).filter((e) => !isAttachEdge(e));
     if (inEdges.length === 0) {
       continue;
     }
@@ -230,7 +230,7 @@ function alignIntermediateReturnNodeRanks(
       returnGateways: ctx.returnGateways,
     });
     const targetRank = ctx.ranks.get(targetId) ?? 0;
-    const outEdges = graph.outEdges(rId).filter((e) => !e.id.startsWith('_attach_'));
+    const outEdges = graph.outEdges(rId).filter((e) => !isAttachEdge(e));
     const hasReturnSuccessors = outEdges.some((e) => returnNodes.has(e.target));
 
     const chosenRank = findAvailableReturnRank(
@@ -256,7 +256,7 @@ function updateReturnFeedbackEdges(
   ctx: FeedbackContext
 ): void {
   for (const e of graph.getEdges()) {
-    if (e.id.startsWith('_attach_')) {
+    if (isAttachEdge(e)) {
       continue;
     }
     const sRank = ranks.get(e.source);

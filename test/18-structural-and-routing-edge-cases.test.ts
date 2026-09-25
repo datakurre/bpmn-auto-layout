@@ -239,4 +239,30 @@ describe('Iteration 12: Structural & Routing Edge Cases', () => {
 
     expectSnapshotMatch(resultXml, '12-event-subprocess-internal-branching');
   });
+
+  it('does not misclassify a sequence flow whose id happens to start with _attach_', async () => {
+    const neutralXml = await layoutWithFlowId('Flow_long');
+    const attachLikeXml = await layoutWithFlowId('_attach_long');
+
+    expect(attachLikeXml.replace(/_attach_long/g, 'Flow_long')).toBe(neutralXml);
+  });
 });
+
+async function layoutWithFlowId(longId: string): Promise<string> {
+  const b = new BpmnBuilder();
+  b.addStartEvent('S')
+    .addExclusiveGateway('G')
+    .addTask('A')
+    .addTask('B')
+    .addTask('C')
+    .addExclusiveGateway('J')
+    .addEndEvent('E')
+    .addSequenceFlow('f1', 'S', 'G')
+    .addSequenceFlow('f2', 'G', 'A')
+    .addSequenceFlow('f3', 'A', 'B')
+    .addSequenceFlow('f4', 'B', 'J')
+    .addSequenceFlow(longId, 'G', 'C')
+    .addSequenceFlow('f6', 'C', 'J')
+    .addSequenceFlow('f7', 'J', 'E');
+  return layoutProcess(await b.toXml());
+}

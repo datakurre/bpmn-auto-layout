@@ -256,14 +256,32 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graph.addNode('ReturnEvent', { $type: 'bpmn:IntermediateThrowEvent' });
     graph.addNode('NoInEvent', { $type: 'bpmn:IntermediateThrowEvent' });
 
-    graph.addEdge({ id: 'e1', source: 'Start', target: 'MergeGW', data: {} });
-    graph.addEdge({ id: 'e2', source: 'MergeGW', target: 'TaskA', data: {} });
-    graph.addEdge({ id: 'e3', source: 'TaskA', target: 'SplitGW', data: {} });
-    graph.addEdge({ id: 'e4', source: 'SplitGW', target: 'End', data: {} });
-    graph.addEdge({ id: 'e5', source: 'SplitGW', target: 'ReturnEvent', data: {} });
-    graph.addEdge({ id: 'e6', source: 'ReturnEvent', target: 'ReturnGW', data: {} });
-    graph.addEdge({ id: 'e7', source: 'ReturnGW', target: 'MergeGW', data: {} });
-    graph.addEdge({ id: 'e8', source: 'NoInEvent', target: 'ReturnGW', data: {} });
+    graph.addEdge({ id: 'e1', source: 'Start', target: 'MergeGW', data: {}, kind: 'sequence' });
+    graph.addEdge({ id: 'e2', source: 'MergeGW', target: 'TaskA', data: {}, kind: 'sequence' });
+    graph.addEdge({ id: 'e3', source: 'TaskA', target: 'SplitGW', data: {}, kind: 'sequence' });
+    graph.addEdge({ id: 'e4', source: 'SplitGW', target: 'End', data: {}, kind: 'sequence' });
+    graph.addEdge({
+      id: 'e5',
+      source: 'SplitGW',
+      target: 'ReturnEvent',
+      data: {},
+      kind: 'sequence',
+    });
+    graph.addEdge({
+      id: 'e6',
+      source: 'ReturnEvent',
+      target: 'ReturnGW',
+      data: {},
+      kind: 'sequence',
+    });
+    graph.addEdge({ id: 'e7', source: 'ReturnGW', target: 'MergeGW', data: {}, kind: 'sequence' });
+    graph.addEdge({
+      id: 'e8',
+      source: 'NoInEvent',
+      target: 'ReturnGW',
+      data: {},
+      kind: 'sequence',
+    });
 
     const feedback = new Set<string>(['e7']);
 
@@ -313,9 +331,9 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graphTight.addNode('M', { $type: 'bpmn:ExclusiveGateway' });
     graphTight.addNode('R', { $type: 'bpmn:IntermediateThrowEvent' });
     graphTight.addNode('G', { $type: 'bpmn:ExclusiveGateway' });
-    graphTight.addEdge({ id: 'f1', source: 'M', target: 'R', data: {} });
-    graphTight.addEdge({ id: 'f2', source: 'R', target: 'G', data: {} });
-    graphTight.addEdge({ id: 'f3', source: 'G', target: 'M', data: {} });
+    graphTight.addEdge({ id: 'f1', source: 'M', target: 'R', data: {}, kind: 'sequence' });
+    graphTight.addEdge({ id: 'f2', source: 'R', target: 'G', data: {}, kind: 'sequence' });
+    graphTight.addEdge({ id: 'f3', source: 'G', target: 'M', data: {}, kind: 'sequence' });
     const ranksTight = new Map<string, number>([
       ['M', 1],
       ['R', 2],
@@ -329,8 +347,8 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graphOrphan.addNode('O_M', { $type: 'bpmn:ExclusiveGateway' });
     graphOrphan.addNode('O_R', { $type: 'bpmn:IntermediateThrowEvent' });
     graphOrphan.addNode('O_G', { $type: 'bpmn:ExclusiveGateway' });
-    graphOrphan.addEdge({ id: 'o2', source: 'O_R', target: 'O_G', data: {} });
-    graphOrphan.addEdge({ id: 'o3', source: 'O_G', target: 'O_M', data: {} });
+    graphOrphan.addEdge({ id: 'o2', source: 'O_R', target: 'O_G', data: {}, kind: 'sequence' });
+    graphOrphan.addEdge({ id: 'o3', source: 'O_G', target: 'O_M', data: {}, kind: 'sequence' });
     const ranksOrphan = new Map<string, number>([
       ['O_M', 1],
       ['O_G', 2],
@@ -430,17 +448,47 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graphDiamond.addNode('D_B', { $type: 'bpmn:Task' });
     graphDiamond.addNode('D_C', { $type: 'bpmn:Task' });
     graphDiamond.addNode('D_Merge', { $type: 'bpmn:Task' });
-    graphDiamond.addEdge({ id: 'd1', source: 'D_Start', target: 'D_B', data: {} });
-    graphDiamond.addEdge({ id: 'd2', source: 'D_Start', target: 'D_C', data: {} });
-    graphDiamond.addEdge({ id: 'd3', source: 'D_B', target: 'D_Merge', data: {} });
-    graphDiamond.addEdge({ id: 'd4', source: 'D_C', target: 'D_Merge', data: {} });
+    graphDiamond.addEdge({
+      id: 'd1',
+      source: 'D_Start',
+      target: 'D_B',
+      data: {},
+      kind: 'sequence',
+    });
+    graphDiamond.addEdge({
+      id: 'd2',
+      source: 'D_Start',
+      target: 'D_C',
+      data: {},
+      kind: 'sequence',
+    });
+    graphDiamond.addEdge({
+      id: 'd3',
+      source: 'D_B',
+      target: 'D_Merge',
+      data: {},
+      kind: 'sequence',
+    });
+    graphDiamond.addEdge({
+      id: 'd4',
+      source: 'D_C',
+      target: 'D_Merge',
+      data: {},
+      kind: 'sequence',
+    });
     expect(canReachEndEvent('D_Start', graphDiamond, new Set())).toBe(false);
 
     // Missing target rank branch in alignReturnGatewayRanks
     const graphMissing = new DirectedGraph();
     graphMissing.addNode('GW_Miss', { $type: 'bpmn:ExclusiveGateway' });
     graphMissing.addNode('Target_NoRank', { $type: 'bpmn:Task' });
-    graphMissing.addEdge({ id: 'f_miss', source: 'GW_Miss', target: 'Target_NoRank', data: {} });
+    graphMissing.addEdge({
+      id: 'f_miss',
+      source: 'GW_Miss',
+      target: 'Target_NoRank',
+      data: {},
+      kind: 'sequence',
+    });
     const ranksMiss = new Map<string, number>([['GW_Miss', 5]]);
     alignReturnPathLayers(graphMissing, ranksMiss, { feedbackEdges: new Set(['f_miss']) });
 
@@ -450,9 +498,27 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graphSourceMiss.addNode('Ret_Node', { $type: 'bpmn:IntermediateThrowEvent' });
     graphSourceMiss.addNode('Split_NoRank', { $type: 'bpmn:ExclusiveGateway' });
     graphSourceMiss.addNode('Tgt', { $type: 'bpmn:Task' });
-    graphSourceMiss.addEdge({ id: 'sm1', source: 'Split_NoRank', target: 'Ret_Node', data: {} });
-    graphSourceMiss.addEdge({ id: 'sm2', source: 'Ret_Node', target: 'GW_Ret', data: {} });
-    graphSourceMiss.addEdge({ id: 'sm3', source: 'GW_Ret', target: 'Tgt', data: {} });
+    graphSourceMiss.addEdge({
+      id: 'sm1',
+      source: 'Split_NoRank',
+      target: 'Ret_Node',
+      data: {},
+      kind: 'sequence',
+    });
+    graphSourceMiss.addEdge({
+      id: 'sm2',
+      source: 'Ret_Node',
+      target: 'GW_Ret',
+      data: {},
+      kind: 'sequence',
+    });
+    graphSourceMiss.addEdge({
+      id: 'sm3',
+      source: 'GW_Ret',
+      target: 'Tgt',
+      data: {},
+      kind: 'sequence',
+    });
     const ranksSourceMiss = new Map<string, number>([
       ['GW_Ret', 5],
       ['Ret_Node', 4],
@@ -470,18 +536,21 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
       source: 'Split_HasRank',
       target: 'Ret_NodeTgt',
       data: {},
+      kind: 'sequence',
     });
     graphMissingTargetRank.addEdge({
       id: 'st2',
       source: 'Ret_NodeTgt',
       target: 'GW_RetTgt',
       data: {},
+      kind: 'sequence',
     });
     graphMissingTargetRank.addEdge({
       id: 'st3',
       source: 'GW_RetTgt',
       target: 'SomeLoopTarget',
       data: {},
+      kind: 'sequence',
     });
     const ranksMissingTgt = new Map<string, number>([
       ['Split_HasRank', 5],
@@ -564,8 +633,20 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     graphNoOut.addNode('Ret_NoOut', { $type: 'bpmn:IntermediateThrowEvent' });
     graphNoOut.addNode('Split_1', { $type: 'bpmn:ExclusiveGateway' });
     graphNoOut.addNode('Tgt_1', { $type: 'bpmn:Task' });
-    graphNoOut.addEdge({ id: 'no1', source: 'Split_1', target: 'Ret_NoOut', data: {} });
-    graphNoOut.addEdge({ id: 'no2', source: 'GW_End', target: 'Tgt_1', data: {} });
+    graphNoOut.addEdge({
+      id: 'no1',
+      source: 'Split_1',
+      target: 'Ret_NoOut',
+      data: {},
+      kind: 'sequence',
+    });
+    graphNoOut.addEdge({
+      id: 'no2',
+      source: 'GW_End',
+      target: 'Tgt_1',
+      data: {},
+      kind: 'sequence',
+    });
     const ranksNoOut = new Map<string, number>([
       ['Split_1', 4],
       ['GW_End', 5],
@@ -616,7 +697,13 @@ describe('Iteration 23: Feedback Loop Hierarchies & Return-Path Flow Alignment',
     const graphNoOutEdge = new DirectedGraph();
     graphNoOutEdge.addNode('Ret_Isolated', { $type: 'bpmn:IntermediateThrowEvent' });
     graphNoOutEdge.addNode('GW_Pred', { $type: 'bpmn:ExclusiveGateway' });
-    graphNoOutEdge.addEdge({ id: 'f_fb', source: 'GW_Pred', target: 'Ret_Isolated', data: {} });
+    graphNoOutEdge.addEdge({
+      id: 'f_fb',
+      source: 'GW_Pred',
+      target: 'Ret_Isolated',
+      data: {},
+      kind: 'sequence',
+    });
     const coords = assignCoordinates(
       graphNoOutEdge,
       new Map([

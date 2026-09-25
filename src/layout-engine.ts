@@ -1,6 +1,11 @@
 import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 import { DiGenerator } from './di-generator';
-import { layoutScope } from './hierarchy/subprocess-layout';
+import {
+  layoutScope,
+  partitionScopeElements,
+  rerouteProcessEdges,
+  type ScopeAnalysis,
+} from './hierarchy/subprocess-layout';
 import {
   layoutProcessLanes,
   routeMessageFlow,
@@ -12,6 +17,26 @@ import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
 import { alignVerticallyStackedPaths, alignIntraProcessBranches } from './hierarchy/path-alignment';
 import { ensureBoundariesAttached } from './hierarchy/boundary-events';
+import {
+  POOL_X,
+  PROCESS_START_Y,
+  POOL_START_Y,
+  INTER_ELEMENT_GAP_Y,
+  BLACKBOX_POOL_WIDTH,
+  BLACKBOX_POOL_HEIGHT,
+  PARTICIPANT_CONTENT_X,
+  POOL_CONTENT_PADDING_Y,
+  MIN_POOL_WIDTH,
+  MIN_POOL_HEIGHT,
+  POOL_WIDTH_MARGIN,
+  POOL_HEIGHT_MARGIN,
+  LANE_CONTENT_MARGIN_X,
+  LANE_MIN_WIDTH,
+  LANE_X,
+  LANE_HEADER_WIDTH,
+  MIN_PORT_SPACING,
+  PORT_INSET,
+} from './di-constants';
 import type { AutoLayoutOptions, Bounds, Point } from './types';
 
 interface PoolEntry {
@@ -29,6 +54,7 @@ interface ParticipantLayoutParams {
   allEdges: PlacedEdge[];
   allLanes: Array<{ element: any; bounds: Bounds }>;
   allPools: PoolEntry[];
+  processAnalysis: Map<string, ScopeAnalysis>;
 }
 
 interface PoolAndLanesParams {
@@ -106,14 +132,36 @@ export class LayoutEngine {
 
   private layoutSingleProcesses(definitions: any, plane: any): void {
     const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
-    let startY = 100;
+    const FIRST_PROCESS_Y = PROCESS_START_Y;
+    let nextTop: number | null = null;
 
     for (const process of processes) {
       const result = layoutScope(process, this.options);
       alignIntraProcessBranches({ process, result, options: this.options });
       ensureBoundariesAttached(result.shapes);
+
+      // layoutScope always positions a process as if it were the only one, so every
+      // process after the first is translated down. minContentY/maxContentY include
+      // edge waypoints, so a loop channel routed above or below the nodes is counted
+      // too. The first process is untouched and keeps byte-identical output.
+      const { minContentY } = computeScopeContentYExtents(result);
+      let startY = FIRST_PROCESS_Y;
+      if (nextTop !== null) {
+        const top = Math.min(FIRST_PROCESS_Y, minContentY);
+        translateScopeResult(result, 0, nextTop - top);
+        startY = FIRST_PROCESS_Y + (nextTop - top);
+      }
+
+      const shapeBoundsById = new Map<string, Bounds>(
+        result.shapes.map((s) => [s.element.id, s.bounds])
+      );
+      rerouteTopLevelProcessFlows(process, shapeBoundsById, {
+        edges: result.edges,
+        analysis: result.analysis,
+      });
+
       const laneResult = layoutProcessLanes(process, result.shapes, {
-        startX: 100,
+        startX: POOL_X,
         startY,
         totalWidth: result.width,
         edges: result.edges,
@@ -143,7 +191,13 @@ export class LayoutEngine {
         });
       }
 
-      startY += Math.max(result.height, laneResult.totalHeight) + 60;
+      // Measured after rerouteTopLevelProcessFlows and on the final, translated
+      // shapes/edges, so a route that changes the content's vertical extent
+      // (a loop channel routed above or below the nodes, say) is reflected
+      // directly instead of being approximated from the pre-reroute extent
+      // plus a uniform shift.
+      const { maxContentY: finalMaxContentY } = computeScopeContentYExtents(result);
+      nextTop = Math.max(finalMaxContentY, startY + laneResult.totalHeight) + INTER_ELEMENT_GAP_Y;
     }
   }
 
@@ -160,7 +214,8 @@ export class LayoutEngine {
     const allEdges: PlacedEdge[] = [];
     const allLanes: Array<{ element: any; bounds: Bounds }> = [];
     const allPools: PoolEntry[] = [];
-    let currentY = 80;
+    const processAnalysis = new Map<string, ScopeAnalysis>();
+    let currentY = POOL_START_Y;
 
     for (const participant of participants) {
       const procRef = participant.processRef?.id || participant.processRef;
@@ -174,6 +229,7 @@ export class LayoutEngine {
         allEdges,
         allLanes,
         allPools,
+        processAnalysis,
       });
     }
 
@@ -188,6 +244,7 @@ export class LayoutEngine {
     });
 
     ensureBoundariesAttached(allShapes);
+    rerouteAllProcesses(definitions, { allShapesMap, allEdges, processAnalysis });
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,
@@ -239,34 +296,26 @@ export class LayoutEngine {
       allEdges,
       allLanes,
       allPools,
+      processAnalysis,
     } = params;
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
       allShapesMap.set(participant.id, poolBounds);
-      return currentY + poolBounds.height + 60;
+      return currentY + poolBounds.height + INTER_ELEMENT_GAP_Y;
     }
 
     const result = layoutScope(process, this.options);
+    processAnalysis.set(process.id, result.analysis);
     const hasLanes = Boolean(process.laneSets && process.laneSets[0]?.lanes?.length > 0);
     const { minContentY, maxContentY } = computeScopeContentYExtents(result);
     const contentHeight = maxContentY - minContentY;
-    const POOL_PADDING_Y = 25;
-    const deltaX = hasLanes ? 0 : 150 - result.minX;
+    const deltaX = hasLanes ? 0 : PARTICIPANT_CONTENT_X - result.minX;
     const padY = hasLanes
-      ? POOL_PADDING_Y
-      : Math.max(POOL_PADDING_Y, Math.round((120 - contentHeight) / 2));
+      ? POOL_CONTENT_PADDING_Y
+      : Math.max(POOL_CONTENT_PADDING_Y, Math.round((MIN_POOL_HEIGHT - contentHeight) / 2));
     const deltaY = currentY + padY - minContentY;
 
-    for (const s of result.shapes) {
-      s.bounds.x += deltaX;
-      s.bounds.y += deltaY;
-    }
-    for (const e of result.edges) {
-      for (const wp of e.waypoints) {
-        wp.x += deltaX;
-        wp.y += deltaY;
-      }
-    }
+    translateScopeResult(result, deltaX, deltaY);
 
     const poolBounds = this.createPoolAndLanes({
       participant,
@@ -286,11 +335,16 @@ export class LayoutEngine {
     allShapes.push(...result.shapes);
     allEdges.push(...result.edges);
 
-    return currentY + poolBounds.height + 60;
+    return currentY + poolBounds.height + INTER_ELEMENT_GAP_Y;
   }
 
   private layoutBlackBoxPool(participant: any, currentY: number, allPools?: PoolEntry[]): Bounds {
-    const poolBounds: Bounds = { x: 100, y: currentY, width: 400, height: 60 };
+    const poolBounds: Bounds = {
+      x: POOL_X,
+      y: currentY,
+      width: BLACKBOX_POOL_WIDTH,
+      height: BLACKBOX_POOL_HEIGHT,
+    };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
   }
@@ -307,8 +361,8 @@ export class LayoutEngine {
       allPools,
     } = params;
     if (hasLanes) {
-      const laneStartX = 130;
-      const laneWidth = Math.max(400, result.width + 30);
+      const laneStartX = LANE_X;
+      const laneWidth = Math.max(LANE_MIN_WIDTH, result.width + LANE_CONTENT_MARGIN_X);
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: laneStartX,
         startY: currentY,
@@ -317,9 +371,9 @@ export class LayoutEngine {
       });
 
       const poolBounds: Bounds = {
-        x: 100,
+        x: POOL_X,
         y: currentY,
-        width: laneWidth + 30,
+        width: laneWidth + LANE_HEADER_WIDTH,
         height: laneResult.totalHeight,
       };
 
@@ -329,10 +383,10 @@ export class LayoutEngine {
     }
 
     const poolBounds: Bounds = {
-      x: 100,
+      x: POOL_X,
       y: currentY,
-      width: Math.max(400, result.width + 100),
-      height: Math.max(120, contentHeight + 50),
+      width: Math.max(MIN_POOL_WIDTH, result.width + POOL_WIDTH_MARGIN),
+      height: Math.max(MIN_POOL_HEIGHT, contentHeight + POOL_HEIGHT_MARGIN),
     };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
@@ -398,6 +452,80 @@ export class LayoutEngine {
         });
         options.edges.push({ element: flow, waypoints });
       }
+    }
+  }
+}
+
+interface RerouteTopLevelContext {
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+  analysis?: ScopeAnalysis;
+}
+
+/**
+ * Routes every top-level sequence flow of `process` exactly once, over its
+ * final (post-alignment) bounds, and writes the result back into `ctx.edges`.
+ * `shapeBoundsById` may contain more shapes than this process owns (e.g. an
+ * entire collaboration); only the process's own regular nodes and boundary
+ * events are looked up.
+ */
+export function rerouteTopLevelProcessFlows(
+  process: any,
+  shapeBoundsById: Map<string, Bounds>,
+  ctx: RerouteTopLevelContext
+): void {
+  const { regularNodes, boundaryEvents } = partitionScopeElements(process);
+  const boundsMap = new Map<string, Bounds>();
+  for (const n of [...regularNodes, ...boundaryEvents]) {
+    const b = shapeBoundsById.get(n.id);
+    if (b) {
+      boundsMap.set(n.id, b);
+    }
+  }
+
+  const rerouted = rerouteProcessEdges(process, boundsMap, ctx.analysis);
+  const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
+  for (const e of ctx.edges) {
+    const newRoute = reroutedMap.get(e.element.id);
+    if (newRoute) {
+      e.waypoints = newRoute.waypoints;
+      e.isFeedback = newRoute.isFeedback;
+    }
+  }
+}
+
+function rerouteAllProcesses(
+  definitions: any,
+  ctx: {
+    allShapesMap: Map<string, Bounds>;
+    allEdges: PlacedEdge[];
+    processAnalysis: Map<string, ScopeAnalysis>;
+  }
+): void {
+  const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
+  for (const process of processes) {
+    rerouteTopLevelProcessFlows(process, ctx.allShapesMap, {
+      edges: ctx.allEdges,
+      analysis: ctx.processAnalysis.get(process.id),
+    });
+  }
+}
+
+export function translateScopeResult(
+  result: {
+    shapes: Array<{ bounds: Bounds }>;
+    edges: Array<{ waypoints: Point[] }>;
+  },
+  deltaX: number,
+  deltaY: number
+): void {
+  for (const s of result.shapes) {
+    s.bounds.x += deltaX;
+    s.bounds.y += deltaY;
+  }
+  for (const e of result.edges) {
+    for (const wp of e.waypoints) {
+      wp.x += deltaX;
+      wp.y += deltaY;
     }
   }
 }
@@ -498,7 +626,6 @@ export function layoutPoolConnectionPorts(
     return a.flowId.localeCompare(b.flowId);
   });
 
-  const MIN_PORT_SPACING = 30;
   const positions = sorted.map((e) => e.idealX);
   for (let i = 1; i < positions.length; i++) {
     if (positions[i] < positions[i - 1] + MIN_PORT_SPACING) {
@@ -506,11 +633,11 @@ export function layoutPoolConnectionPorts(
     }
   }
 
-  const maxAllowedX = poolBounds.x + poolBounds.width - 20;
+  const maxAllowedX = poolBounds.x + poolBounds.width - PORT_INSET;
   if (positions[positions.length - 1] > maxAllowedX) {
     const overflow = positions[positions.length - 1] - maxAllowedX;
     for (let i = positions.length - 1; i >= 0; i--) {
-      positions[i] = Math.max(poolBounds.x + 20, positions[i] - overflow);
+      positions[i] = Math.max(poolBounds.x + PORT_INSET, positions[i] - overflow);
     }
   }
 
@@ -539,8 +666,8 @@ export function collectPoolPortEntries(params: CollectPoolPortsParams): PoolPort
         ? Math.round(srcBounds.x + srcBounds.width / 2)
         : Math.round(poolBounds.x + poolBounds.width / 2);
       const idealX = Math.max(
-        poolBounds.x + 20,
-        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+        poolBounds.x + PORT_INSET,
+        Math.min(poolBounds.x + poolBounds.width - PORT_INSET, rawX)
       );
       entries.push({ flowId: flow.id, idealX });
     } else if (srcId === poolId) {
@@ -549,8 +676,8 @@ export function collectPoolPortEntries(params: CollectPoolPortsParams): PoolPort
         ? Math.round(tgtBounds.x + tgtBounds.width / 2)
         : Math.round(poolBounds.x + poolBounds.width / 2);
       const idealX = Math.max(
-        poolBounds.x + 20,
-        Math.min(poolBounds.x + poolBounds.width - 20, rawX)
+        poolBounds.x + PORT_INSET,
+        Math.min(poolBounds.x + poolBounds.width - PORT_INSET, rawX)
       );
       entries.push({ flowId: flow.id, idealX });
     }
@@ -634,7 +761,10 @@ export function computeTargetPortX(params: TargetPortParams): number | undefined
       const rawX = srcBounds
         ? Math.round(srcBounds.x + srcBounds.width / 2)
         : Math.round(tgtBounds.x + tgtBounds.width / 2);
-      const idealX = Math.max(tgtBounds.x + 20, Math.min(tgtBounds.x + tgtBounds.width - 20, rawX));
+      const idealX = Math.max(
+        tgtBounds.x + PORT_INSET,
+        Math.min(tgtBounds.x + tgtBounds.width - PORT_INSET, rawX)
+      );
       return { flowId: f.id, idealX };
     });
     const portMap = layoutPoolConnectionPorts(tgtBounds, entries);

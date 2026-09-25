@@ -1,8 +1,9 @@
-import { DirectedGraph } from '../graph/graph';
+import { DirectedGraph, isAttachEdge } from '../graph/graph';
 import { findFeedbackEdges } from '../graph/cycle-removal';
 import { assignLayers } from '../graph/layer-assignment';
 import { alignReturnPathLayers } from '../graph/return-path-layout';
 import { assignCoordinates } from '../graph/coordinate-assignment';
+import { type AxisSpan, isHorizontalSpanBlocked } from '../graph/obstacles';
 import { routeOrthogonalEdge } from '../graph/orthogonal-router';
 import {
   routeGatewayOutgoingEdges,
@@ -11,7 +12,16 @@ import {
   type GatewayIncomingFlowInfo,
 } from '../graph/gateway-router';
 import { insertDummyNodes } from '../graph/dummy-nodes';
-import { SUBPROCESS_MIN_WIDTH, SUBPROCESS_MIN_HEIGHT, isSubProcessType } from '../di-constants';
+import {
+  SUBPROCESS_MIN_WIDTH,
+  SUBPROCESS_MIN_HEIGHT,
+  SUBPROCESS_PADDING,
+  SUBPROCESS_HEADER_HEIGHT,
+  SUBPROCESS_CONTAINER_PADDING_X,
+  SUBPROCESS_CONTAINER_PADDING_Y,
+  SUBPROCESS_WIDTH_BUDGET_FLOOR,
+  isSubProcessType,
+} from '../di-constants';
 import { addBoundaryEventEdges, placeBoundaries, routeBoundaryExit } from './boundary-events';
 import {
   isArtifact,
@@ -30,6 +40,16 @@ import type { AutoLayoutOptions, Bounds, Point } from '../types';
 
 export { routeAssociationEdge } from './artifact-layout';
 
+export interface ScopeAnalysis {
+  feedbackEdges: Set<string>;
+  returnNodes: Set<string>;
+  returnGateways: Map<string, string>;
+}
+
+function emptyScopeAnalysis(): ScopeAnalysis {
+  return { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() };
+}
+
 export interface ScopeLayoutResult {
   width: number;
   height: number;
@@ -47,6 +67,7 @@ export interface ScopeLayoutResult {
     isFeedback?: boolean;
     labelBounds?: Bounds;
   }>;
+  analysis: ScopeAnalysis;
 }
 
 interface LayoutContext {
@@ -56,17 +77,64 @@ interface LayoutContext {
   nodeToLane?: Map<string, number>;
 }
 
+export interface ScopeCacheOptions {
+  customDimensions?: Map<string, { width: number; height: number }>;
+  scopeCache?: Map<string, ScopeLayoutResult>;
+  callCounter?: { count: number };
+}
+
+function cloneScopeResult(result: ScopeLayoutResult): ScopeLayoutResult {
+  return {
+    width: result.width,
+    height: result.height,
+    minX: result.minX,
+    minY: result.minY,
+    shapes: result.shapes.map((s) => ({
+      element: s.element,
+      bounds: { ...s.bounds },
+      isExpanded: s.isExpanded,
+      labelBounds: s.labelBounds,
+    })),
+    edges: result.edges.map((e) => ({
+      element: e.element,
+      waypoints: e.waypoints.map((wp) => ({ ...wp })),
+      isFeedback: e.isFeedback,
+      labelBounds: e.labelBounds,
+    })),
+    analysis: {
+      feedbackEdges: new Set(result.analysis.feedbackEdges),
+      returnNodes: new Set(result.analysis.returnNodes),
+      returnGateways: new Map(result.analysis.returnGateways),
+    },
+  };
+}
+
+function resolveScopeCacheOptions(
+  cacheOptions: ScopeCacheOptions | undefined
+): ResolvedScopeCacheOptions {
+  const callCounter = cacheOptions?.callCounter;
+  if (callCounter) {
+    callCounter.count += 1;
+  }
+  return {
+    customDimensions: cacheOptions?.customDimensions,
+    scopeCache: cacheOptions?.scopeCache ?? new Map<string, ScopeLayoutResult>(),
+    callCounter,
+  };
+}
+
 export function layoutScope(
   scopeElement: any,
   options?: AutoLayoutOptions,
-  customDimensions?: Map<string, { width: number; height: number }>
+  cacheOptions?: ScopeCacheOptions
 ): ScopeLayoutResult {
+  const resolvedCacheOptions = resolveScopeCacheOptions(cacheOptions);
   const flowElements = scopeElement.flowElements || [];
   const subProcesses = flowElements.filter((el: any) => isSubProcessType(el.$type));
   const { childScopeResults, subDimensions } = layoutChildSubProcesses(
     subProcesses,
     options,
-    customDimensions
+    resolvedCacheOptions
   );
 
   const partition = partitionScopeElements(scopeElement);
@@ -87,15 +155,24 @@ export function layoutScope(
     compensationHandlers.length === 0 &&
     allArtifacts.length === 0
   ) {
-    return { width: 100, height: 80, minX: 0, minY: 0, shapes: [], edges: [] };
+    return {
+      width: 100,
+      height: 80,
+      minX: 0,
+      minY: 0,
+      shapes: [],
+      edges: [],
+      analysis: emptyScopeAnalysis(),
+    };
   }
 
   const boundsMap = new Map<string, Bounds>();
   const shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }> = [];
   const edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> = [];
 
+  let analysis = emptyScopeAnalysis();
   if (regularNodes.length > 0 || boundaryEvents.length > 0) {
-    layoutRegularFlowNodes({
+    analysis = layoutRegularFlowNodes({
       scopeElement,
       regularNodes,
       boundaryEvents,
@@ -108,6 +185,47 @@ export function layoutScope(
       edges,
     });
   }
+
+  layoutRemainingArtifacts(
+    { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes },
+    { childScopeResults, boundsMap, shapes, edges }
+  );
+
+  const bounding = computeScopeBoundingBox(shapes);
+  const { width, height } = computeScopeContainerDimensions(bounding);
+  return {
+    width,
+    height,
+    minX: bounding.minX,
+    minY: bounding.minY,
+    shapes,
+    edges,
+    analysis,
+  };
+}
+
+interface ScopeArtifactPartition {
+  allArtifacts: any[];
+  allAssociations: any[];
+  eventSubProcesses: any[];
+  compensationHandlers: any[];
+  regularNodes: any[];
+}
+
+interface ScopeArtifactContext {
+  childScopeResults: Map<string, ScopeLayoutResult>;
+  boundsMap: Map<string, Bounds>;
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
+}
+
+function layoutRemainingArtifacts(
+  partition: ScopeArtifactPartition,
+  ctx: ScopeArtifactContext
+): void {
+  const { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes } =
+    partition;
+  const { childScopeResults, boundsMap, shapes, edges } = ctx;
 
   const regularNodeIds = new Set<string>(regularNodes.map((n: any) => n.id));
   const { connected, unconnected } = partitionArtifacts(
@@ -131,16 +249,6 @@ export function layoutScope(
     });
     routeAssociations(allAssociations, boundsMap, edges);
   }
-
-  const bounding = computeScopeBoundingBox(shapes);
-  return {
-    width: Math.max(SUBPROCESS_MIN_WIDTH, bounding.maxX - bounding.minX + 60),
-    height: Math.max(SUBPROCESS_MIN_HEIGHT, bounding.maxY - bounding.minY + 70),
-    minX: bounding.minX,
-    minY: bounding.minY,
-    shapes,
-    edges,
-  };
 }
 
 function extractNodeToLaneMap(scopeElement: any): Map<string, number> | undefined {
@@ -186,16 +294,8 @@ export interface IncomingFlowCandidate {
   isReturnGateway?: boolean;
 }
 
-function isCorridorBlocked(
-  y: number,
-  xSpan: { start: number; end: number },
-  obstacles: Bounds[]
-): boolean {
-  const minX = Math.min(xSpan.start, xSpan.end);
-  const maxX = Math.max(xSpan.start, xSpan.end);
-  return obstacles.some(
-    (b) => y > b.y && y < b.y + b.height && Math.max(minX, b.x) < Math.min(maxX, b.x + b.width)
-  );
+function isCorridorBlocked(y: number, xSpan: AxisSpan, obstacles: Bounds[]): boolean {
+  return isHorizontalSpanBlocked(y, xSpan, { obstacles });
 }
 
 function assignMergeBottomPort(
@@ -647,6 +747,7 @@ function addSequenceFlowEdges(graph: DirectedGraph, sequenceFlows: any[]): void 
         target: tgtId,
         data: flow,
         order,
+        kind: 'sequence',
       });
     }
   }
@@ -679,8 +780,8 @@ export function offsetAndCollectChildren(
     edges: Array<{ element: any; waypoints: Point[] }>;
   }
 ): void {
-  const offsetX = parentBounds.x + 30 - child.minX;
-  const offsetY = parentBounds.y + 35 - child.minY;
+  const offsetX = parentBounds.x + SUBPROCESS_PADDING - child.minX;
+  const offsetY = parentBounds.y + SUBPROCESS_HEADER_HEIGHT - child.minY;
 
   for (const s of child.shapes) {
     collector.shapes.push({
@@ -727,6 +828,24 @@ function computeScopeBoundingBox(shapes: Array<{ bounds: Bounds }>): {
   return { minX, minY, maxX, maxY };
 }
 
+function computeScopeContainerDimensions(bounding: {
+  minX: number;
+  minY: number;
+  maxX: number;
+  maxY: number;
+}): { width: number; height: number } {
+  return {
+    width: Math.max(
+      SUBPROCESS_MIN_WIDTH,
+      bounding.maxX - bounding.minX + SUBPROCESS_CONTAINER_PADDING_X
+    ),
+    height: Math.max(
+      SUBPROCESS_MIN_HEIGHT,
+      bounding.maxY - bounding.minY + SUBPROCESS_CONTAINER_PADDING_Y
+    ),
+  };
+}
+
 function isNonVisual(el: any): boolean {
   return el.$type === 'bpmn:DataObject';
 }
@@ -758,7 +877,7 @@ function alignTerminalBoundaryRanks(
     if (isSubProcessType(hostNode?.data?.$type)) {
       continue;
     }
-    const hostBoundaries = graph.outEdges(hostId).filter((e) => e.id.startsWith('_attach_'));
+    const hostBoundaries = graph.outEdges(hostId).filter(isAttachEdge);
     if (hostBoundaries.length !== 1) {
       continue;
     }
@@ -782,7 +901,7 @@ function alignTerminalBoundaryRanks(
 
 function clearMergeCorridorObstacles(graph: DirectedGraph, ranks: Map<string, number>): void {
   for (const node of graph.getNodes()) {
-    const inEdges = graph.inEdges(node.id).filter((e) => !e.id.startsWith('_attach_'));
+    const inEdges = graph.inEdges(node.id).filter((e) => !isAttachEdge(e));
     if (inEdges.length < 2) {
       continue;
     }
@@ -819,7 +938,7 @@ function alignScopeEndEvents(graph: DirectedGraph, ranks: Map<string, number>): 
   }
 }
 
-function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
+function layoutRegularFlowNodes(ctx: RegularFlowContext): ScopeAnalysis {
   const {
     scopeElement,
     regularNodes,
@@ -890,29 +1009,75 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): void {
       isFeedback: feedbackEdges.has(e.element.id),
     });
   }
+
+  return {
+    feedbackEdges,
+    returnNodes: returnPathAnalysis.returnNodes,
+    returnGateways: returnPathAnalysis.returnGateways,
+  };
 }
 
 const SUBPROCESS_MAX_ASPECT_RATIO = 6;
 const SUBPROCESS_TARGET_ASPECT_RATIO = 2;
 
+interface ScopeCacheContext {
+  cache: Map<string, ScopeLayoutResult>;
+  subDimensions: Map<string, { width: number; height: number }>;
+  callCounter?: { count: number };
+}
+
+function layoutScopeCached(
+  sub: any,
+  options: AutoLayoutOptions | undefined,
+  ctx: ScopeCacheContext
+): ScopeLayoutResult {
+  const key = `${sub.id}|${options?.widthBudget ?? ''}`;
+  const cached = ctx.cache.get(key);
+  if (cached) {
+    return cloneScopeResult(cached);
+  }
+  const result = layoutScope(sub, options, {
+    customDimensions: ctx.subDimensions,
+    scopeCache: ctx.cache,
+    callCounter: ctx.callCounter,
+  });
+  ctx.cache.set(key, result);
+  return cloneScopeResult(result);
+}
+
+interface ResolvedScopeCacheOptions {
+  customDimensions?: Map<string, { width: number; height: number }>;
+  scopeCache: Map<string, ScopeLayoutResult>;
+  callCounter?: { count: number };
+}
+
 function layoutChildSubProcesses(
   subProcesses: any[],
-  options?: AutoLayoutOptions,
-  customDimensions?: Map<string, { width: number; height: number }>
+  options: AutoLayoutOptions | undefined,
+  cacheOptions: ResolvedScopeCacheOptions
 ): {
   childScopeResults: Map<string, ScopeLayoutResult>;
   subDimensions: Map<string, { width: number; height: number }>;
 } {
   const childScopeResults = new Map<string, ScopeLayoutResult>();
-  const subDimensions = customDimensions ?? new Map<string, { width: number; height: number }>();
+  const subDimensions =
+    cacheOptions.customDimensions ?? new Map<string, { width: number; height: number }>();
+  const ctx: ScopeCacheContext = {
+    cache: cacheOptions.scopeCache,
+    subDimensions,
+    callCounter: cacheOptions.callCounter,
+  };
 
   for (const sub of subProcesses) {
-    let childResult = layoutScope(sub, options, subDimensions);
+    let childResult = layoutScopeCached(sub, options, ctx);
     const containerRatio = childResult.width / childResult.height;
     if (containerRatio > SUBPROCESS_MAX_ASPECT_RATIO) {
       const area = childResult.width * childResult.height;
-      const widthBudget = Math.max(600, Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO));
-      childResult = layoutScope(sub, { ...options, widthBudget }, subDimensions);
+      const widthBudget = Math.max(
+        SUBPROCESS_WIDTH_BUDGET_FLOOR,
+        Math.sqrt(area * SUBPROCESS_TARGET_ASPECT_RATIO)
+      );
+      childResult = layoutScopeCached(sub, { ...options, widthBudget }, ctx);
     }
     childScopeResults.set(sub.id, childResult);
     subDimensions.set(sub.id, { width: childResult.width, height: childResult.height });
@@ -972,17 +1137,19 @@ export function partitionScopeElements(scopeElement: any): ScopeElementsPartitio
 export function rerouteProcessEdges(
   process: any,
   boundsMap: Map<string, Bounds>,
-  feedbackEdges?: Set<string>
+  analysis?: ScopeAnalysis
 ): Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> {
   const { regularNodes, boundaryEvents, sequenceFlows } = partitionScopeElements(process);
   const routed = routeScopeEdges(sequenceFlows, {
     regularNodes,
     boundaryEvents,
     boundsMap,
-    feedbackEdges,
+    feedbackEdges: analysis?.feedbackEdges,
+    returnNodes: analysis?.returnNodes,
+    returnGateways: analysis?.returnGateways,
   });
   return routed.map((e) => ({
     ...e,
-    isFeedback: feedbackEdges?.has(e.element.id),
+    isFeedback: analysis?.feedbackEdges?.has(e.element.id),
   }));
 }

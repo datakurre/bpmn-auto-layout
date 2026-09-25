@@ -1,3 +1,5 @@
+export type EdgeKind = 'sequence' | 'attach' | 'dummy';
+
 export interface GraphNode {
   id: string;
   data: any;
@@ -10,6 +12,11 @@ export interface GraphEdge {
   target: string;
   data: any;
   order?: number;
+  kind: EdgeKind;
+}
+
+export function isAttachEdge(edge: { kind: EdgeKind }): boolean {
+  return edge.kind === 'attach';
 }
 
 export class DirectedGraph {
@@ -27,12 +34,16 @@ export class DirectedGraph {
   }
 
   public addEdge(edge: GraphEdge): void {
+    if (this.edges.has(edge.id)) {
+      throw new Error(`Duplicate edge id: ${edge.id}`);
+    }
     const fullEdge: GraphEdge = {
       id: edge.id,
       source: edge.source,
       target: edge.target,
       data: edge.data,
       order: edge.order ?? 0,
+      kind: edge.kind,
     };
     this.edges.set(fullEdge.id, fullEdge);
 

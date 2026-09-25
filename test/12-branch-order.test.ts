@@ -65,9 +65,23 @@ describe('Issue #78: Gateway Branch Ordering by Document Order', () => {
     graph.addNode('N3', null);
     graph.addNode('N4', null);
 
-    graph.addEdge({ id: 'z_edge', source: 'N1', target: 'N2', data: null, order: 0 });
-    graph.addEdge({ id: 'a_edge', source: 'N1', target: 'N3', data: null, order: 0 });
-    graph.addEdge({ id: 'm_edge', source: 'N1', target: 'N4', data: null }); // order undefined
+    graph.addEdge({
+      id: 'z_edge',
+      source: 'N1',
+      target: 'N2',
+      data: null,
+      order: 0,
+      kind: 'sequence',
+    });
+    graph.addEdge({
+      id: 'a_edge',
+      source: 'N1',
+      target: 'N3',
+      data: null,
+      order: 0,
+      kind: 'sequence',
+    });
+    graph.addEdge({ id: 'm_edge', source: 'N1', target: 'N4', data: null, kind: 'sequence' }); // order undefined
 
     const out = graph.outEdges('N1');
     expect(out).toHaveLength(3);
@@ -173,10 +187,10 @@ describe('Issue #78: Gateway Branch Ordering by Document Order', () => {
     graph.addNode('N1', null);
     graph.addNode('N2', null);
 
-    graph.addEdge({ id: 'e1', source: 'N1', target: 'N2', data: null, order: 2 });
-    graph.addEdge({ id: 'e2', source: 'N1', target: 'N2', data: null, order: 1 });
-    graph.addEdge({ id: 'e3', source: 'N1', target: 'N2', data: null, order: 0 });
-    graph.addEdge({ id: 'e4', source: 'N1', target: 'N2', data: null });
+    graph.addEdge({ id: 'e1', source: 'N1', target: 'N2', data: null, order: 2, kind: 'sequence' });
+    graph.addEdge({ id: 'e2', source: 'N1', target: 'N2', data: null, order: 1, kind: 'sequence' });
+    graph.addEdge({ id: 'e3', source: 'N1', target: 'N2', data: null, order: 0, kind: 'sequence' });
+    graph.addEdge({ id: 'e4', source: 'N1', target: 'N2', data: null, kind: 'sequence' });
 
     const out = graph.outEdges('N1');
     expect(out).toHaveLength(4);

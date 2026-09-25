@@ -1,5 +1,6 @@
 import type { Bounds, Point } from '../types';
 import { LANE_MIN_HEIGHT } from '../di-constants';
+import { verticalSegmentHitsBox } from '../graph/obstacles';
 
 export interface LaneLayoutResult {
   lanes: Array<{ element: any; bounds: Bounds }>;
@@ -177,8 +178,7 @@ export function isMessageCorridorBlocked(
     return false;
   }
   const [y1, y2] = yRange;
-  const minY = Math.min(y1, y2);
-  const maxY = Math.max(y1, y2);
+  const span = { start: y1, end: y2 };
   return ctx.obstacles.some((b) => {
     if (ctx.ignore.includes(b)) {
       return false;
@@ -193,7 +193,7 @@ export function isMessageCorridorBlocked(
     if (enclosesAny) {
       return false;
     }
-    return x > b.x && x < b.x + b.width && b.y + b.height > minY && b.y < maxY;
+    return verticalSegmentHitsBox(x, span, b);
   });
 }
 
