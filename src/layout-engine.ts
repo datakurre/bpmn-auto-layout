@@ -144,7 +144,7 @@ export class LayoutEngine {
       // process after the first is translated down. minContentY/maxContentY include
       // edge waypoints, so a loop channel routed above or below the nodes is counted
       // too. The first process is untouched and keeps byte-identical output.
-      const { minContentY, maxContentY } = computeScopeContentYExtents(result);
+      const { minContentY } = computeScopeContentYExtents(result);
       let startY = FIRST_PROCESS_Y;
       if (nextTop !== null) {
         const top = Math.min(FIRST_PROCESS_Y, minContentY);
@@ -191,9 +191,13 @@ export class LayoutEngine {
         });
       }
 
-      const translatedMaxContentY = maxContentY + (startY - FIRST_PROCESS_Y);
-      nextTop =
-        Math.max(translatedMaxContentY, startY + laneResult.totalHeight) + INTER_ELEMENT_GAP_Y;
+      // Measured after rerouteTopLevelProcessFlows and on the final, translated
+      // shapes/edges, so a route that changes the content's vertical extent
+      // (a loop channel routed above or below the nodes, say) is reflected
+      // directly instead of being approximated from the pre-reroute extent
+      // plus a uniform shift.
+      const { maxContentY: finalMaxContentY } = computeScopeContentYExtents(result);
+      nextTop = Math.max(finalMaxContentY, startY + laneResult.totalHeight) + INTER_ELEMENT_GAP_Y;
     }
   }
 

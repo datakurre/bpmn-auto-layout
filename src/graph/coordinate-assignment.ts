@@ -2,7 +2,7 @@ import { isAttachEdge, type DirectedGraph } from './graph';
 import {
   getElementDimensions,
   DEFAULT_GRID_SPACING,
-  POOL_X,
+  GRID_START_X,
   GRID_START_X_WITH_LANES,
   MIN_COLUMN_WIDTH,
   MIN_TRACK_HALF_HEIGHT,
@@ -38,7 +38,7 @@ export function assignCoordinates(
   const nodes = graph.getNodes();
   const gridSpacing = options?.gridSpacing ?? DEFAULT_GRID_SPACING;
   const hasLanes = Boolean(options?.nodeToLane && options.nodeToLane.size > 0);
-  const startX = hasLanes ? GRID_START_X_WITH_LANES : POOL_X;
+  const startX = hasLanes ? GRID_START_X_WITH_LANES : GRID_START_X;
 
   const { rankGroups, maxRank } = groupNodesByRank(nodes, ranks);
   const { colWidths, colX, rankRows } = computeColumnPositions(graph, rankGroups, {

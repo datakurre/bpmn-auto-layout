@@ -13,7 +13,9 @@ import { scoreDiagram } from '../src/layout-metrics';
 // while leaving 15-parallel-with-unequal-branch-depth unchanged. That result
 // means the fix needs to reason about the full set of edges a reorder would
 // newly cross, not just the branch's own reconvergence point -- left as
-// follow-up work. These totals are the current, unregressed baseline.
+// follow-up work. These are current baseline upper bounds, not exact targets:
+// use toBeLessThanOrEqual so a future improvement doesn't fail this test the
+// way an exact pin would.
 describe('Corpus layout quality', () => {
   it('keeps total edge crossings and bends within the pinned baseline', async () => {
     const snapshotsDir = join(__dirname, 'snapshots');
@@ -36,7 +38,7 @@ describe('Corpus layout quality', () => {
 
     expect(totalShapeOverlaps).toBe(0);
     expect(totalEdgeShapeCrossings).toBe(0);
-    expect(totalCrossings).toBe(13);
-    expect(totalBends).toBe(155);
+    expect(totalCrossings).toBeLessThanOrEqual(13);
+    expect(totalBends).toBeLessThanOrEqual(155);
   });
 });

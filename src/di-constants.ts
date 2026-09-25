@@ -72,6 +72,10 @@ export const LANE_MIN_WIDTH = 400;
 // inside the lane that isn't named anywhere else. Keep the literal as-is rather
 // than force a derivation that doesn't actually hold.
 export const GRID_START_X_WITH_LANES = 180;
+// A process without lanes has no pool either, but its grid still starts at the
+// same x pools do. Named separately from POOL_X so a reader doesn't have to
+// infer that connection from a reused pool constant.
+export const GRID_START_X = POOL_X;
 export const MIN_COLUMN_WIDTH = 36;
 export const MIN_TRACK_HALF_HEIGHT = 40;
 export const BOUNDARY_TRACK_PADDING = 20;
