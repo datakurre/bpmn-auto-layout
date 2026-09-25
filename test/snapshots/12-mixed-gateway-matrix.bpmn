@@ -35,19 +35,19 @@
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
         <dc:Bounds x="100" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="104" y="168" width="28" height="14" />
+          <dc:Bounds x="102" y="168" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Incl_Split_di" bpmnElement="Gate_Incl_Split">
         <dc:Bounds x="196" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="204" y="95" width="34" height="14" />
+          <dc:Bounds x="202" y="95" width="34" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Par_Split_di" bpmnElement="Gate_Par_Split">
         <dc:Bounds x="331" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="342" y="95" width="28" height="14" />
+          <dc:Bounds x="340" y="95" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_P1_di" bpmnElement="Task_P1">
@@ -59,7 +59,7 @@
       <bpmndi:BPMNShape id="Gate_Par_Join_di" bpmnElement="Gate_Par_Join">
         <dc:Bounds x="626" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="637" y="95" width="28" height="14" />
+          <dc:Bounds x="635" y="95" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_Excl_Inner_di" bpmnElement="Gate_Excl_Inner">
@@ -92,7 +92,7 @@
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
         <dc:Bounds x="1226" y="242" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1229" y="288" width="30" height="14" />
+          <dc:Bounds x="1227" y="288" width="30" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_PathA_di" bpmnElement="Flow_PathA">

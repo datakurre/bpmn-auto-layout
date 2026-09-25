@@ -48,7 +48,7 @@
       <bpmndi:BPMNShape id="Fork_Parallel_di" bpmnElement="Fork_Parallel">
         <dc:Bounds x="196" y="155" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="235" y="138" width="52" height="28" />
+          <dc:Bounds x="233" y="138" width="52" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_QuickCheck_di" bpmnElement="Task_QuickCheck">

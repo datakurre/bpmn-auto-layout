@@ -14,7 +14,7 @@
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
         <dc:Bounds x="100" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="104" y="168" width="28" height="14" />
+          <dc:Bounds x="102" y="168" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_A_di" bpmnElement="Task_A">
@@ -26,7 +26,7 @@
       <bpmndi:BPMNShape id="End_1_di" bpmnElement="End_1">
         <dc:Bounds x="516" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="522" y="168" width="24" height="14" />
+          <dc:Bounds x="520" y="168" width="24" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="F1_di" bpmnElement="F1">

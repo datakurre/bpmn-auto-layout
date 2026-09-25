@@ -70,7 +70,7 @@
       <bpmndi:BPMNShape id="Gate_Fork_di" bpmnElement="Gate_Fork">
         <dc:Bounds x="356" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="367" y="95" width="28" height="14" />
+          <dc:Bounds x="365" y="95" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_ReserveHotel_di" bpmnElement="Task_ReserveHotel">
@@ -82,7 +82,7 @@
       <bpmndi:BPMNShape id="Gate_Join_di" bpmnElement="Gate_Join">
         <dc:Bounds x="626" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="637" y="95" width="28" height="14" />
+          <dc:Bounds x="635" y="95" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_ChargePayment_di" bpmnElement="Task_ChargePayment">
@@ -91,7 +91,7 @@
       <bpmndi:BPMNShape id="Gate_Confirm_di" bpmnElement="Gate_Confirm">
         <dc:Bounds x="896" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="890" y="95" width="62" height="14" />
+          <dc:Bounds x="888" y="95" width="62" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Throw_CompensateAll_di" bpmnElement="Throw_CompensateAll">
@@ -142,7 +142,7 @@
       <bpmndi:BPMNShape id="Sub_Start_di" bpmnElement="Sub_Start">
         <dc:Bounds x="808" y="455" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="812" y="501" width="28" height="14" />
+          <dc:Bounds x="810" y="501" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Sub_ValidateRefund_di" bpmnElement="Sub_ValidateRefund">
@@ -154,7 +154,7 @@
       <bpmndi:BPMNShape id="Sub_End_di" bpmnElement="Sub_End">
         <dc:Bounds x="1224" y="455" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1227" y="501" width="30" height="14" />
+          <dc:Bounds x="1225" y="501" width="30" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">

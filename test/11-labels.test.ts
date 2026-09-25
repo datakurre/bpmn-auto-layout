@@ -5,6 +5,7 @@ import {
   estimateLabelDimensions,
   estimateTextAnnotationDimensions,
   estimateWordWidth,
+  computeLabelVisualShift,
   generateTextWrapCandidates,
   boxesOverlap,
   doesBoxCollide,
@@ -37,6 +38,17 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       expect(estimateWordWidth('i')).toBe(3.5);
       expect(estimateWordWidth('A')).toBe(7.5);
       expect(estimateWordWidth('a')).toBe(6.0);
+    });
+
+    it('compensates for renderer alignment of short single-word labels', () => {
+      expect(computeLabelVisualShift(undefined)).toBe(0);
+      expect(computeLabelVisualShift('')).toBe(0);
+      expect(computeLabelVisualShift('   ')).toBe(0);
+      expect(computeLabelVisualShift('Start')).toBe(2);
+      expect(computeLabelVisualShift('  Start  ')).toBe(2);
+      expect(computeLabelVisualShift('Start\n\n')).toBe(2);
+      expect(computeLabelVisualShift('Process Started')).toBe(0);
+      expect(computeLabelVisualShift('Order\nPlaced')).toBe(2);
     });
 
     it('accurately estimates label dimensions for various text patterns', () => {
@@ -313,6 +325,27 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       expect(Math.abs(labelCenterX - 118)).toBeLessThanOrEqual(1);
     });
 
+    it('visually centers single-word event and gateway labels', () => {
+      const shapes: PlacedShape[] = [
+        {
+          element: { id: 'Start_Single', $type: 'bpmn:StartEvent', name: 'Start' },
+          bounds: { x: 100, y: 100, width: 36, height: 36 },
+        },
+        {
+          element: { id: 'Gateway_Single', $type: 'bpmn:ExclusiveGateway', name: 'Approve' },
+          bounds: { x: 200, y: 100, width: 50, height: 50 },
+        },
+      ];
+
+      for (const shape of shapes) {
+        layoutElementLabel(shape, [], { shapes: [shape], edges: [] });
+        const bounds = shape.labelBounds!;
+        const elementCenterX = shape.bounds.x + shape.bounds.width / 2;
+        const renderedTextCenterX = bounds.x + bounds.width / 2 + 2;
+        expect(renderedTextCenterX).toBe(elementCenterX);
+      }
+    });
+
     it('falls back to diagonal when all 4 orthogonal sides are obstructed', () => {
       const shape: PlacedShape = {
         element: {
@@ -352,6 +385,41 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
         (shape.labelBounds!.x >= 136 || shape.labelBounds!.x + shape.labelBounds!.width <= 100) &&
         (shape.labelBounds!.y >= 136 || shape.labelBounds!.y + shape.labelBounds!.height <= 100);
       expect(isDiagonal).toBe(true);
+    });
+
+    it('keeps artifact label placement unchanged when orthogonal positions are blocked', () => {
+      const shape: PlacedShape = {
+        element: { id: 'Artifact_Diagonal', $type: 'bpmn:DataObjectReference', name: 'Report' },
+        bounds: { x: 100, y: 100, width: 36, height: 50 },
+      };
+      const obstacles: PlacedShape[] = [
+        {
+          element: { id: 'Top_Obstacle', $type: 'bpmn:Task' },
+          bounds: { x: 90, y: 70, width: 55, height: 30 },
+        },
+        {
+          element: { id: 'Bottom_Obstacle', $type: 'bpmn:Task' },
+          bounds: { x: 90, y: 155, width: 55, height: 30 },
+        },
+        {
+          element: { id: 'Right_Obstacle', $type: 'bpmn:Task' },
+          bounds: { x: 140, y: 110, width: 60, height: 30 },
+        },
+        {
+          element: { id: 'Left_Obstacle', $type: 'bpmn:Task' },
+          bounds: { x: 35, y: 110, width: 60, height: 30 },
+        },
+      ];
+
+      layoutElementLabel(shape, [], { shapes: [shape, ...obstacles], edges: [] });
+
+      expect(shape.labelBounds).toBeDefined();
+      expect(shape.labelBounds!.x).toBe(
+        shape.bounds.x + shape.bounds.width + ARTIFACT_LABEL_MARGIN
+      );
+      expect(shape.labelBounds!.y).toBe(
+        shape.bounds.y - ARTIFACT_LABEL_MARGIN - shape.labelBounds!.height
+      );
     });
 
     it('omits label when element name is absent or empty', () => {
@@ -728,7 +796,10 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
 
       expect(boundaryShape.labelBounds).toBeDefined();
       expect(boundaryShape.labelBounds!.x).toBe(
-        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_DIAGONAL_MARGIN
+        boundaryShape.bounds.x +
+          boundaryShape.bounds.width +
+          BOUNDARY_EVENT_DIAGONAL_MARGIN -
+          computeLabelVisualShift(boundaryShape.element.name)
       );
       expect(boundaryShape.labelBounds!.y).toBe(
         boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
@@ -800,7 +871,10 @@ describe('Iteration 11: Event, Gateway, and Path Labels', () => {
       expect(boundaryShape.labelBounds).toBeDefined();
       // Fallback is bottom-right diagonal, NOT orthogonal bottom
       expect(boundaryShape.labelBounds!.x).toBe(
-        boundaryShape.bounds.x + boundaryShape.bounds.width + BOUNDARY_EVENT_DIAGONAL_MARGIN
+        boundaryShape.bounds.x +
+          boundaryShape.bounds.width +
+          BOUNDARY_EVENT_DIAGONAL_MARGIN -
+          computeLabelVisualShift(boundaryShape.element.name)
       );
       expect(boundaryShape.labelBounds!.y).toBe(
         boundaryShape.bounds.y + boundaryShape.bounds.height + BOUNDARY_EVENT_DIAGONAL_MARGIN
