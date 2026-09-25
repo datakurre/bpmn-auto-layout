@@ -36,14 +36,24 @@ describe('Issue #97: nested subprocess re-layout caching', () => {
   it('lays out a deeply nested chain of wide subprocesses with fewer layoutScope calls', async () => {
     // #97's own measurement recorded 32 layoutScope calls for this exact
     // depth/n before caching (8 scopes, "up to 4x" the ideal of one call
-    // each). The ideal of one call per scope, or even the "one relayout per
-    // scope" bound of 2*(depth+1)=16, isn't reachable here: every level in
-    // this chain is wide enough to trigger its own width-budget retry, and
-    // that retry computes a widthBudget from its own (inherited-budget-
+    // each). The issue's acceptance criterion asked for at most
+    // 2*(depth+1)=16 calls (one normal pass plus at most one relayout per
+    // scope), but that bound isn't reachable for this fixture: every level
+    // in this chain is wide enough to trigger its own width-budget retry,
+    // and that retry computes a widthBudget from its own (inherited-budget-
     // dependent) area, which cascades to its descendants and is different
-    // at every level -- so most cache keys are still distinct. Caching still
-    // catches the cases where an inherited budget repeats, cutting real,
-    // measured redundant work without changing the wrapping/output.
+    // at every level -- so most cache keys are still distinct.
+    //
+    // Measured after caching: 27 calls (down from 32). #97 was reopened
+    // after #102 merged with this gap unaddressed; per the issue's own
+    // second resolution path ("decide the remaining cost is acceptable...
+    // and change the criterion"), 27 is accepted as the real bound for this
+    // adversarial fixture -- reaching 16 would need predicting each
+    // subprocess's width budget before its first layout, which risks
+    // mispredicting the budget and needing a fallback retry anyway, for a
+    // diagram whose absolute layout time is 65ms in the worst case measured.
+    // Pinned as an upper bound (not exact) so a future improvement, such as
+    // that prediction, doesn't fail this test.
     const depth = 7;
     const n = 40;
     const builder = new BpmnBuilder('Process_Deep');
@@ -53,7 +63,7 @@ describe('Issue #97: nested subprocess re-layout caching', () => {
     const callCounter = { count: 0 };
     layoutScope(process, undefined, { callCounter });
 
-    expect(callCounter.count).toBeLessThan(32);
+    expect(callCounter.count).toBeLessThanOrEqual(27);
   });
 
   it('produces identical XML when the same diagram is laid out twice', async () => {
