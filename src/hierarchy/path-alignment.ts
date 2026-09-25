@@ -1,10 +1,5 @@
-import type { AutoLayoutOptions, Bounds, Point } from '../types';
-import {
-  buildScopeGraph,
-  getRefId,
-  partitionScopeElements,
-  type ScopeLayoutResult,
-} from './subprocess-layout';
+import type { AutoLayoutOptions, Bounds } from '../types';
+import { buildScopeGraph, getRefId, partitionScopeElements } from './subprocess-layout';
 import { findFeedbackEdges } from '../graph/cycle-removal';
 import { boxesOverlap } from '../layout-metrics';
 
@@ -13,14 +8,19 @@ export interface CollaborationAlignmentContext {
   collaboration: any;
   allShapesMap: Map<string, Bounds>;
   allShapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean; labelBounds?: Bounds }>;
-  allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean; labelBounds?: Bounds }>;
   allLanes?: Array<{ element: any; bounds: Bounds }>;
   allPools?: Array<{ element: any; bounds: Bounds }>;
 }
 
+export interface AlignableScopeResult {
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
+  minX: number;
+  width: number;
+}
+
 export interface IntraProcessAlignmentContext {
   process: any;
-  result: ScopeLayoutResult;
+  result: AlignableScopeResult;
   options?: AutoLayoutOptions;
 }
 
@@ -34,19 +34,17 @@ interface MessagePair {
 interface ProcessForwardInfo {
   process: any;
   forwardSuccessors: Map<string, string[]>;
-  subProcessDescendants: Map<string, { shapes: string[]; edges: string[] }>;
+  subProcessDescendants: Map<string, string[]>;
 }
 
 interface ShiftSubtreeContext {
   allShapesMap: Map<string, Bounds>;
-  allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   forwardSuccessors: Map<string, string[]>;
-  subProcessDescendants: Map<string, { shapes: string[]; edges: string[] }>;
+  subProcessDescendants: Map<string, string[]>;
 }
 
 interface PairShiftContext {
   allShapesMap: Map<string, Bounds>;
-  allEdges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   procInfos: Map<string, ProcessForwardInfo>;
 }
 
@@ -72,20 +70,18 @@ function buildNodeProcessMap(definitions: any): Map<string, any> {
   return map;
 }
 
-function collectSubProcessDescendants(
-  element: any,
-  descendants: { shapes: string[]; edges: string[] }
-): void {
+function collectSubProcessDescendantShapeIds(element: any): string[] {
+  const shapeIds: string[] = [];
   for (const child of element.flowElements || []) {
     if (child.$type === 'bpmn:SequenceFlow') {
-      descendants.edges.push(child.id);
-    } else {
-      descendants.shapes.push(child.id);
-      if (child.$type === 'bpmn:SubProcess') {
-        collectSubProcessDescendants(child, descendants);
-      }
+      continue;
+    }
+    shapeIds.push(child.id);
+    if (child.$type === 'bpmn:SubProcess') {
+      shapeIds.push(...collectSubProcessDescendantShapeIds(child));
     }
   }
+  return shapeIds;
 }
 
 function collectAllBoundaryEvents(scope: any): any[] {
@@ -131,12 +127,10 @@ function buildProcessForwardInfo(process: any): ProcessForwardInfo {
     }
   }
 
-  const subProcessDescendants = new Map<string, { shapes: string[]; edges: string[] }>();
+  const subProcessDescendants = new Map<string, string[]>();
   for (const node of regularNodes) {
     if (node.$type === 'bpmn:SubProcess') {
-      const descendants = { shapes: [], edges: [] };
-      collectSubProcessDescendants(node, descendants);
-      subProcessDescendants.set(node.id, descendants);
+      subProcessDescendants.set(node.id, collectSubProcessDescendantShapeIds(node));
     }
   }
 
@@ -166,17 +160,13 @@ function collectReachableNodes(
 function shiftSubtreeNodes(startId: string, deltaX: number, ctx: ShiftSubtreeContext): void {
   const reachable = collectReachableNodes(startId, ctx.forwardSuccessors);
   const shiftedShapeIds = new Set<string>();
-  const shiftedEdgeIds = new Set<string>();
 
   for (const id of reachable) {
     shiftedShapeIds.add(id);
     const desc = ctx.subProcessDescendants.get(id);
     if (desc) {
-      for (const sId of desc.shapes) {
+      for (const sId of desc) {
         shiftedShapeIds.add(sId);
-      }
-      for (const eId of desc.edges) {
-        shiftedEdgeIds.add(eId);
       }
     }
   }
@@ -185,14 +175,6 @@ function shiftSubtreeNodes(startId: string, deltaX: number, ctx: ShiftSubtreeCon
     const b = ctx.allShapesMap.get(id);
     if (b) {
       b.x += deltaX;
-    }
-  }
-
-  for (const edge of ctx.allEdges) {
-    if (shiftedEdgeIds.has(edge.element.id)) {
-      for (const wp of edge.waypoints) {
-        wp.x += deltaX;
-      }
     }
   }
 }
@@ -261,7 +243,6 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
     const shiftRoot = getEffectiveShiftRoot(pair.tgtId, pair.tgtProc);
     shiftSubtreeNodes(shiftRoot, delta, {
       allShapesMap: ctx.allShapesMap,
-      allEdges: ctx.allEdges,
       forwardSuccessors: tgtInfo.forwardSuccessors,
       subProcessDescendants: tgtInfo.subProcessDescendants,
     });
@@ -273,7 +254,6 @@ function applyPairShift(pair: MessagePair, ctx: PairShiftContext): boolean {
   const shiftRoot = getEffectiveShiftRoot(pair.srcId, pair.srcProc);
   shiftSubtreeNodes(shiftRoot, delta, {
     allShapesMap: ctx.allShapesMap,
-    allEdges: ctx.allEdges,
     forwardSuccessors: srcInfo.forwardSuccessors,
     subProcessDescendants: srcInfo.subProcessDescendants,
   });
@@ -303,7 +283,6 @@ export function alignCollaborationPaths(opts: CollaborationAlignmentContext): vo
 
   const pairCtx: PairShiftContext = {
     allShapesMap: opts.allShapesMap,
-    allEdges: opts.allEdges,
     procInfos,
   };
 
@@ -619,17 +598,11 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
   });
 
   const shapeIdsToShift = new Set<string>();
-  const descendantEdgeIds = new Set<string>();
   for (const n of [...nodesToShift, ...boundaryEventsToShift]) {
     shapeIdsToShift.add(n.id);
     if (n.$type === 'bpmn:SubProcess') {
-      const descendants = { shapes: [], edges: [] };
-      collectSubProcessDescendants(n, descendants);
-      for (const sId of descendants.shapes) {
+      for (const sId of collectSubProcessDescendantShapeIds(n)) {
         shapeIdsToShift.add(sId);
-      }
-      for (const eId of descendants.edges) {
-        descendantEdgeIds.add(eId);
       }
     }
   }
@@ -639,19 +612,10 @@ export function alignIntraProcessBranches(ctx: IntraProcessAlignmentContext): bo
       b.x += candidate.deltaX;
     }
   }
-  if (descendantEdgeIds.size > 0) {
-    for (const e of result.edges) {
-      if (descendantEdgeIds.has(e.element.id)) {
-        for (const wp of e.waypoints) {
-          wp.x += candidate.deltaX;
-        }
-      }
-    }
-  }
 
-  // Node/shape movement only: routing happens once, after every alignment
-  // pass has finished moving nodes (see LayoutEngine.layoutSingleProcesses
-  // and layoutCollaboration).
+  // Node/shape movement only: no edges exist yet at this point. Routing
+  // happens once, after every alignment pass has finished moving nodes (see
+  // LayoutEngine.layoutSingleProcesses and layoutCollaboration).
   let maxRight = 0;
   for (const s of result.shapes) {
     maxRight = Math.max(maxRight, s.bounds.x + s.bounds.width);
@@ -673,18 +637,10 @@ export function alignVerticallyStackedPaths(opts: CollaborationAlignmentContext)
         (process.flowElements as any[] | undefined)?.map((fe: any) => fe.id)
       );
       const partShapes = opts.allShapes.filter((s) => flowElementIds.has(s.element.id));
-      const partEdges = opts.allEdges.filter((e) => flowElementIds.has(e.element.id));
-      const fakeResult: ScopeLayoutResult = {
+      const fakeResult: AlignableScopeResult = {
         width: 0,
-        height: 0,
         minX: Math.min(...partShapes.map((s) => s.bounds.x), 100),
-        minY: Math.min(...partShapes.map((s) => s.bounds.y), 100),
         shapes: partShapes,
-        edges: partEdges,
-        // alignIntraProcessBranches only moves nodes now; it doesn't read
-        // this beyond satisfying the type, since routing happens once, later,
-        // in LayoutEngine.layoutCollaboration.
-        analysis: { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() },
       };
       alignIntraProcessBranches({ process, result: fakeResult });
     }

@@ -107,18 +107,6 @@
           <dc:Bounds x="399" y="235" width="120" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
-        <di:waypoint x="422" y="135" />
-        <di:waypoint x="482" y="135" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
-        <di:waypoint x="582" y="135" />
-        <di:waypoint x="642" y="135" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
-        <di:waypoint x="742" y="135" />
-        <di:waypoint x="802" y="135" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Merge_di" bpmnElement="Flow_Merge">
         <di:waypoint x="1234" y="440" />
         <di:waypoint x="1294" y="440" />
@@ -158,6 +146,18 @@
         <di:waypoint x="384" y="238" />
         <di:waypoint x="384" y="560" />
         <di:waypoint x="1024" y="560" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="422" y="135" />
+        <di:waypoint x="482" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="582" y="135" />
+        <di:waypoint x="642" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="742" y="135" />
+        <di:waypoint x="802" y="135" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

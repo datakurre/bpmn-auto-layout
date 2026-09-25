@@ -45,14 +45,6 @@
           <dc:Bounds x="600" y="168" width="52" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Sub_Flow_1_di" bpmnElement="Sub_Flow_1">
-        <di:waypoint x="262" y="135" />
-        <di:waypoint x="322" y="135" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Sub_Flow_2_di" bpmnElement="Sub_Flow_2">
-        <di:waypoint x="422" y="135" />
-        <di:waypoint x="482" y="135" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Parent_Flow_1_di" bpmnElement="Parent_Flow_1">
         <di:waypoint x="136" y="140" />
         <di:waypoint x="196" y="140" />
@@ -60,6 +52,14 @@
       <bpmndi:BPMNEdge id="Parent_Flow_2_di" bpmnElement="Parent_Flow_2">
         <di:waypoint x="548" y="140" />
         <di:waypoint x="608" y="140" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_1_di" bpmnElement="Sub_Flow_1">
+        <di:waypoint x="262" y="135" />
+        <di:waypoint x="322" y="135" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Sub_Flow_2_di" bpmnElement="Sub_Flow_2">
+        <di:waypoint x="422" y="135" />
+        <di:waypoint x="482" y="135" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -66,13 +66,13 @@
           <dc:Bounds x="850" y="168" width="56" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
-      <bpmndi:BPMNEdge id="Inner_F1_di" bpmnElement="Inner_F1">
-        <di:waypoint x="388" y="135" />
-        <di:waypoint x="448" y="135" />
+      <bpmndi:BPMNEdge id="Main_F1_di" bpmnElement="Main_F1">
+        <di:waypoint x="136" y="140" />
+        <di:waypoint x="196" y="140" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Inner_F2_di" bpmnElement="Inner_F2">
-        <di:waypoint x="548" y="135" />
-        <di:waypoint x="608" y="135" />
+      <bpmndi:BPMNEdge id="Main_F2_di" bpmnElement="Main_F2">
+        <di:waypoint x="800" y="140" />
+        <di:waypoint x="860" y="140" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Outer_F1_di" bpmnElement="Outer_F1">
         <di:waypoint x="262" y="140" />
@@ -82,13 +82,13 @@
         <di:waypoint x="674" y="140" />
         <di:waypoint x="734" y="140" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Main_F1_di" bpmnElement="Main_F1">
-        <di:waypoint x="136" y="140" />
-        <di:waypoint x="196" y="140" />
+      <bpmndi:BPMNEdge id="Inner_F1_di" bpmnElement="Inner_F1">
+        <di:waypoint x="388" y="135" />
+        <di:waypoint x="448" y="135" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Main_F2_di" bpmnElement="Main_F2">
-        <di:waypoint x="800" y="140" />
-        <di:waypoint x="860" y="140" />
+      <bpmndi:BPMNEdge id="Inner_F2_di" bpmnElement="Inner_F2">
+        <di:waypoint x="548" y="135" />
+        <di:waypoint x="608" y="135" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

@@ -2,9 +2,9 @@ import { BpmnModdle, type BPMNModdle } from 'bpmn-moddle';
 import { DiGenerator } from './di-generator';
 import {
   layoutScope,
-  partitionScopeElements,
-  rerouteProcessEdges,
+  routeScope,
   type ScopeAnalysis,
+  type ScopeLayoutResult,
 } from './hierarchy/subprocess-layout';
 import {
   layoutProcessLanes,
@@ -51,16 +51,16 @@ interface ParticipantLayoutParams {
   currentY: number;
   allShapesMap: Map<string, Bounds>;
   allShapes: PlacedShape[];
-  allEdges: PlacedEdge[];
   allLanes: Array<{ element: any; bounds: Bounds }>;
   allPools: PoolEntry[];
-  processAnalysis: Map<string, ScopeAnalysis>;
+  analysisMap: Map<string, ScopeAnalysis>;
 }
 
 interface PoolAndLanesParams {
   participant: any;
   process: any;
-  result: any;
+  result: ScopeLayoutResult;
+  edges: PlacedEdge[];
   currentY: number;
   hasLanes: boolean;
   contentHeight?: number;
@@ -140,36 +140,40 @@ export class LayoutEngine {
       alignIntraProcessBranches({ process, result, options: this.options });
       ensureBoundariesAttached(result.shapes);
 
+      // Route once, now that alignment has finished moving nodes but before
+      // any inter-process translation below: translating shapes and these
+      // routed edges together by the same rigid delta afterward reproduces
+      // exactly the route this call already computed (routing only looks at
+      // relative positions within this process), so there is no need to
+      // route a second time at the final position.
+      const shapeBoundsById = new Map<string, Bounds>(
+        result.shapes.map((s) => [s.element.id, s.bounds])
+      );
+      const analysisMap = buildAnalysisMap(process.id, result);
+      const edges: PlacedEdge[] = routeScope(process, { boundsMap: shapeBoundsById, analysisMap });
+
       // layoutScope always positions a process as if it were the only one, so every
       // process after the first is translated down. minContentY/maxContentY include
       // edge waypoints, so a loop channel routed above or below the nodes is counted
       // too. The first process is untouched and keeps byte-identical output.
-      const { minContentY } = computeScopeContentYExtents(result);
+      const { minContentY } = computeScopeContentYExtents({ shapes: result.shapes, edges });
       let startY = FIRST_PROCESS_Y;
       if (nextTop !== null) {
         const top = Math.min(FIRST_PROCESS_Y, minContentY);
-        translateScopeResult(result, 0, nextTop - top);
+        translateScopeResult(result, { x: 0, y: nextTop - top }, edges);
         startY = FIRST_PROCESS_Y + (nextTop - top);
       }
-
-      const shapeBoundsById = new Map<string, Bounds>(
-        result.shapes.map((s) => [s.element.id, s.bounds])
-      );
-      rerouteTopLevelProcessFlows(process, shapeBoundsById, {
-        edges: result.edges,
-        analysis: result.analysis,
-      });
 
       const laneResult = layoutProcessLanes(process, result.shapes, {
         startX: POOL_X,
         startY,
         totalWidth: result.width,
-        edges: result.edges,
+        edges,
       });
 
       layoutAllLabels({
         shapes: result.shapes,
-        edges: result.edges,
+        edges,
         lanes: laneResult.lanes,
       });
 
@@ -183,7 +187,7 @@ export class LayoutEngine {
           labelBounds: s.labelBounds,
         });
       }
-      for (const e of result.edges) {
+      for (const e of edges) {
         this.diGenerator.addEdge(plane, {
           bpmnElement: e.element,
           waypoints: e.waypoints,
@@ -191,12 +195,10 @@ export class LayoutEngine {
         });
       }
 
-      // Measured after rerouteTopLevelProcessFlows and on the final, translated
-      // shapes/edges, so a route that changes the content's vertical extent
-      // (a loop channel routed above or below the nodes, say) is reflected
-      // directly instead of being approximated from the pre-reroute extent
-      // plus a uniform shift.
-      const { maxContentY: finalMaxContentY } = computeScopeContentYExtents(result);
+      const { maxContentY: finalMaxContentY } = computeScopeContentYExtents({
+        shapes: result.shapes,
+        edges,
+      });
       nextTop = Math.max(finalMaxContentY, startY + laneResult.totalHeight) + INTER_ELEMENT_GAP_Y;
     }
   }
@@ -211,10 +213,9 @@ export class LayoutEngine {
     const participants = orderCollaborationParticipants(rawParticipants, ctx.existingY);
     const allShapesMap = new Map<string, Bounds>();
     const allShapes: PlacedShape[] = [];
-    const allEdges: PlacedEdge[] = [];
     const allLanes: Array<{ element: any; bounds: Bounds }> = [];
     const allPools: PoolEntry[] = [];
-    const processAnalysis = new Map<string, ScopeAnalysis>();
+    const analysisMap = new Map<string, ScopeAnalysis>();
     let currentY = POOL_START_Y;
 
     for (const participant of participants) {
@@ -226,10 +227,9 @@ export class LayoutEngine {
         currentY,
         allShapesMap,
         allShapes,
-        allEdges,
         allLanes,
         allPools,
-        processAnalysis,
+        analysisMap,
       });
     }
 
@@ -238,13 +238,19 @@ export class LayoutEngine {
       collaboration,
       allShapesMap,
       allShapes,
-      allEdges,
       allLanes,
       allPools,
     });
 
     ensureBoundariesAttached(allShapes);
-    rerouteAllProcesses(definitions, { allShapesMap, allEdges, processAnalysis });
+
+    // Route once per process, now that every alignment pass (including the
+    // message-flow pair shifts above) has finished moving nodes.
+    const allEdges: PlacedEdge[] = [];
+    const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
+    for (const process of processes) {
+      allEdges.push(...routeScope(process, { boundsMap: allShapesMap, analysisMap }));
+    }
 
     this.routeAllMessageFlows(collaboration.messageFlows || [], allShapesMap, {
       plane,
@@ -293,10 +299,9 @@ export class LayoutEngine {
       currentY,
       allShapesMap,
       allShapes,
-      allEdges,
       allLanes,
       allPools,
-      processAnalysis,
+      analysisMap,
     } = params;
     if (!process) {
       const poolBounds = this.layoutBlackBoxPool(participant, currentY, allPools);
@@ -305,9 +310,29 @@ export class LayoutEngine {
     }
 
     const result = layoutScope(process, this.options);
-    processAnalysis.set(process.id, result.analysis);
+    const scopeAnalysisMap = buildAnalysisMap(process.id, result);
+    for (const [id, analysis] of scopeAnalysisMap) {
+      analysisMap.set(id, analysis);
+    }
     const hasLanes = Boolean(process.laneSets && process.laneSets[0]?.lanes?.length > 0);
-    const { minContentY, maxContentY } = computeScopeContentYExtents(result);
+
+    // Provisional routing, used only to size this pool/lanes before the
+    // collaboration-wide alignment passes run (which may still shift a
+    // subset of this process's nodes); discarded afterward. The real, final
+    // routing happens once, after every alignment pass, in
+    // layoutCollaboration.
+    const provisionalBoundsById = new Map<string, Bounds>(
+      result.shapes.map((s) => [s.element.id, s.bounds])
+    );
+    const provisionalEdges = routeScope(process, {
+      boundsMap: provisionalBoundsById,
+      analysisMap: scopeAnalysisMap,
+    });
+
+    const { minContentY, maxContentY } = computeScopeContentYExtents({
+      shapes: result.shapes,
+      edges: provisionalEdges,
+    });
     const contentHeight = maxContentY - minContentY;
     const deltaX = hasLanes ? 0 : PARTICIPANT_CONTENT_X - result.minX;
     const padY = hasLanes
@@ -315,12 +340,13 @@ export class LayoutEngine {
       : Math.max(POOL_CONTENT_PADDING_Y, Math.round((MIN_POOL_HEIGHT - contentHeight) / 2));
     const deltaY = currentY + padY - minContentY;
 
-    translateScopeResult(result, deltaX, deltaY);
+    translateScopeResult(result, { x: deltaX, y: deltaY }, provisionalEdges);
 
     const poolBounds = this.createPoolAndLanes({
       participant,
       process,
       result,
+      edges: provisionalEdges,
       currentY,
       hasLanes,
       contentHeight,
@@ -333,7 +359,6 @@ export class LayoutEngine {
       allShapesMap.set(s.element.id, s.bounds);
     }
     allShapes.push(...result.shapes);
-    allEdges.push(...result.edges);
 
     return currentY + poolBounds.height + INTER_ELEMENT_GAP_Y;
   }
@@ -354,6 +379,7 @@ export class LayoutEngine {
       participant,
       process,
       result,
+      edges,
       currentY,
       hasLanes,
       contentHeight = 80,
@@ -367,7 +393,7 @@ export class LayoutEngine {
         startX: laneStartX,
         startY: currentY,
         totalWidth: laneWidth,
-        edges: result.edges,
+        edges,
       });
 
       const poolBounds: Bounds = {
@@ -456,76 +482,32 @@ export class LayoutEngine {
   }
 }
 
-interface RerouteTopLevelContext {
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
-  analysis?: ScopeAnalysis;
-}
-
 /**
- * Routes every top-level sequence flow of `process` exactly once, over its
- * final (post-alignment) bounds, and writes the result back into `ctx.edges`.
- * `shapeBoundsById` may contain more shapes than this process owns (e.g. an
- * entire collaboration); only the process's own regular nodes and boundary
- * events are looked up.
+ * Every scope's own ScopeAnalysis, keyed by element id: `processId` itself
+ * plus every descendant subprocess id from `result.childAnalysis`. This is
+ * what a `routeScope` call needs to route every scope in a process's tree
+ * with its own feedback/return-path context, not just the top-level one.
  */
-export function rerouteTopLevelProcessFlows(
-  process: any,
-  shapeBoundsById: Map<string, Bounds>,
-  ctx: RerouteTopLevelContext
-): void {
-  const { regularNodes, boundaryEvents } = partitionScopeElements(process);
-  const boundsMap = new Map<string, Bounds>();
-  for (const n of [...regularNodes, ...boundaryEvents]) {
-    const b = shapeBoundsById.get(n.id);
-    if (b) {
-      boundsMap.set(n.id, b);
-    }
-  }
-
-  const rerouted = rerouteProcessEdges(process, boundsMap, ctx.analysis);
-  const reroutedMap = new Map(rerouted.map((e) => [e.element.id, e]));
-  for (const e of ctx.edges) {
-    const newRoute = reroutedMap.get(e.element.id);
-    if (newRoute) {
-      e.waypoints = newRoute.waypoints;
-      e.isFeedback = newRoute.isFeedback;
-    }
-  }
-}
-
-function rerouteAllProcesses(
-  definitions: any,
-  ctx: {
-    allShapesMap: Map<string, Bounds>;
-    allEdges: PlacedEdge[];
-    processAnalysis: Map<string, ScopeAnalysis>;
-  }
-): void {
-  const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
-  for (const process of processes) {
-    rerouteTopLevelProcessFlows(process, ctx.allShapesMap, {
-      edges: ctx.allEdges,
-      analysis: ctx.processAnalysis.get(process.id),
-    });
-  }
+function buildAnalysisMap(
+  processId: string,
+  result: ScopeLayoutResult
+): Map<string, ScopeAnalysis> {
+  return new Map([[processId, result.analysis], ...result.childAnalysis]);
 }
 
 export function translateScopeResult(
-  result: {
-    shapes: Array<{ bounds: Bounds }>;
-    edges: Array<{ waypoints: Point[] }>;
-  },
-  deltaX: number,
-  deltaY: number
+  result: { shapes: Array<{ bounds: Bounds }> },
+  delta: { x: number; y: number },
+  edges: Array<{ waypoints: Point[] }>
 ): void {
   for (const s of result.shapes) {
-    s.bounds.x += deltaX;
-    s.bounds.y += deltaY;
+    s.bounds.x += delta.x;
+    s.bounds.y += delta.y;
   }
-  for (const e of result.edges) {
+  for (const e of edges) {
     for (const wp of e.waypoints) {
-      wp.x += deltaX;
-      wp.y += deltaY;
+      wp.x += delta.x;
+      wp.y += delta.y;
     }
   }
 }

@@ -143,18 +143,6 @@
         <di:waypoint x="1494" y="145" />
         <di:waypoint x="1554" y="145" />
       </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
-        <di:waypoint x="920" y="370" />
-        <di:waypoint x="980" y="370" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
-        <di:waypoint x="1080" y="370" />
-        <di:waypoint x="1140" y="370" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
-        <di:waypoint x="1240" y="370" />
-        <di:waypoint x="1300" y="370" />
-      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="VF_1_di" bpmnElement="VF_1">
         <di:waypoint x="314" y="375" />
         <di:waypoint x="374" y="375" />
@@ -182,6 +170,18 @@
       <bpmndi:BPMNEdge id="VF_6_di" bpmnElement="VF_6">
         <di:waypoint x="1526" y="375" />
         <di:waypoint x="1586" y="375" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
+        <di:waypoint x="920" y="370" />
+        <di:waypoint x="980" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_2_di" bpmnElement="SF_2">
+        <di:waypoint x="1080" y="370" />
+        <di:waypoint x="1140" y="370" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="SF_3_di" bpmnElement="SF_3">
+        <di:waypoint x="1240" y="370" />
+        <di:waypoint x="1300" y="370" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_Inquiry_di" bpmnElement="MF_Inquiry">
         <di:waypoint x="296" y="185" />

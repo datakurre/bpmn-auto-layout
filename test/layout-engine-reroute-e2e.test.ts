@@ -2,8 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { BpmnModdle } from 'bpmn-moddle';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
-import { layoutScope, partitionScopeElements } from '../src/hierarchy/subprocess-layout';
-import { rerouteTopLevelProcessFlows } from '../src/layout-engine';
+import { layoutScope, routeScope, type ScopeAnalysis } from '../src/hierarchy/subprocess-layout';
+import {
+  alignIntraProcessBranches,
+  type AlignableScopeResult,
+} from '../src/hierarchy/path-alignment';
 import type { Bounds, Point } from '../src/types';
 
 function extractBounds(xml: string, id: string): Bounds {
@@ -35,12 +38,21 @@ function extractWaypoints(xml: string, edgeId: string): Point[] {
   return points;
 }
 
-// #100 phase 1 acceptance criterion: re-running the reroute on the final,
-// already-laid-out bounds (with the process's real analysis) must reproduce
-// exactly the waypoints layoutProcess actually emitted for every top-level
-// sequence flow. This is what makes "route once, after placement" true rather
-// than "route once, coincidentally matching a route computed earlier".
-describe('rerouteTopLevelProcessFlows reproduces the real output (#100 phase 1, end-to-end)', () => {
+function buildAnalysisMap(
+  processId: string,
+  result: { analysis: ScopeAnalysis; childAnalysis: Map<string, ScopeAnalysis> }
+): Map<string, ScopeAnalysis> {
+  return new Map([[processId, result.analysis], ...result.childAnalysis]);
+}
+
+// #100/#103 acceptance criterion: re-running the final routing on the
+// output's bounds, with each scope's own analysis, must reproduce exactly the
+// waypoints layoutProcess actually emitted for every sequence flow and
+// association -- top-level, inside a subprocess, and after a subprocess has
+// been moved by alignIntraProcessBranches. This is what makes "route once,
+// after placement" true rather than "route once, coincidentally matching a
+// route computed earlier".
+describe('routeScope reproduces the real output (#100/#103, end-to-end)', () => {
   it('matches the output waypoints for a standalone process with a feedback loop', async () => {
     const builder = new BpmnBuilder('Proc');
     builder
@@ -63,14 +75,13 @@ describe('rerouteTopLevelProcessFlows reproduces the real output (#100 phase 1, 
     // not just plain forward flows.
     expect(result.analysis.feedbackEdges.has('Retry')).toBe(true);
 
-    const shapeBoundsById = new Map(
+    const boundsMap = new Map(
       ['S', 'T1', 'T2', 'E'].map((id) => [id, extractBounds(finalXml, id)])
     );
-    const { sequenceFlows } = partitionScopeElements(process);
-    const edges = sequenceFlows.map((sf: any) => ({ element: sf, waypoints: [] as Point[] }));
+    const analysisMap = buildAnalysisMap(process.id, result);
+    const edges = routeScope(process, { boundsMap, analysisMap });
 
-    rerouteTopLevelProcessFlows(process, shapeBoundsById, { edges, analysis: result.analysis });
-
+    expect(edges.length).toBeGreaterThan(0);
     for (const edge of edges) {
       expect(edge.waypoints).toEqual(extractWaypoints(finalXml, edge.element.id));
     }
@@ -117,21 +128,130 @@ describe('rerouteTopLevelProcessFlows reproduces the real output (#100 phase 1, 
       (el: any) => el.$type === 'bpmn:Process'
     );
 
-    const shapeBoundsById = new Map<string, Bounds>();
+    const boundsMap = new Map<string, Bounds>();
     for (const id of ['A_s', 'A_1', 'A_send', 'A_2', 'A_e', 'B_s', 'B_receive', 'B_e']) {
-      shapeBoundsById.set(id, extractBounds(finalXml, id));
+      boundsMap.set(id, extractBounds(finalXml, id));
     }
 
+    let matchedAny = false;
     for (const process of processes) {
       const result = layoutScope(process);
-      const { sequenceFlows } = partitionScopeElements(process);
-      const edges = sequenceFlows.map((sf: any) => ({ element: sf, waypoints: [] as Point[] }));
-
-      rerouteTopLevelProcessFlows(process, shapeBoundsById, { edges, analysis: result.analysis });
+      const analysisMap = buildAnalysisMap(process.id, result);
+      const edges = routeScope(process, { boundsMap, analysisMap });
 
       for (const edge of edges) {
+        matchedAny = true;
         expect(edge.waypoints).toEqual(extractWaypoints(finalXml, edge.element.id));
       }
     }
+    expect(matchedAny).toBe(true);
+  });
+
+  it('matches the output for flows inside a subprocess that alignIntraProcessBranches shifts', () => {
+    // Same fixture as the "shifts a shifted subprocess's descendant shapes
+    // along with it" test in path-alignment.test.ts: a candidate gateway
+    // (GW1) whose non-join branch is a SubProcess (Fail) containing its own
+    // task and a self-loop sequence flow. alignIntraProcessBranches shifts
+    // Fail (and its descendant shapes) right by deltaX; routeScope must then
+    // route Fail's internal flow, and the flow from GW1 into Fail, using
+    // Fail's new position -- not a stale, rigidly-translated route.
+    const gw = { id: 'GW1', $type: 'bpmn:ExclusiveGateway' };
+    const join = { id: 'Join1', $type: 'bpmn:ExclusiveGateway' };
+    const obs = { id: 'Obs', $type: 'bpmn:Task' };
+    const col1 = { id: 'Col1', $type: 'bpmn:Task' };
+    const col2 = { id: 'Col2', $type: 'bpmn:Task' };
+    const child = { id: 'Sub_Child', $type: 'bpmn:Task' };
+    const childFlow = {
+      id: 'Sub_Flow',
+      $type: 'bpmn:SequenceFlow',
+      sourceRef: 'Sub_Child',
+      targetRef: 'Sub_Child',
+    };
+    const sub = { id: 'Fail', $type: 'bpmn:SubProcess', flowElements: [child, childFlow] };
+    const failEnd = { id: 'FailEnd', $type: 'bpmn:EndEvent' };
+
+    const flowJoin = {
+      $type: 'bpmn:SequenceFlow',
+      id: 'F_Join',
+      sourceRef: 'GW1',
+      targetRef: 'Join1',
+    };
+    const flowJoinObs = {
+      $type: 'bpmn:SequenceFlow',
+      id: 'F_JoinObs',
+      sourceRef: 'Obs',
+      targetRef: 'Join1',
+    };
+    const flowFail = {
+      $type: 'bpmn:SequenceFlow',
+      id: 'F_Fail',
+      sourceRef: 'GW1',
+      targetRef: 'Fail',
+    };
+    const flowDownstream = {
+      $type: 'bpmn:SequenceFlow',
+      id: 'F_Downstream',
+      sourceRef: 'Fail',
+      targetRef: 'FailEnd',
+    };
+
+    const process = {
+      id: 'Proc1',
+      $type: 'bpmn:Process',
+      flowElements: [
+        gw,
+        join,
+        obs,
+        col1,
+        col2,
+        sub,
+        failEnd,
+        flowJoin,
+        flowJoinObs,
+        flowFail,
+        flowDownstream,
+      ],
+    };
+
+    const result: AlignableScopeResult = {
+      width: 800,
+      minX: 100,
+      shapes: [
+        { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
+        { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
+        { element: obs, bounds: { x: 100, y: 160, width: 100, height: 80 } },
+        { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
+        { element: col2, bounds: { x: 350, y: 160, width: 100, height: 80 } },
+        { element: sub, bounds: { x: 180, y: 100, width: 100, height: 50 }, isExpanded: true },
+        { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
+        { element: child, bounds: { x: 200, y: 110, width: 40, height: 30 } },
+      ],
+    };
+
+    const shifted = alignIntraProcessBranches({ process, result });
+    expect(shifted).toBe(true);
+
+    const boundsMap = new Map(result.shapes.map((s) => [s.element.id, s.bounds]));
+    const edges = routeScope(process, { boundsMap, analysisMap: new Map() });
+
+    const edgeMap = new Map(edges.map((e) => [e.element.id, e]));
+    const subChildBounds = boundsMap.get('Sub_Child')!;
+
+    // Sub_Flow is a self-loop on Sub_Child; whatever route the router picks
+    // for it must sit at Sub_Child's actual (post-shift) position, not the
+    // pre-shift one.
+    const subFlowWaypoints = edgeMap.get('Sub_Flow')!.waypoints;
+    expect(subFlowWaypoints.length).toBeGreaterThan(0);
+    for (const wp of subFlowWaypoints) {
+      expect(wp.x).toBeGreaterThanOrEqual(subChildBounds.x);
+      expect(wp.x).toBeLessThanOrEqual(subChildBounds.x + subChildBounds.width);
+    }
+
+    // F_Fail (GW1 -> Fail) must land on Fail's shifted bounds too.
+    const failBounds = boundsMap.get('Fail')!;
+    const flowFailWaypoints = edgeMap.get('F_Fail')!.waypoints;
+    const lastPoint = flowFailWaypoints[flowFailWaypoints.length - 1];
+    expect(lastPoint.x).toBeGreaterThanOrEqual(failBounds.x - 1);
+    expect(lastPoint.x).toBeLessThanOrEqual(failBounds.x + failBounds.width + 1);
   });
 });

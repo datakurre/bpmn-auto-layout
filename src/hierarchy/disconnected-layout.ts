@@ -1,5 +1,5 @@
 import { SUBPROCESS_MIN_HEIGHT, SUBPROCESS_MIN_WIDTH, isSubProcessType } from '../di-constants';
-import type { Bounds, Point } from '../types';
+import type { Bounds } from '../types';
 import { getArtifactDimensions } from './artifact-layout';
 import { getRefId, offsetAndCollectChildren, type ScopeLayoutResult } from './subprocess-layout';
 
@@ -7,10 +7,11 @@ export function isEventSubProcess(el: any): boolean {
   return el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true;
 }
 
-export function computeCurrentDiagramBounds(
-  shapes: Array<{ bounds: Bounds }>,
-  edges: Array<{ waypoints: Point[] }>
-): { minX: number; maxX: number; maxY: number } {
+export function computeCurrentDiagramBounds(shapes: Array<{ bounds: Bounds }>): {
+  minX: number;
+  maxX: number;
+  maxY: number;
+} {
   if (shapes.length === 0) {
     return { minX: 100, maxX: 500, maxY: 40 };
   }
@@ -23,13 +24,6 @@ export function computeCurrentDiagramBounds(
     maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
     maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
   }
-  for (const e of edges) {
-    for (const wp of e.waypoints) {
-      minX = Math.min(minX, wp.x);
-      maxX = Math.max(maxX, wp.x);
-      maxY = Math.max(maxY, wp.y);
-    }
-  }
   return { minX, maxX, maxY };
 }
 
@@ -37,7 +31,6 @@ export interface DisconnectedLayoutContext {
   childScopeResults: Map<string, ScopeLayoutResult>;
   boundsMap: Map<string, Bounds>;
   shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
   associations?: any[];
 }
 
@@ -109,10 +102,7 @@ export function layoutDisconnectedElements(
 
     if (childResult) {
       ctx.shapes.push({ element: item, bounds, isExpanded: true });
-      offsetAndCollectChildren(childResult, bounds, {
-        shapes: ctx.shapes,
-        edges: ctx.edges,
-      });
+      offsetAndCollectChildren(childResult, bounds, ctx.shapes);
     } else {
       ctx.shapes.push({ element: item, bounds });
     }

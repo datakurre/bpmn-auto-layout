@@ -4,12 +4,9 @@ import {
   alignIntraProcessBranches,
   alignVerticallyStackedPaths,
   unifyCollaborationPoolWidths,
+  type AlignableScopeResult,
 } from '../src/hierarchy/path-alignment';
-import {
-  layoutScope,
-  type ScopeAnalysis,
-  type ScopeLayoutResult,
-} from '../src/hierarchy/subprocess-layout';
+import { layoutScope, routeScope } from '../src/hierarchy/subprocess-layout';
 import { boxesOverlap } from '../src/layout-metrics';
 import { BpmnBuilder } from '../src/bpmn-builder';
 
@@ -63,10 +60,6 @@ function buildOrderFulfillmentProcess(): any {
     .addSequenceFlow('F_ERP', 'Task_Update_ERP', 'Task_Notify_Customer')
     .addSequenceFlow('F_Done', 'Task_Notify_Customer', 'End_Order_Fulfilled');
   return builder.getProcess();
-}
-
-function emptyAnalysis(): ScopeAnalysis {
-  return { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() };
 }
 
 describe('path-alignment unit tests', () => {
@@ -372,10 +365,6 @@ describe('path-alignment unit tests', () => {
         ['Sub2', { x: 130, y: 330, width: 140, height: 100 }],
         ['T_Inner', { x: 150, y: 350, width: 100, height: 80 }],
       ]);
-      const edgeInner = {
-        element: { id: 'F_Inner' },
-        waypoints: [{ x: 200, y: 390 }],
-      };
 
       const ctx: any = {
         definitions: { rootElements: [proc1, proc2] },
@@ -384,15 +373,14 @@ describe('path-alignment unit tests', () => {
         },
         allShapesMap: shapesMap,
         allShapes: [],
-        allEdges: [edgeInner],
       };
 
       alignCollaborationPaths(ctx);
-      // A1 center is 450, Sub1 center is 200 -> delta = 250
+      // A1 center is 450, Sub1 center is 200 -> delta = 250. No edges exist
+      // yet at this point: routing happens once, later, over final bounds.
       expect(shapesMap.get('Sub1')?.x).toBe(350);
       expect(shapesMap.get('Sub2')?.x).toBe(380);
       expect(shapesMap.get('T_Inner')?.x).toBe(400);
-      expect(edgeInner.waypoints[0].x).toBe(450);
     });
 
     it('shifts sender forward when tgtCenter > srcCenter', () => {
@@ -673,17 +661,13 @@ describe('path-alignment unit tests', () => {
           { $type: 'bpmn:SequenceFlow', id: 'F1', sourceRef: 'T1', targetRef: 'T2' },
         ],
       };
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 300,
-        height: 100,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: { id: 'T1' }, bounds: { x: 100, y: 100, width: 100, height: 80 } },
           { element: { id: 'T2' }, bounds: { x: 250, y: 100, width: 100, height: 80 } },
         ],
-        edges: [],
       };
 
       const res = alignIntraProcessBranches({ process, result });
@@ -705,18 +689,14 @@ describe('path-alignment unit tests', () => {
           { $type: 'bpmn:SequenceFlow', id: 'F2', sourceRef: 'GW1', targetRef: 'T1' },
         ],
       };
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 400,
-        height: 200,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 300, y: 200, width: 50, height: 50 } },
           { element: t1, bounds: { x: 200, y: 100, width: 100, height: 80 } },
         ],
-        edges: [],
       };
 
       // Join1 only has 1 incoming flow (incCount < 2), so joinFlow is not recognized
@@ -745,19 +725,15 @@ describe('path-alignment unit tests', () => {
       // Obs is at x: 100..200, y: 160..240 directly under GW1 (x: 100..150, y: 100..150)
       // Join1 is at x: 250
       // No parallel node exists with x >= 200 and < 250, so targetX is undefined
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 400,
-        height: 300,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 250, y: 200, width: 50, height: 50 } },
           { element: obs, bounds: { x: 100, y: 160, width: 100, height: 80 } },
           { element: fail, bounds: { x: 180, y: 100, width: 100, height: 80 } },
         ],
-        edges: [],
       };
 
       const res = alignIntraProcessBranches({ process, result });
@@ -784,12 +760,9 @@ describe('path-alignment unit tests', () => {
       };
       // targetX will be 240, but Join1 is at 250.
       // gBounds.x (100) + deltaX (140) + width (50) + 60 = 350 > 250 -> exceeds slack!
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 400,
-        height: 300,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 250, y: 200, width: 50, height: 50 } },
@@ -797,7 +770,6 @@ describe('path-alignment unit tests', () => {
           { element: nextCol, bounds: { x: 240, y: 160, width: 50, height: 50 } },
           { element: fail, bounds: { x: 180, y: 100, width: 100, height: 80 } },
         ],
-        edges: [],
       };
 
       const res = alignIntraProcessBranches({ process, result });
@@ -914,12 +886,9 @@ describe('path-alignment unit tests', () => {
         ],
       };
 
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 800,
-        height: 400,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
@@ -929,22 +898,6 @@ describe('path-alignment unit tests', () => {
           { element: fail, bounds: { x: 180, y: 100, width: 100, height: 50 } },
           { element: beFail, bounds: { x: 212, y: 132, width: 36, height: 36 } },
           { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
-        ],
-        edges: [
-          {
-            element: flowJoin,
-            waypoints: [
-              { x: 125, y: 150 },
-              { x: 600, y: 225 },
-            ],
-          },
-          {
-            element: flowFail,
-            waypoints: [
-              { x: 150, y: 125 },
-              { x: 180, y: 125 },
-            ],
-          },
         ],
       };
 
@@ -960,7 +913,7 @@ describe('path-alignment unit tests', () => {
       expect(boxesOverlap(shapeMap.get('BE_Fail'), shapeMap.get('Fail'))).toBe(true);
     });
 
-    it("shifts a shifted subprocess's descendant shapes and internal edges along with it", () => {
+    it("shifts a shifted subprocess's descendant shapes along with it", () => {
       const gw = { id: 'GW1', $type: 'bpmn:ExclusiveGateway' };
       const join = { id: 'Join1', $type: 'bpmn:ExclusiveGateway' };
       const obs = { id: 'Obs', $type: 'bpmn:Task' };
@@ -1017,12 +970,9 @@ describe('path-alignment unit tests', () => {
         ],
       };
 
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 800,
-        height: 400,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
@@ -1033,29 +983,6 @@ describe('path-alignment unit tests', () => {
           { element: failEnd, bounds: { x: 320, y: 100, width: 36, height: 36 } },
           { element: child, bounds: { x: 200, y: 110, width: 40, height: 30 } },
         ],
-        edges: [
-          {
-            element: flowJoin,
-            waypoints: [
-              { x: 125, y: 150 },
-              { x: 600, y: 225 },
-            ],
-          },
-          {
-            element: flowFail,
-            waypoints: [
-              { x: 150, y: 125 },
-              { x: 180, y: 125 },
-            ],
-          },
-          {
-            element: childFlow,
-            waypoints: [
-              { x: 220, y: 125 },
-              { x: 230, y: 125 },
-            ],
-          },
-        ],
       };
 
       const res = alignIntraProcessBranches({ process, result });
@@ -1065,18 +992,13 @@ describe('path-alignment unit tests', () => {
       for (const s of result.shapes) {
         shapeMap.set(s.element.id, s.bounds);
       }
-      const edgeMap = new Map<string, any>();
-      for (const e of result.edges) {
-        edgeMap.set(e.element.id, e);
-      }
 
+      // No edges exist yet at this point (routing happens once, later, over
+      // final bounds -- see test/layout-engine-reroute-e2e.test.ts for the
+      // corresponding routeScope coverage of this exact fixture).
       const deltaX = shapeMap.get('GW1').x - 100;
       expect(deltaX).toBeGreaterThan(0);
       expect(shapeMap.get('Sub_Child')?.x).toBe(200 + deltaX);
-
-      const childEdge = edgeMap.get('Sub_Flow');
-      expect(childEdge.waypoints[0].x).toBe(220 + deltaX);
-      expect(childEdge.waypoints[1].x).toBe(230 + deltaX);
     });
 
     it('returns false when candidate gateway shift causes overlap with an existing node', () => {
@@ -1098,12 +1020,9 @@ describe('path-alignment unit tests', () => {
         flowElements: [gw, join, obs, col1, obstacleAtTarget, flowJoin, flowOther],
       };
 
-      const result: ScopeLayoutResult = {
-        analysis: emptyAnalysis(),
+      const result: AlignableScopeResult = {
         width: 1000,
-        height: 600,
         minX: 100,
-        minY: 100,
         shapes: [
           { element: gw, bounds: { x: 100, y: 100, width: 50, height: 50 } },
           { element: join, bounds: { x: 600, y: 200, width: 50, height: 50 } },
@@ -1111,30 +1030,31 @@ describe('path-alignment unit tests', () => {
           { element: col1, bounds: { x: 300, y: 160, width: 100, height: 80 } },
           { element: obstacleAtTarget, bounds: { x: 300, y: 100, width: 100, height: 80 } },
         ],
-        edges: [
-          {
-            element: flowJoin,
-            waypoints: [
-              { x: 125, y: 150 },
-              { x: 600, y: 225 },
-            ],
-          },
-        ],
       };
 
       const res = alignIntraProcessBranches({ process, result });
       expect(res).toBe(false);
     });
 
-    it('keeps a loop edge marked as feedback after shifting the candidate gateway (#94 defect A)', () => {
+    it('keeps a loop edge marked as feedback after shifting the candidate gateway, once routed (#94 defect A)', () => {
       const process = buildOrderFulfillmentProcess();
       const result = layoutScope(process);
 
       const res = alignIntraProcessBranches({ process, result });
       expect(res).toBe(true);
 
+      // No edges exist yet after alignment; routing happens once, later, over
+      // the final (post-shift) bounds, using the analysis layoutScope
+      // captured before any shift.
+      const boundsMap = new Map<string, any>();
+      for (const s of result.shapes) {
+        boundsMap.set(s.element.id, s.bounds);
+      }
+      const analysisMap = new Map([[process.id, result.analysis], ...result.childAnalysis]);
+      const edges = routeScope(process, { boundsMap, analysisMap });
+
       const edgeMap = new Map<string, any>();
-      for (const e of result.edges) {
+      for (const e of edges) {
         edgeMap.set(e.element.id, e);
       }
       expect(edgeMap.get('F_Stock_Retry')?.isFeedback).toBe(true);
@@ -1147,7 +1067,6 @@ describe('path-alignment unit tests', () => {
         definitions: { rootElements: [] },
         collaboration: { participants: [] },
         allShapes: [],
-        allEdges: [],
         allShapesMap: new Map(),
       };
       alignVerticallyStackedPaths(ctx);
@@ -1159,7 +1078,6 @@ describe('path-alignment unit tests', () => {
         definitions: {},
         collaboration: undefined,
         allShapes: [],
-        allEdges: [],
         allShapesMap: new Map(),
       });
 
@@ -1170,7 +1088,6 @@ describe('path-alignment unit tests', () => {
           messageFlows: [],
         },
         allShapes: [],
-        allEdges: [],
         allShapesMap: new Map(),
       };
       alignVerticallyStackedPaths(ctx);
@@ -1191,7 +1108,6 @@ describe('path-alignment unit tests', () => {
           messageFlows: [],
         },
         allShapes: [shapeT1],
-        allEdges: [],
         allShapesMap: new Map([['T1', shapeT1.bounds]]),
       };
       alignVerticallyStackedPaths(ctx);

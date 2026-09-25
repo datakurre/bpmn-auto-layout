@@ -69,6 +69,10 @@
         <di:waypoint x="296" y="140" />
         <di:waypoint x="356" y="140" />
       </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Assoc_1_di" bpmnElement="Assoc_1">
+        <di:waypoint x="246" y="198" />
+        <di:waypoint x="246" y="298" />
+      </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SubFlow_1_di" bpmnElement="SubFlow_1">
         <di:waypoint x="166" y="373" />
         <di:waypoint x="226" y="373" />
@@ -80,10 +84,6 @@
       <bpmndi:BPMNEdge id="SubFlow_3_di" bpmnElement="SubFlow_3">
         <di:waypoint x="486" y="373" />
         <di:waypoint x="546" y="373" />
-      </bpmndi:BPMNEdge>
-      <bpmndi:BPMNEdge id="Assoc_1_di" bpmnElement="Assoc_1">
-        <di:waypoint x="246" y="198" />
-        <di:waypoint x="246" y="298" />
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>
   </bpmndi:BPMNDiagram>

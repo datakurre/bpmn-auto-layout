@@ -50,6 +50,14 @@ function emptyScopeAnalysis(): ScopeAnalysis {
   return { feedbackEdges: new Set(), returnNodes: new Set(), returnGateways: new Map() };
 }
 
+function cloneAnalysis(analysis: ScopeAnalysis): ScopeAnalysis {
+  return {
+    feedbackEdges: new Set(analysis.feedbackEdges),
+    returnNodes: new Set(analysis.returnNodes),
+    returnGateways: new Map(analysis.returnGateways),
+  };
+}
+
 export interface ScopeLayoutResult {
   width: number;
   height: number;
@@ -61,13 +69,14 @@ export interface ScopeLayoutResult {
     isExpanded?: boolean;
     labelBounds?: Bounds;
   }>;
-  edges: Array<{
-    element: any;
-    waypoints: Point[];
-    isFeedback?: boolean;
-    labelBounds?: Bounds;
-  }>;
   analysis: ScopeAnalysis;
+  /**
+   * Every descendant subprocess's own ScopeAnalysis, keyed by its element id,
+   * flattened across all nesting depths. Lets a final routing pass look up
+   * any scope's analysis (feedback edges, return-path info) directly, without
+   * re-walking the scope tree layoutScope already built.
+   */
+  childAnalysis: Map<string, ScopeAnalysis>;
 }
 
 interface LayoutContext {
@@ -95,17 +104,10 @@ function cloneScopeResult(result: ScopeLayoutResult): ScopeLayoutResult {
       isExpanded: s.isExpanded,
       labelBounds: s.labelBounds,
     })),
-    edges: result.edges.map((e) => ({
-      element: e.element,
-      waypoints: e.waypoints.map((wp) => ({ ...wp })),
-      isFeedback: e.isFeedback,
-      labelBounds: e.labelBounds,
-    })),
-    analysis: {
-      feedbackEdges: new Set(result.analysis.feedbackEdges),
-      returnNodes: new Set(result.analysis.returnNodes),
-      returnGateways: new Map(result.analysis.returnGateways),
-    },
+    analysis: cloneAnalysis(result.analysis),
+    childAnalysis: new Map(
+      Array.from(result.childAnalysis.entries()).map(([id, a]) => [id, cloneAnalysis(a)])
+    ),
   };
 }
 
@@ -161,14 +163,13 @@ export function layoutScope(
       minX: 0,
       minY: 0,
       shapes: [],
-      edges: [],
       analysis: emptyScopeAnalysis(),
+      childAnalysis: new Map(),
     };
   }
 
   const boundsMap = new Map<string, Bounds>();
   const shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }> = [];
-  const edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> = [];
 
   let analysis = emptyScopeAnalysis();
   if (regularNodes.length > 0 || boundaryEvents.length > 0) {
@@ -182,13 +183,12 @@ export function layoutScope(
       options,
       boundsMap,
       shapes,
-      edges,
     });
   }
 
   layoutRemainingArtifacts(
     { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes },
-    { childScopeResults, boundsMap, shapes, edges }
+    { childScopeResults, boundsMap, shapes }
   );
 
   const bounding = computeScopeBoundingBox(shapes);
@@ -199,9 +199,22 @@ export function layoutScope(
     minX: bounding.minX,
     minY: bounding.minY,
     shapes,
-    edges,
     analysis,
+    childAnalysis: collectChildAnalysis(childScopeResults),
   };
+}
+
+function collectChildAnalysis(
+  childScopeResults: Map<string, ScopeLayoutResult>
+): Map<string, ScopeAnalysis> {
+  const childAnalysis = new Map<string, ScopeAnalysis>();
+  for (const [subId, childResult] of childScopeResults.entries()) {
+    childAnalysis.set(subId, childResult.analysis);
+    for (const [descId, descAnalysis] of childResult.childAnalysis.entries()) {
+      childAnalysis.set(descId, descAnalysis);
+    }
+  }
+  return childAnalysis;
 }
 
 interface ScopeArtifactPartition {
@@ -216,7 +229,6 @@ interface ScopeArtifactContext {
   childScopeResults: Map<string, ScopeLayoutResult>;
   boundsMap: Map<string, Bounds>;
   shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
 function layoutRemainingArtifacts(
@@ -225,7 +237,7 @@ function layoutRemainingArtifacts(
 ): void {
   const { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes } =
     partition;
-  const { childScopeResults, boundsMap, shapes, edges } = ctx;
+  const { childScopeResults, boundsMap, shapes } = ctx;
 
   const regularNodeIds = new Set<string>(regularNodes.map((n: any) => n.id));
   const { connected, unconnected } = partitionArtifacts(
@@ -235,19 +247,16 @@ function layoutRemainingArtifacts(
   );
 
   layoutConnectedArtifacts(connected, { boundsMap, shapes });
-  routeAssociations(allAssociations, boundsMap, edges);
 
   const disconnectedItems = [...eventSubProcesses, ...compensationHandlers, ...unconnected];
   if (disconnectedItems.length > 0) {
-    const diagramBounds = computeCurrentDiagramBounds(shapes, edges);
+    const diagramBounds = computeCurrentDiagramBounds(shapes);
     layoutDisconnectedElements(disconnectedItems, diagramBounds, {
       childScopeResults,
       boundsMap,
       shapes,
-      edges,
       associations: allAssociations,
     });
-    routeAssociations(allAssociations, boundsMap, edges);
   }
 }
 
@@ -775,16 +784,13 @@ function assignCoordinatesWithCustomDimensions(
 export function offsetAndCollectChildren(
   child: ScopeLayoutResult,
   parentBounds: Bounds,
-  collector: {
-    shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-    edges: Array<{ element: any; waypoints: Point[] }>;
-  }
+  shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>
 ): void {
   const offsetX = parentBounds.x + SUBPROCESS_PADDING - child.minX;
   const offsetY = parentBounds.y + SUBPROCESS_HEADER_HEIGHT - child.minY;
 
   for (const s of child.shapes) {
-    collector.shapes.push({
+    shapes.push({
       element: s.element,
       bounds: {
         x: s.bounds.x + offsetX,
@@ -793,16 +799,6 @@ export function offsetAndCollectChildren(
         height: s.bounds.height,
       },
       isExpanded: s.isExpanded,
-    });
-  }
-
-  for (const e of child.edges) {
-    collector.edges.push({
-      element: e.element,
-      waypoints: e.waypoints.map((pt) => ({
-        x: pt.x + offsetX,
-        y: pt.y + offsetY,
-      })),
     });
   }
 }
@@ -860,7 +856,6 @@ interface RegularFlowContext {
   options?: AutoLayoutOptions;
   boundsMap: Map<string, Bounds>;
   shapes: Array<{ element: any; bounds: Bounds; isExpanded?: boolean }>;
-  edges: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
 function alignTerminalBoundaryRanks(
@@ -949,7 +944,6 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): ScopeAnalysis {
     options,
     boundsMap,
     shapes,
-    edges,
   } = ctx;
 
   const graph = buildScopeGraph(regularNodes, boundaryEvents, sequenceFlows);
@@ -986,28 +980,12 @@ function layoutRegularFlowNodes(ctx: RegularFlowContext): ScopeAnalysis {
 
     if (isSub && childScopeResults.has(node.id)) {
       const child = childScopeResults.get(node.id)!;
-      offsetAndCollectChildren(child, bounds, { shapes, edges });
+      offsetAndCollectChildren(child, bounds, shapes);
     }
   }
 
   for (const bEvent of boundaryEvents) {
     shapes.push({ element: bEvent, bounds: boundsMap.get(bEvent.id)! });
-  }
-
-  const routedEdges = routeScopeEdges(sequenceFlows, {
-    regularNodes,
-    boundaryEvents,
-    boundsMap,
-    feedbackEdges,
-    returnNodes: returnPathAnalysis.returnNodes,
-    returnGateways: returnPathAnalysis.returnGateways,
-  });
-  for (const e of routedEdges) {
-    edges.push({
-      element: e.element,
-      waypoints: e.waypoints,
-      isFeedback: feedbackEdges.has(e.element.id),
-    });
   }
 
   return {
@@ -1152,4 +1130,67 @@ export function rerouteProcessEdges(
     ...e,
     isFeedback: analysis?.feedbackEdges?.has(e.element.id),
   }));
+}
+
+export interface ScopeRoutingContext {
+  /**
+   * Final absolute bounds for every node routeScope might need, across the
+   * whole process/collaboration -- not just this scope's own nodes. Each
+   * recursive call narrows this down to its own scope's nodes before routing,
+   * so a sibling subprocess's or another participant's shapes are never
+   * treated as obstacles for this scope's own edges.
+   */
+  boundsMap: Map<string, Bounds>;
+  /** Every scope's own ScopeAnalysis (top-level process ids and subprocess ids), keyed by element id. */
+  analysisMap: Map<string, ScopeAnalysis>;
+}
+
+/**
+ * Routes `scopeElement`'s own sequence flows and associations exactly once,
+ * over final (post-alignment) absolute bounds, then recurses into every
+ * subprocess nested directly inside it -- so every scope in the tree, at any
+ * nesting depth, is routed exactly once, after every placement and alignment
+ * pass has finished moving nodes. This replaces the early routing layoutScope
+ * used to do for itself and every descendant subprocess: layoutScope now only
+ * places nodes and records each scope's ScopeAnalysis.
+ */
+export function routeScope(
+  scopeElement: any,
+  ctx: ScopeRoutingContext
+): Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }> {
+  const analysis = ctx.analysisMap.get(scopeElement.id);
+  const {
+    regularNodes,
+    boundaryEvents,
+    allArtifacts,
+    allAssociations,
+    eventSubProcesses,
+    compensationHandlers,
+  } = partitionScopeElements(scopeElement);
+
+  const localBoundsMap = new Map<string, Bounds>();
+  for (const n of [
+    ...regularNodes,
+    ...boundaryEvents,
+    ...allArtifacts,
+    ...eventSubProcesses,
+    ...compensationHandlers,
+  ]) {
+    const b = ctx.boundsMap.get(n.id);
+    if (b) {
+      localBoundsMap.set(n.id, b);
+    }
+  }
+
+  const edges = rerouteProcessEdges(scopeElement, localBoundsMap, analysis);
+  routeAssociations(allAssociations, localBoundsMap, edges);
+
+  const subProcesses = (scopeElement.flowElements || []).filter((el: any) =>
+    isSubProcessType(el.$type)
+  );
+  for (const sub of subProcesses) {
+    edges.push(...routeScope(sub, ctx));
+  }
+
+  return edges;
 }

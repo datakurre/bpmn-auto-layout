@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess } from '../src/index';
 import { scoreDiagram } from '../src/layout-metrics';
-import { routeAssociationEdge, layoutScope } from '../src/hierarchy/subprocess-layout';
+import { routeAssociationEdge, layoutScope, routeScope } from '../src/hierarchy/subprocess-layout';
 import { getArtifactDimensions } from '../src/hierarchy/artifact-layout';
 import { expectSnapshotMatch } from './helpers/snapshot-helper';
 
@@ -275,10 +275,13 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(result.shapes.some((s) => s.element.id === 'Doc_In2')).toBe(true);
     expect(result.shapes.some((s) => s.element.id === 'Store_Out')).toBe(true);
     expect(result.shapes.some((s) => s.element.id === 'Store_Out2')).toBe(true);
-    expect(result.edges.some((e) => e.element.id === 'DIA_1')).toBe(true);
-    expect(result.edges.some((e) => e.element.id === 'Assoc_Doc_In2_Task_1')).toBe(true);
-    expect(result.edges.some((e) => e.element.id === 'DOA_1')).toBe(true);
-    expect(result.edges.some((e) => e.element.id === 'Assoc_Task_1_Store_Out2')).toBe(true);
+
+    const boundsMap = new Map(result.shapes.map((s) => [s.element.id, s.bounds]));
+    const edges = routeScope(scopeElement, { boundsMap, analysisMap: new Map() });
+    expect(edges.some((e) => e.element.id === 'DIA_1')).toBe(true);
+    expect(edges.some((e) => e.element.id === 'Assoc_Doc_In2_Task_1')).toBe(true);
+    expect(edges.some((e) => e.element.id === 'DOA_1')).toBe(true);
+    expect(edges.some((e) => e.element.id === 'Assoc_Task_1_Store_Out2')).toBe(true);
   });
 
   it('handles placement of multiple artifacts (below and side) on the same host', async () => {
@@ -308,7 +311,7 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
     expect(emptyResult.shapes.length).toBe(0);
 
     // Scope with only disconnected data object (no regular nodes)
-    const disconnectedOnly = layoutScope({
+    const orphanScope = {
       flowElements: [
         { $type: 'bpmn:DataObjectReference', id: 'Doc_Solo' },
         {
@@ -318,9 +321,15 @@ describe('Iteration 10: Event Sub-Processes & Artifacts', () => {
           targetRef: 'Unknown_2',
         },
       ],
-    });
+    };
+    const disconnectedOnly = layoutScope(orphanScope);
     expect(disconnectedOnly.shapes.length).toBe(1);
-    expect(disconnectedOnly.edges.length).toBe(0);
+
+    // Assoc_Orphan's refs resolve to nothing placed, so routing it finds no
+    // bounds for either end and skips it rather than throwing.
+    const boundsMap = new Map(disconnectedOnly.shapes.map((s) => [s.element.id, s.bounds]));
+    const edges = routeScope(orphanScope, { boundsMap, analysisMap: new Map() });
+    expect(edges.length).toBe(0);
 
     // Many disconnected items forcing row wrapping
     const items: any[] = [];
