@@ -310,6 +310,16 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
 
+    // Prepare Revised Quotation sits directly below Review Quotation, so the
+    // message between them is one straight vertical line -- it must not step
+    // sideways just to leave from the center of the source's edge.
+    const quoteFlow = /bpmnElement="Msg_Quote"[^>]*>([\s\S]*?)<\/bpmndi:BPMNEdge>/.exec(
+      resultXml
+    )![1];
+    const quoteXs = [...quoteFlow.matchAll(/<di:waypoint x="([\d.-]+)"/g)].map((m) => m[1]);
+    expect(quoteXs).toHaveLength(2);
+    expect(quoteXs[0]).toBe(quoteXs[1]);
+
     expectSnapshotMatch(resultXml, '09-b2b-procurement');
   });
 

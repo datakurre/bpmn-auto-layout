@@ -268,9 +268,7 @@
         <di:waypoint x="326" y="415" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Quote_di" bpmnElement="Msg_Quote">
-        <di:waypoint x="596" y="415" />
-        <di:waypoint x="596" y="360" />
-        <di:waypoint x="579" y="360" />
+        <di:waypoint x="579" y="415" />
         <di:waypoint x="579" y="185" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Msg_Confirm_di" bpmnElement="Msg_Confirm">
