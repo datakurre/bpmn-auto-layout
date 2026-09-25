@@ -1,4 +1,5 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
 import { BpmnBuilder } from '../src/bpmn-builder';
 import { layoutProcess, layoutProcessWithDiagnostics } from '../src/index';
 import { scoreDiagram, boxesOverlap } from '../src/layout-metrics';
@@ -346,11 +347,9 @@ describe('Iteration 5: Boundary Events', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
   });
 
-  it('ensures Event_Retract in activity-based-publication-workflow.bpmn remains strictly attached', async () => {
-    const path = await import('node:path');
-    const fs = await import('node:fs');
-    const xml = fs.readFileSync(
-      path.resolve(__dirname, '../activity-based-publication-workflow.bpmn'),
+  it('keeps the publication retract boundary event attached to its review task', async () => {
+    const xml = readFileSync(
+      new URL('./fixtures/publication-boundary-message.bpmn', import.meta.url),
       'utf-8'
     );
     const { xml: resultXml, warnings } = await layoutProcessWithDiagnostics(xml);
