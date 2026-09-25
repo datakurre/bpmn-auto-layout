@@ -73,6 +73,20 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
 
+    // #99: the retry loop must drop into the first clear column right of
+    // Task_Backorder, not run along its row past the sync gateway and the
+    // whole fulfillment subprocess before turning down.
+    const backorder =
+      /bpmnElement="Task_Backorder"[^>]*>\s*<dc:Bounds x="([\d.-]+)" y="[\d.-]+" width="([\d.-]+)"/.exec(
+        resultXml
+      )!;
+    const retryWaypoints = [
+      .../bpmnElement="F_Stock_Retry"[^>]*>([\s\S]*?)<\/bpmndi:BPMNEdge>/
+        .exec(resultXml)![1]
+        .matchAll(/<di:waypoint x="([\d.-]+)"/g),
+    ].map((m) => Number(m[1]));
+    expect(Math.max(...retryWaypoints)).toBe(Number(backorder[1]) + Number(backorder[2]) + 20);
+
     expectSnapshotMatch(resultXml, '09-order-fulfillment');
   });
 

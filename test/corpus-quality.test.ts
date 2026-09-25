@@ -4,42 +4,31 @@ import { join } from 'node:path';
 import { scoreDiagram } from '../src/layout-metrics';
 
 // Pins the total edge crossings and bends across the whole snapshot corpus,
-// so a future change can't silently regress layout quality. See #99, which
-// attributes 3 of these crossings to a missing sibling-order sweep. Two
-// investigations have now looked at the two named fixtures without a fix
-// landing, because both turned out not to be sibling-order problems at a
-// single split, which is what #99's own implementation plan (barycenter over
-// one reconvergence point) assumes:
+// so a future change can't silently regress layout quality. These are
+// baseline upper bounds, not exact targets: toBeLessThanOrEqual lets a future
+// improvement pass without editing this file.
 //
-// - 09-loan-approval-matrix (2 crossings, LF_High_Risk x LF_Auto_Approve and
-//   LF_UW_Decline x LF_Auto_Approve): Task_Fast_Approve sits above
-//   Gateway_Risk_Tier/Gateway_Underwriter, but its join (Join_Approve, y=300)
-//   sits below theirs (Join_Decline, y=180) -- source order and destination
-//   order are inverted between two DIFFERENT downstream joins, not two
-//   siblings of one gateway sharing one join. A sibling swap at either
-//   gateway can't fix this; both joins would need to be reordered together,
-//   and Join_Decline/Join_Approve aren't siblings of a common split either.
-// - 15-parallel-with-unequal-branch-depth (1 crossing, Flow_B3_Out x
-//   Flow_B2_4): Task_Teardown's return-to-join edge has to travel from its
-//   own track up to Join_Parallel's, and the orthogonal router's chosen
-//   vertical corridor (x=1318) happens to pass through the exact x where an
-//   unrelated branch (Task_Deep_3 -> Task_Deep_4) exits horizontally at
-//   y=300. The two edges don't share an ancestor split at all; this is a
-//   corridor/step-x selection collision in the router, not a branch-order
-//   problem.
+// #99 named 3 forward-edge crossings in two fixtures:
 //
-// A prior attempt (see git history for the reverted merge-distance-based
-// sibling reorder) confirmed the risk empirically: reordering siblings moves
-// every downstream track, and measured against this corpus it traded the 3
-// targeted crossings for 8 new ones in 09-loan-approval-matrix alone (13 ->
-// 21 total) while leaving 15-parallel-with-unequal-branch-depth unchanged.
-// Fixing this needs two separate, more targeted changes -- consistent join
-// ordering between correlated branches for the first case, and corridor
-// selection that avoids an unrelated branch's exit column for the second --
-// neither of which is the sibling-reorder sweep #99 describes. Left open.
-// These are current baseline upper bounds, not exact targets: use
-// toBeLessThanOrEqual so a future improvement doesn't fail this test the way
-// an exact pin would.
+// - 15-parallel-with-unequal-branch-depth (fixed): the forward pass placed
+//   the four-task deep branch on its fork's middle track, but the dummy
+//   barycenter sweep then moved a dummy of Task_Teardown's long edge onto
+//   Task_Deep_4's track; the dummy won the collision tie on `order`, so the
+//   real node -- and, through later sweeps, its whole branch -- was pushed a
+//   track down and Task_Teardown's edge crossed it. The sweep now never moves
+//   a dummy onto a real node's track (sweepRankDummyBarycenter). The same
+//   rule, together with a drop-column fix for loop edges
+//   (getNearestClearSourceStepX), also tidied 09-order-fulfillment,
+//   09-incident-management and 16-subprocess-with-boundary-error-escalation:
+//   13 -> 12 crossings and 155 -> 146 bends corpus-wide.
+// - 09-loan-approval-matrix (still 2 crossings, LF_High_Risk x
+//   LF_Auto_Approve and LF_UW_Decline x LF_Auto_Approve): Join_Approve's
+//   parents average to the same track as Join_Decline's, and the tie goes to
+//   Join_Decline by document order, so the two joins are inverted relative to
+//   their sources. Ordering tied merges by their unrounded parent barycenter
+//   was tried and reverted: it shifts the whole underwriting branch and makes
+//   the boundary timer overlap its host. A real fix has to reorder both joins
+//   together with what feeds them.
 describe('Corpus layout quality', () => {
   it('keeps total edge crossings and bends within the pinned baseline', async () => {
     const snapshotsDir = join(__dirname, 'snapshots');
@@ -62,7 +51,7 @@ describe('Corpus layout quality', () => {
 
     expect(totalShapeOverlaps).toBe(0);
     expect(totalEdgeShapeCrossings).toBe(0);
-    expect(totalCrossings).toBeLessThanOrEqual(13);
-    expect(totalBends).toBeLessThanOrEqual(155);
+    expect(totalCrossings).toBeLessThanOrEqual(12);
+    expect(totalBends).toBeLessThanOrEqual(146);
   });
 });

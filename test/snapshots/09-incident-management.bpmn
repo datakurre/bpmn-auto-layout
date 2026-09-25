@@ -210,8 +210,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="F_Clarify_T1_di" bpmnElement="F_Clarify_T1">
         <di:waypoint x="1186" y="265" />
-        <di:waypoint x="1366" y="265" />
-        <di:waypoint x="1366" y="605" />
+        <di:waypoint x="1206" y="265" />
+        <di:waypoint x="1206" y="605" />
         <di:waypoint x="461" y="605" />
         <di:waypoint x="461" y="170" />
       </bpmndi:BPMNEdge>

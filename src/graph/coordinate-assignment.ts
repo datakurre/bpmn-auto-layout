@@ -332,6 +332,13 @@ function sweepRankDummyBarycenter(
     return;
   }
 
+  // Tracks held by real BPMN elements in this rank. A dummy is never moved onto
+  // (or within one track of) one of these: resolveRankCollisions only pushes
+  // downward, so such a move would either shove the real node -- and its whole
+  // branch -- off its parent's track, or push the dummy past it so the long
+  // edge cuts through that branch (#99). The dummy keeps its current track.
+  const realTracks = nodesInRank.filter((n) => !n.data?.isDummy).map((n) => ctx.tracks.get(n.id)!);
+
   for (const node of dummiesInRank) {
     // Each dummy node has exactly one in-edge and one out-edge by construction
     // (see insertDummyNodes), and neither is ever a feedback edge.
@@ -340,7 +347,9 @@ function sweepRankDummyBarycenter(
     // The full forward pass above already assigned a track to every node.
     const neighborTracks = neighborIds.map((id) => ctx.tracks.get(id)!);
     const barycenter = neighborTracks.reduce((a, b) => a + b, 0) / neighborTracks.length;
-    ctx.tracks.set(node.id, barycenter);
+    if (!realTracks.some((t) => Math.abs(t - barycenter) < 1)) {
+      ctx.tracks.set(node.id, barycenter);
+    }
   }
   resolveRankCollisions(nodesInRank, ctx.tracks, graph);
 }

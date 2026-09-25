@@ -78,12 +78,12 @@
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_NotifyOps_di" bpmnElement="Task_NotifyOps">
-        <dc:Bounds x="1024" y="520" width="100" height="80" />
+        <dc:Bounds x="1024" y="400" width="100" height="80" />
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gate_MergeDownstream_di" bpmnElement="Gate_MergeDownstream">
         <dc:Bounds x="1184" y="415" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1118" y="433" width="60" height="14" />
+          <dc:Bounds x="1179" y="471" width="60" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Confirm_di" bpmnElement="Task_Confirm">
@@ -117,9 +117,8 @@
         <di:waypoint x="1209" y="415" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Slow_Rejoin_di" bpmnElement="Flow_Slow_Rejoin">
-        <di:waypoint x="1124" y="560" />
-        <di:waypoint x="1209" y="560" />
-        <di:waypoint x="1209" y="465" />
+        <di:waypoint x="1124" y="440" />
+        <di:waypoint x="1184" y="440" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
         <di:waypoint x="136" y="140" />
@@ -144,8 +143,8 @@
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="Flow_Slow_di" bpmnElement="Flow_Slow">
         <di:waypoint x="384" y="238" />
-        <di:waypoint x="384" y="560" />
-        <di:waypoint x="1024" y="560" />
+        <di:waypoint x="384" y="440" />
+        <di:waypoint x="1024" y="440" />
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="SF_1_di" bpmnElement="SF_1">
         <di:waypoint x="422" y="135" />

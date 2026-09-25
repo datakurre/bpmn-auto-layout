@@ -180,6 +180,30 @@ describe('orthogonal-router', () => {
     expect(waypoints[waypoints.length - 2]).toEqual({ x: 45, y: 140 });
   });
 
+  it('drops a blocked feedback loop in the first clear column right of the source (#99)', () => {
+    const src: Bounds = { x: 400, y: 100, width: 100, height: 80 };
+    const tgt: Bounds = { x: 100, y: 100, width: 100, height: 80 };
+    // Blocks the straight drop from src's bottom-center, forcing a right exit.
+    const obsBelowSrc: Bounds = { x: 440, y: 190, width: 20, height: 40 };
+    // Occupies the default drop column (src right + 20 = 520): step past it.
+    const obsInColumn: Bounds = { x: 505, y: 150, width: 30, height: 60 };
+    // Shares the drop's y-range but not its column: must NOT be stepped past.
+    const obsFarRight: Bounds = { x: 800, y: 150, width: 100, height: 80 };
+
+    const waypoints = routeOrthogonalEdge(src, tgt, [
+      src,
+      tgt,
+      obsBelowSrc,
+      obsInColumn,
+      obsFarRight,
+    ]);
+
+    expect(waypoints[0]).toEqual({ x: 500, y: 140 });
+    // 505 + 30 + 20: just past the shape in the column, not past obsFarRight.
+    expect(waypoints[1]).toEqual({ x: 555, y: 140 });
+    expect(waypoints[2].x).toBe(555);
+  });
+
   it('shifts forward S-bend stepX earlier when obstacle blocks horizontal departure corridor', () => {
     const src: Bounds = { x: 100, y: 100, width: 100, height: 80 };
     const tgt: Bounds = { x: 500, y: 300, width: 100, height: 80 };

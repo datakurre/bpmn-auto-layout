@@ -6,6 +6,9 @@ import {
   isHorizontalSpanBlocked,
 } from './obstacles';
 
+/** Horizontal gap kept between a loop edge's vertical drop and any shape. */
+const STEP_CLEARANCE = 20;
+
 interface ObstacleCheckContext {
   ignore: Bounds;
   obstacles?: Bounds[];
@@ -188,6 +191,36 @@ function getClearSourceStepX(src: Bounds, channelY: number, obstacles: Bounds[])
   return stepX;
 }
 
+/**
+ * First column right of `src` where the loop's drop from the source's
+ * right-middle to `channelY` clears every shape by STEP_CLEARANCE.
+ *
+ * Unlike getClearSourceStepX -- which steps past every shape to the right
+ * that merely shares the drop's y-range, and whose far-right answer the
+ * upward/downward decision in hasBlockedDownwardFeedbackExit relies on --
+ * this only steps past shapes that actually occupy the current column, so
+ * the drawn route uses a free gap next to the source instead of running
+ * horizontally through the rest of the row (#99).
+ */
+function getNearestClearSourceStepX(src: Bounds, channelY: number, obstacles: Bounds[]): number {
+  let stepX = src.x + src.width + STEP_CLEARANCE;
+  const span = { start: Math.round(src.y + src.height / 2), end: channelY };
+  const blockers = obstacles
+    .filter(
+      (b) =>
+        b !== src &&
+        b.x + b.width + STEP_CLEARANCE > stepX &&
+        axisIntervalsOverlap(span, { start: b.y, end: b.y + b.height })
+    )
+    .sort((a, b) => a.x - b.x);
+  for (const b of blockers) {
+    if (b.x - STEP_CLEARANCE < stepX) {
+      stepX = Math.max(stepX, b.x + b.width + STEP_CLEARANCE);
+    }
+  }
+  return stepX;
+}
+
 function getClearTargetStepX(tgt: Bounds, channelY: number, obstacles: Bounds[]): number {
   let stepX = tgt.x - 20;
   const tgtLeftY = Math.round(tgt.y + tgt.height / 2);
@@ -233,7 +266,7 @@ function computeFeedbackWaypoints(src: Bounds, tgt: Bounds, ctx: FeedbackRouteCo
 
   if (srcBlocked) {
     const srcRight: Point = { x: src.x + src.width, y: Math.round(src.y + src.height / 2) };
-    const srcStepX = getClearSourceStepX(src, ctx.channelY, ctx.allBounds!);
+    const srcStepX = getNearestClearSourceStepX(src, ctx.channelY, ctx.allBounds!);
     waypoints.push(srcRight, { x: srcStepX, y: srcRight.y }, { x: srcStepX, y: ctx.channelY });
   } else {
     waypoints.push(srcBottom, { x: srcBottom.x, y: ctx.channelY });

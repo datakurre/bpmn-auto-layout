@@ -149,6 +149,19 @@ describe('Iteration 15: Complex Routing & Edge Cases', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+    // #99: the dummy sweep used to shove this deep branch one track down, so
+    // Task_Teardown's edge to the join crossed Task_Deep_3 -> Task_Deep_4.
+    expect(score.metrics.edgeCrossings).toBe(0);
+    const centerY = (id: string): number => {
+      const m = new RegExp(
+        `bpmnElement="${id}"[^>]*>\\s*<dc:Bounds x="[\\d.-]+" y="([\\d.-]+)" width="[\\d.-]+" height="([\\d.-]+)"`
+      ).exec(resultXml)!;
+      return Number(m[1]) + Number(m[2]) / 2;
+    };
+    const deepRow = centerY('Task_Deep_1');
+    for (const id of ['Task_Deep_2', 'Task_Deep_3', 'Task_Deep_4']) {
+      expect(centerY(id)).toBe(deepRow);
+    }
 
     expectSnapshotMatch(resultXml, '15-parallel-with-unequal-branch-depth');
   });
