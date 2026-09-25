@@ -1,5 +1,5 @@
 import { SUBPROCESS_MIN_HEIGHT, SUBPROCESS_MIN_WIDTH, isSubProcessType } from '../di-constants';
-import type { Bounds } from '../types';
+import type { Bounds, Point } from '../types';
 import { getArtifactDimensions } from './artifact-layout';
 import { getRefId, offsetAndCollectChildren, type ScopeLayoutResult } from './subprocess-layout';
 
@@ -7,7 +7,10 @@ export function isEventSubProcess(el: any): boolean {
   return el.$type === 'bpmn:SubProcess' && el.triggeredByEvent === true;
 }
 
-export function computeCurrentDiagramBounds(shapes: Array<{ bounds: Bounds }>): {
+export function computeCurrentDiagramBounds(
+  shapes: Array<{ bounds: Bounds }>,
+  edges: Array<{ waypoints: Point[] }>
+): {
   minX: number;
   maxX: number;
   maxY: number;
@@ -23,6 +26,16 @@ export function computeCurrentDiagramBounds(shapes: Array<{ bounds: Bounds }>): 
     minX = Math.min(minX, s.bounds.x);
     maxX = Math.max(maxX, s.bounds.x + s.bounds.width);
     maxY = Math.max(maxY, s.bounds.y + s.bounds.height);
+  }
+  // Waypoints too: a loop or gateway channel can extend past every shape's
+  // own bounds, and a disconnected item placed inside that channel would
+  // force the flow it belongs to into a detour around the item.
+  for (const e of edges) {
+    for (const wp of e.waypoints) {
+      minX = Math.min(minX, wp.x);
+      maxX = Math.max(maxX, wp.x);
+      maxY = Math.max(maxY, wp.y);
+    }
   }
   return { minX, maxX, maxY };
 }

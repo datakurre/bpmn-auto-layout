@@ -147,7 +147,6 @@ export function layoutScope(
     compensationHandlers,
     regularNodes,
     allArtifacts,
-    allAssociations,
   } = partition;
 
   if (
@@ -186,10 +185,7 @@ export function layoutScope(
     });
   }
 
-  layoutRemainingArtifacts(
-    { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes },
-    { childScopeResults, boundsMap, shapes }
-  );
+  layoutRemainingArtifacts({ ...partition, analysis }, { childScopeResults, boundsMap, shapes });
 
   const bounding = computeScopeBoundingBox(shapes);
   const { width, height } = computeScopeContainerDimensions(bounding);
@@ -223,6 +219,9 @@ interface ScopeArtifactPartition {
   eventSubProcesses: any[];
   compensationHandlers: any[];
   regularNodes: any[];
+  boundaryEvents: any[];
+  sequenceFlows: any[];
+  analysis: ScopeAnalysis;
 }
 
 interface ScopeArtifactContext {
@@ -235,8 +234,16 @@ function layoutRemainingArtifacts(
   partition: ScopeArtifactPartition,
   ctx: ScopeArtifactContext
 ): void {
-  const { allArtifacts, allAssociations, eventSubProcesses, compensationHandlers, regularNodes } =
-    partition;
+  const {
+    allArtifacts,
+    allAssociations,
+    eventSubProcesses,
+    compensationHandlers,
+    regularNodes,
+    boundaryEvents,
+    sequenceFlows,
+    analysis,
+  } = partition;
   const { childScopeResults, boundsMap, shapes } = ctx;
 
   const regularNodeIds = new Set<string>(regularNodes.map((n: any) => n.id));
@@ -250,7 +257,19 @@ function layoutRemainingArtifacts(
 
   const disconnectedItems = [...eventSubProcesses, ...compensationHandlers, ...unconnected];
   if (disconnectedItems.length > 0) {
-    const diagramBounds = computeCurrentDiagramBounds(shapes);
+    // Throwaway routing pass, discarded once it's used: sizes the diagram
+    // with sequence-flow channels included (a loop can route above or below
+    // the nodes), so a disconnected item isn't placed inside one. The real,
+    // final routing of these same flows happens once, later, in routeScope.
+    const provisionalEdges = routeScopeEdges(sequenceFlows, {
+      regularNodes,
+      boundaryEvents,
+      boundsMap,
+      feedbackEdges: analysis.feedbackEdges,
+      returnNodes: analysis.returnNodes,
+      returnGateways: analysis.returnGateways,
+    });
+    const diagramBounds = computeCurrentDiagramBounds(shapes, provisionalEdges);
     layoutDisconnectedElements(disconnectedItems, diagramBounds, {
       childScopeResults,
       boundsMap,
@@ -1168,22 +1187,32 @@ export function routeScope(
     compensationHandlers,
   } = partitionScopeElements(scopeElement);
 
-  const localBoundsMap = new Map<string, Bounds>();
-  for (const n of [
-    ...regularNodes,
-    ...boundaryEvents,
-    ...allArtifacts,
-    ...eventSubProcesses,
-    ...compensationHandlers,
-  ]) {
+  // Sequence flows only ever treat this scope's own regular nodes and
+  // boundary events as routing obstacles -- matching layoutScope's old
+  // internal routing, which ran before disconnected elements (event
+  // subprocesses, compensation handlers) or artifacts existed. Including
+  // those here would force a loop or gateway route into a detour around
+  // something it never had to avoid before.
+  const flowBoundsMap = new Map<string, Bounds>();
+  for (const n of [...regularNodes, ...boundaryEvents]) {
     const b = ctx.boundsMap.get(n.id);
     if (b) {
-      localBoundsMap.set(n.id, b);
+      flowBoundsMap.set(n.id, b);
     }
   }
 
-  const edges = rerouteProcessEdges(scopeElement, localBoundsMap, analysis);
-  routeAssociations(allAssociations, localBoundsMap, edges);
+  // Associations connect regular nodes to artifacts, event subprocesses and
+  // compensation handlers too, so they need the fuller bounds map.
+  const associationBoundsMap = new Map(flowBoundsMap);
+  for (const n of [...allArtifacts, ...eventSubProcesses, ...compensationHandlers]) {
+    const b = ctx.boundsMap.get(n.id);
+    if (b) {
+      associationBoundsMap.set(n.id, b);
+    }
+  }
+
+  const edges = rerouteProcessEdges(scopeElement, flowBoundsMap, analysis);
+  routeAssociations(allAssociations, associationBoundsMap, edges);
 
   const subProcesses = (scopeElement.flowElements || []).filter((el: any) =>
     isSubProcessType(el.$type)

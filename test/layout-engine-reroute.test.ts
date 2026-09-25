@@ -90,4 +90,27 @@ describe('routeScope (#100/#103: route once, over final positions)', () => {
     const edges = routeScope(process, { boundsMap, analysisMap: new Map() });
     expect(findEdge(edges, 'FC')).toBeUndefined();
   });
+
+  it('skips an artifact with no bounds yet when routing its association', () => {
+    const process = {
+      $type: 'bpmn:Process',
+      id: 'Proc1',
+      flowElements: [
+        { id: 'D1', $type: 'bpmn:Task' },
+        { id: 'Note_1', $type: 'bpmn:TextAnnotation' },
+        {
+          $type: 'bpmn:Association',
+          id: 'Assoc_1',
+          sourceRef: 'D1',
+          targetRef: 'Note_1',
+        },
+      ],
+    };
+
+    // Note_1 hasn't been placed yet, so it has no entry in boundsMap.
+    const boundsMap = new Map([['D1', { x: 100, y: 100, width: 100, height: 80 }]]);
+
+    const edges = routeScope(process, { boundsMap, analysisMap: new Map() });
+    expect(findEdge(edges, 'Assoc_1')).toBeUndefined();
+  });
 });
