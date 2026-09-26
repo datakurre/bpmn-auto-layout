@@ -21,14 +21,25 @@ import { scoreDiagram } from '../src/layout-metrics';
 //   (getNearestClearSourceStepX), also tidied 09-order-fulfillment,
 //   09-incident-management and 16-subprocess-with-boundary-error-escalation:
 //   13 -> 12 crossings and 155 -> 146 bends corpus-wide.
-// - 09-loan-approval-matrix (still 2 crossings, LF_High_Risk x
-//   LF_Auto_Approve and LF_UW_Decline x LF_Auto_Approve): Join_Approve's
-//   parents average to the same track as Join_Decline's, and the tie goes to
-//   Join_Decline by document order, so the two joins are inverted relative to
-//   their sources. Ordering tied merges by their unrounded parent barycenter
-//   was tried and reverted: it shifts the whole underwriting branch and makes
-//   the boundary timer overlap its host. A real fix has to reorder both joins
-//   together with what feeds them.
+// - 09-loan-approval-matrix (2 crossings, LF_High_Risk x LF_Auto_Approve and
+//   LF_UW_Decline x LF_Auto_Approve; kept on purpose): Join_Approve's parents
+//   average to the same track as Join_Decline's, and the tie goes to
+//   Join_Decline by document order, so the two joins sit in the opposite
+//   order to their sources. Ordering tied merges by their unrounded parent
+//   barycenter removes both crossings (with the dummy sweep also refusing any
+//   occupied track, since a dummy-vs-dummy collision otherwise cascades into
+//   the underwriting chain), but the result is worse to read: 3 more bends
+//   (14 -> 17), and LF_High_Risk (descending to the lower join) and
+//   LF_UW_Approve (ascending to the upper one) must pass each other in the
+//   same band between the two joins, so they end up sharing a 135px channel
+//   -- two different flows merged into one line. That trade isn't taken:
+//   more bends read worse than a well-placed crossing, and these are as
+//   well-placed as crossings get. LF_High_Risk is a single straight zero-bend
+//   line and LF_Auto_Approve crosses it at a right angle. The topology is
+//   inherent to the pair of joins: any arrangement either crosses or shares
+//   a channel. The dummy-sweep guard alone changed no snapshot, so it wasn't
+//   added. (The third crossing in this fixture, LF_UW_Cond x LF_SLA_Flow, is a
+//   boundary-event exit edge and was never part of #99.)
 describe('Corpus layout quality', () => {
   it('keeps total edge crossings and bends within the pinned baseline', async () => {
     const snapshotsDir = join(__dirname, 'snapshots');
@@ -52,6 +63,6 @@ describe('Corpus layout quality', () => {
     expect(totalShapeOverlaps).toBe(0);
     expect(totalEdgeShapeCrossings).toBe(0);
     expect(totalCrossings).toBeLessThanOrEqual(12);
-    expect(totalBends).toBeLessThanOrEqual(146);
+    expect(totalBends).toBeLessThanOrEqual(144);
   });
 });
