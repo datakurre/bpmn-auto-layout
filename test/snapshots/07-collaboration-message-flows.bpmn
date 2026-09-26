@@ -26,7 +26,7 @@
       <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
         <dc:Bounds x="150" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="146" y="173" width="44" height="14" />
+          <dc:Bounds x="144" y="173" width="44" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Cust_Order_di" bpmnElement="Cust_Order">

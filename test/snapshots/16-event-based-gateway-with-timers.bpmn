@@ -45,7 +45,7 @@
       <bpmndi:BPMNShape id="Gate_Event_di" bpmnElement="Gate_Event">
         <dc:Bounds x="356" y="155" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="395" y="138" width="54" height="28" />
+          <dc:Bounds x="393" y="138" width="54" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Catch_Accept_di" bpmnElement="Catch_Accept">

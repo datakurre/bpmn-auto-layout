@@ -78,7 +78,7 @@
       <bpmndi:BPMNShape id="Gate_Revise_di" bpmnElement="Gate_Revise">
         <dc:Bounds x="1001" y="160" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1040" y="157" width="46" height="14" />
+          <dc:Bounds x="1038" y="157" width="46" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="End_Cancel_di" bpmnElement="End_Cancel">

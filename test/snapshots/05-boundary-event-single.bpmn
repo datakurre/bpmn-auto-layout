@@ -17,7 +17,7 @@
       <bpmndi:BPMNShape id="Start_1_di" bpmnElement="Start_1">
         <dc:Bounds x="100" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="104" y="168" width="28" height="14" />
+          <dc:Bounds x="102" y="168" width="28" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Main_di" bpmnElement="Task_Main">
@@ -26,7 +26,7 @@
       <bpmndi:BPMNShape id="End_Main_di" bpmnElement="End_Main">
         <dc:Bounds x="356" y="122" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="345" y="168" width="58" height="14" />
+          <dc:Bounds x="343" y="168" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Timeout_di" bpmnElement="Task_Timeout">
@@ -35,7 +35,7 @@
       <bpmndi:BPMNShape id="End_Timeout_di" bpmnElement="End_Timeout">
         <dc:Bounds x="612" y="262" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="602" y="308" width="56" height="14" />
+          <dc:Bounds x="600" y="308" width="56" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Boundary_Timer_di" bpmnElement="Boundary_Timer">

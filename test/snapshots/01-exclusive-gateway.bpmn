@@ -8,7 +8,7 @@
       <bpmndi:BPMNShape id="Gateway_1_di" bpmnElement="Gateway_1">
         <dc:Bounds x="100" y="115" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="105" y="171" width="40" height="14" />
+          <dc:Bounds x="103" y="171" width="40" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
     </bpmndi:BPMNPlane>

@@ -61,7 +61,7 @@
       <bpmndi:BPMNShape id="Fork_Checks_di" bpmnElement="Fork_Checks">
         <dc:Bounds x="356" y="155" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="395" y="138" width="44" height="28" />
+          <dc:Bounds x="393" y="138" width="44" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_KYC_di" bpmnElement="Task_KYC">
@@ -76,7 +76,7 @@
       <bpmndi:BPMNShape id="Join_Checks_di" bpmnElement="Join_Checks">
         <dc:Bounds x="626" y="155" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="665" y="138" width="42" height="28" />
+          <dc:Bounds x="663" y="138" width="42" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Gateway_Risk_Tier_di" bpmnElement="Gateway_Risk_Tier">
@@ -118,7 +118,7 @@
       <bpmndi:BPMNShape id="Gateway_Underwriter_di" bpmnElement="Gateway_Underwriter">
         <dc:Bounds x="1166" y="275" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1205" y="258" width="64" height="28" />
+          <dc:Bounds x="1203" y="258" width="64" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Request_Collateral_di" bpmnElement="Task_Request_Collateral">

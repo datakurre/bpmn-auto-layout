@@ -52,7 +52,7 @@
       <bpmndi:BPMNShape id="Gate_Check_di" bpmnElement="Gate_Check">
         <dc:Bounds x="356" y="139" width="50" height="50" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="352" y="119" width="58" height="14" />
+          <dc:Bounds x="350" y="119" width="58" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Standard_di" bpmnElement="Task_Standard">
@@ -97,7 +97,7 @@
       <bpmndi:BPMNShape id="Start_Cancel_di" bpmnElement="Start_Cancel">
         <dc:Bounds x="130" y="441" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="114" y="487" width="68" height="28" />
+          <dc:Bounds x="112" y="487" width="68" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Cleanup_di" bpmnElement="Task_Cleanup">
@@ -106,7 +106,7 @@
       <bpmndi:BPMNShape id="End_Cancelled_di" bpmnElement="End_Cancelled">
         <dc:Bounds x="386" y="441" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="373" y="487" width="62" height="28" />
+          <dc:Bounds x="371" y="487" width="62" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Doc_Policy_di" bpmnElement="Doc_Policy">

@@ -93,6 +93,28 @@ export function estimateWordWidth(word: string): number {
   return width;
 }
 
+export function computeLabelVisualShift(text?: string): number {
+  if (!text || text.trim() === '') {
+    return 0;
+  }
+  const words = text.split(/\s+/);
+  let maxWordWidth = 0;
+  for (const word of words) {
+    if (!word) {
+      continue;
+    }
+    maxWordWidth = Math.max(maxWordWidth, estimateWordWidth(word));
+  }
+  let maxLineWidth = 0;
+  for (const line of text.split('\n')) {
+    const trimmedLine = line.trim();
+    if (trimmedLine) {
+      maxLineWidth = Math.max(maxLineWidth, estimateWordWidth(trimmedLine));
+    }
+  }
+  return Math.ceil(maxLineWidth) < Math.ceil(maxWordWidth) + 4 ? 2 : 0;
+}
+
 export function estimateLabelDimensions(text: string): { width: number; height: number } {
   const lines = text.split('\n');
   let maxLineWidth = 0;
@@ -330,8 +352,10 @@ function computeOrthogonalElementBounds(
   geom: ElementLabelGeom,
   side: 'bottom' | 'top' | 'right' | 'left'
 ): Bounds {
-  const { elementBounds, dim, margin } = geom;
-  const cx = Math.round(elementBounds.x + elementBounds.width / 2);
+  const { elementBounds, dim, margin, text } = geom;
+  const visualShift =
+    isEvent(geom.element) || isGateway(geom.element) ? computeLabelVisualShift(text) : 0;
+  const cx = Math.round(elementBounds.x + elementBounds.width / 2) - visualShift;
   const cy = Math.round(elementBounds.y + elementBounds.height / 2);
 
   if (side === 'bottom') {
@@ -370,24 +394,35 @@ function computeGatewayDiagonalBounds(
   geom: ElementLabelGeom,
   corner: 'top-right' | 'bottom-right' | 'top-left' | 'bottom-left'
 ): Bounds {
-  const { elementBounds, dim } = geom;
+  const { elementBounds, dim, text } = geom;
   const cx = Math.round(elementBounds.x + elementBounds.width / 2);
   const cy = Math.round(elementBounds.y + elementBounds.height / 2);
+  const xShift = computeLabelVisualShift(text);
   if (corner === 'top-right') {
-    return { x: cx + 14, y: cy - 14 - dim.height, width: dim.width, height: dim.height };
-  }
-  if (corner === 'bottom-right') {
-    return { x: cx + 14, y: cy + 14, width: dim.width, height: dim.height };
-  }
-  if (corner === 'top-left') {
     return {
-      x: cx - 14 - dim.width,
+      x: cx + 14 - xShift,
       y: cy - 14 - dim.height,
       width: dim.width,
       height: dim.height,
     };
   }
-  return { x: cx - 14 - dim.width, y: cy + 14, width: dim.width, height: dim.height };
+  if (corner === 'bottom-right') {
+    return { x: cx + 14 - xShift, y: cy + 14, width: dim.width, height: dim.height };
+  }
+  if (corner === 'top-left') {
+    return {
+      x: cx - 14 - dim.width - xShift,
+      y: cy - 14 - dim.height,
+      width: dim.width,
+      height: dim.height,
+    };
+  }
+  return {
+    x: cx - 14 - dim.width - xShift,
+    y: cy + 14,
+    width: dim.width,
+    height: dim.height,
+  };
 }
 
 function computeDiagonalElementBounds(
@@ -399,10 +434,11 @@ function computeDiagonalElementBounds(
   }
   const isBoundary = isBoundaryEvent(geom.element);
   const margin = isBoundary ? BOUNDARY_EVENT_DIAGONAL_MARGIN : geom.margin;
-  const { elementBounds, dim } = geom;
+  const { elementBounds, dim, text } = geom;
+  const visualShift = isEvent(geom.element) ? computeLabelVisualShift(text) : 0;
   if (corner === 'top-right') {
     return {
-      x: elementBounds.x + elementBounds.width + margin,
+      x: elementBounds.x + elementBounds.width + margin - visualShift,
       y: elementBounds.y - margin - dim.height,
       width: dim.width,
       height: dim.height,
@@ -410,7 +446,7 @@ function computeDiagonalElementBounds(
   }
   if (corner === 'bottom-right') {
     return {
-      x: elementBounds.x + elementBounds.width + margin,
+      x: elementBounds.x + elementBounds.width + margin - visualShift,
       y: elementBounds.y + elementBounds.height + margin,
       width: dim.width,
       height: dim.height,
@@ -418,14 +454,14 @@ function computeDiagonalElementBounds(
   }
   if (corner === 'top-left') {
     return {
-      x: elementBounds.x - margin - dim.width,
+      x: elementBounds.x - margin - dim.width - visualShift,
       y: elementBounds.y - margin - dim.height,
       width: dim.width,
       height: dim.height,
     };
   }
   return {
-    x: elementBounds.x - margin - dim.width,
+    x: elementBounds.x - margin - dim.width - visualShift,
     y: elementBounds.y + elementBounds.height + margin,
     width: dim.width,
     height: dim.height,

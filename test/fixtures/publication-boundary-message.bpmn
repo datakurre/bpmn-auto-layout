@@ -1,0 +1,54 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_Publication" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_Publication">
+    <bpmn:participant id="Participant_Publication" processRef="Process_Publication" />
+    <bpmn:participant id="Participant_CMS" name="CMS" />
+    <bpmn:messageFlow id="Message_Submit" sourceRef="Event_Submit" targetRef="Participant_CMS" />
+    <bpmn:messageFlow id="Message_Reject" sourceRef="Event_Reject" targetRef="Participant_CMS" />
+    <bpmn:messageFlow id="Message_Retract" sourceRef="Participant_CMS" targetRef="Event_Retract" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Publication" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Publication">
+      <bpmn:lane id="Lane_Creator" name="Creator">
+        <bpmn:flowNodeRef>Start_Publication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Draft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_Draft</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_Submit</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Reviewer" name="Reviewer">
+        <bpmn:flowNodeRef>Task_Review</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Approved</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_Reject</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Gateway_Return</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Published</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_Retract</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:startEvent id="Start_Publication" />
+    <bpmn:exclusiveGateway id="Gateway_Draft" />
+    <bpmn:task id="Task_Draft" name="Create Draft" />
+    <bpmn:intermediateThrowEvent id="Event_Submit" name="Submit">
+      <bpmn:messageEventDefinition id="MessageDefinition_Submit" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:task id="Task_Review" name="Review" />
+    <bpmn:exclusiveGateway id="Gateway_Approved" name="Was approved?" />
+    <bpmn:intermediateThrowEvent id="Event_Reject" name="Reject">
+      <bpmn:messageEventDefinition id="MessageDefinition_Reject" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:exclusiveGateway id="Gateway_Return" />
+    <bpmn:endEvent id="End_Published" name="Finish" />
+    <bpmn:boundaryEvent id="Event_Retract" name="Retract" attachedToRef="Task_Review">
+      <bpmn:messageEventDefinition id="MessageDefinition_Retract" />
+    </bpmn:boundaryEvent>
+    <bpmn:sequenceFlow id="Flow_Start" sourceRef="Start_Publication" targetRef="Gateway_Draft" />
+    <bpmn:sequenceFlow id="Flow_Draft" sourceRef="Gateway_Draft" targetRef="Task_Draft" />
+    <bpmn:sequenceFlow id="Flow_Submit" sourceRef="Task_Draft" targetRef="Event_Submit" />
+    <bpmn:sequenceFlow id="Flow_Review" sourceRef="Event_Submit" targetRef="Task_Review" />
+    <bpmn:sequenceFlow id="Flow_Approval" sourceRef="Task_Review" targetRef="Gateway_Approved" />
+    <bpmn:sequenceFlow id="Flow_Published" name="yes" sourceRef="Gateway_Approved" targetRef="End_Published" />
+    <bpmn:sequenceFlow id="Flow_Rejected" name="no" sourceRef="Gateway_Approved" targetRef="Event_Reject" />
+    <bpmn:sequenceFlow id="Flow_Retry" sourceRef="Event_Reject" targetRef="Gateway_Return" />
+    <bpmn:sequenceFlow id="Flow_RetryDraft" sourceRef="Gateway_Return" targetRef="Gateway_Draft" />
+    <bpmn:sequenceFlow id="Flow_Retract" sourceRef="Event_Retract" targetRef="Gateway_Return" />
+  </bpmn:process>
+</bpmn:definitions>
