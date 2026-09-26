@@ -425,6 +425,65 @@ describe('Iteration 7: Swimlanes (Pools & Lanes)', () => {
     expect(waypointsDown[1].x).toBe(350);
   });
 
+  describe('message flows between horizontally overlapping shapes run straight, not via the source center', () => {
+    const upper = { x: 500, y: 100, width: 100, height: 80 };
+    const lower = { x: 500, y: 400, width: 100, height: 80 };
+
+    it('slides the source exit to a spread target port instead of jogging (09-b2b Msg_Quote)', () => {
+      const waypoints = routeMessageFlow(lower, upper, { targetPortX: 533 });
+      expect(waypoints).toEqual([
+        { x: 533, y: 400 },
+        { x: 533, y: 180 },
+      ]);
+    });
+
+    it('slides the target entry to a fixed source port', () => {
+      const waypoints = routeMessageFlow(upper, lower, { sourcePortX: 570 });
+      expect(waypoints).toEqual([
+        { x: 570, y: 180 },
+        { x: 570, y: 400 },
+      ]);
+    });
+
+    it('uses the point of the overlap nearest the source center when neither port is fixed', () => {
+      const shiftedTarget = { x: 560, y: 400, width: 100, height: 80 };
+      const waypoints = routeMessageFlow(upper, shiftedTarget);
+      // Overlap is x 560..600 inset by 10 on each side -> 570..590; source center 550 clamps to 570.
+      expect(waypoints).toEqual([
+        { x: 570, y: 180 },
+        { x: 570, y: 400 },
+      ]);
+    });
+
+    it('keeps the target port and jogs when the fixed port lies outside the overlap', () => {
+      const waypoints = routeMessageFlow(lower, upper, { targetPortX: 505 });
+      expect(waypoints.length).toBeGreaterThan(2);
+      expect(waypoints[waypoints.length - 1].x).toBe(505);
+    });
+
+    it('leaves two fixed ports alone', () => {
+      const waypoints = routeMessageFlow(lower, upper, { sourcePortX: 520, targetPortX: 580 });
+      expect(waypoints[0].x).toBe(520);
+      expect(waypoints[waypoints.length - 1].x).toBe(580);
+      expect(waypoints.length).toBeGreaterThan(2);
+    });
+
+    it('does not slide when the shapes do not overlap enough to keep off the corners', () => {
+      const barelyOverlapping = { x: 595, y: 400, width: 100, height: 80 };
+      const waypoints = routeMessageFlow(upper, barelyOverlapping);
+      expect(waypoints.length).toBeGreaterThan(2);
+    });
+
+    it('falls back to the routed path when the straight corridor is blocked', () => {
+      const blocker = { x: 500, y: 250, width: 100, height: 60 };
+      const waypoints = routeMessageFlow(lower, upper, {
+        targetPortX: 533,
+        obstacles: [blocker],
+      });
+      expect(waypoints.length).toBeGreaterThan(2);
+    });
+  });
+
   it('layouts collaboration with lanes and external pool with straight vertical message flows', async () => {
     const builder = new BpmnBuilder('Proc_Lanes');
     builder

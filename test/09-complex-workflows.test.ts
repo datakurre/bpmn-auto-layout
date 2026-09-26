@@ -73,6 +73,20 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
 
+    // #99: the retry loop must drop into the first clear column right of
+    // Task_Backorder, not run along its row past the sync gateway and the
+    // whole fulfillment subprocess before turning down.
+    const backorder =
+      /bpmnElement="Task_Backorder"[^>]*>\s*<dc:Bounds x="([\d.-]+)" y="[\d.-]+" width="([\d.-]+)"/.exec(
+        resultXml
+      )!;
+    const retryWaypoints = [
+      .../bpmnElement="F_Stock_Retry"[^>]*>([\s\S]*?)<\/bpmndi:BPMNEdge>/
+        .exec(resultXml)![1]
+        .matchAll(/<di:waypoint x="([\d.-]+)"/g),
+    ].map((m) => Number(m[1]));
+    expect(Math.max(...retryWaypoints)).toBe(Number(backorder[1]) + Number(backorder[2]) + 20);
+
     expectSnapshotMatch(resultXml, '09-order-fulfillment');
   });
 
@@ -295,6 +309,16 @@ describe('Iteration 9: Complex Workflows & High-Density Architectures', () => {
     expect(score.hardViolations.shapeOverlaps).toBe(0);
     expect(score.hardViolations.edgeShapeCrossings).toBe(0);
     expect(score.hardViolations.nonOrthogonalSegments).toBe(0);
+
+    // Prepare Revised Quotation sits directly below Review Quotation, so the
+    // message between them is one straight vertical line -- it must not step
+    // sideways just to leave from the center of the source's edge.
+    const quoteFlow = /bpmnElement="Msg_Quote"[^>]*>([\s\S]*?)<\/bpmndi:BPMNEdge>/.exec(
+      resultXml
+    )![1];
+    const quoteXs = [...quoteFlow.matchAll(/<di:waypoint x="([\d.-]+)"/g)].map((m) => m[1]);
+    expect(quoteXs).toHaveLength(2);
+    expect(quoteXs[0]).toBe(quoteXs[1]);
 
     expectSnapshotMatch(resultXml, '09-b2b-procurement');
   });

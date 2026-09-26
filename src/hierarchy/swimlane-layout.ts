@@ -197,6 +197,41 @@ export function isMessageCorridorBlocked(
   });
 }
 
+/** Keeps a straight message flow off the rounded corners of the shape it leaves/enters. */
+const MESSAGE_PORT_EDGE_INSET = 10;
+
+/**
+ * An x at which a vertical message flow can leave `source` and enter `target`
+ * without a jog, or undefined when the shapes don't overlap enough.
+ *
+ * A port fixed by the caller (a pool's spread port, or a target port spread
+ * among several incoming flows) is kept when the other shape can meet it;
+ * when both ports are fixed the caller already chose, so there's nothing to
+ * slide. With neither fixed, use the point of the overlap nearest the
+ * source's center.
+ */
+function findSharedStraightX(
+  source: Bounds,
+  target: Bounds,
+  ports: { sourcePortX?: number; targetPortX?: number }
+): number | undefined {
+  const lo = Math.max(source.x, target.x) + MESSAGE_PORT_EDGE_INSET;
+  const hi = Math.min(source.x + source.width, target.x + target.width) - MESSAGE_PORT_EDGE_INSET;
+  if (lo > hi) {
+    return undefined;
+  }
+  const { sourcePortX, targetPortX } = ports;
+  if (sourcePortX !== undefined && targetPortX !== undefined) {
+    return undefined;
+  }
+  const fixed = sourcePortX ?? targetPortX;
+  if (fixed !== undefined) {
+    return fixed >= lo && fixed <= hi ? fixed : undefined;
+  }
+  const sourceCenter = Math.round(source.x + source.width / 2);
+  return Math.min(hi, Math.max(lo, sourceCenter));
+}
+
 export function routeMessageFlow(
   sourceBounds: Bounds,
   targetBounds: Bounds,
@@ -215,6 +250,26 @@ export function routeMessageFlow(
   const srcPort: Point = { x: srcX, y: srcY };
   const tgtX = opts.targetPortX ?? Math.round(targetBounds.x + targetBounds.width / 2);
   const tgtPort: Point = { x: tgtX, y: tgtY };
+
+  // A message flow doesn't have to leave its source at the center: when the
+  // two shapes overlap horizontally, run straight at an x inside both instead
+  // of stepping sideways just to leave from the middle of the edge.
+  const straightX = findSharedStraightX(sourceBounds, targetBounds, {
+    sourcePortX: opts.sourcePortX,
+    targetPortX: opts.targetPortX,
+  });
+  if (straightX !== undefined) {
+    const blocked = isMessageCorridorBlocked(straightX, [srcY, tgtY], {
+      ignore,
+      obstacles: opts.obstacles,
+    });
+    if (!blocked) {
+      return [
+        { x: straightX, y: srcY },
+        { x: straightX, y: tgtY },
+      ];
+    }
+  }
 
   if (srcPort.x === tgtPort.x) {
     const blocked = isMessageCorridorBlocked(srcPort.x, [srcPort.y, tgtPort.y], {
