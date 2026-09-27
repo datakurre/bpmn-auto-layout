@@ -37,11 +37,21 @@ jobs:
       - name: Verify code quality & tests (100% coverage)
         run: nix develop --command sh -c "npm ci && npm run typecheck && npm run build && npm test && npm run lint && npm run format:check"
 
+      - name: Run scale benchmark
+        run: nix develop --command npm run benchmark:scale
+
       - name: Upload coverage artifact
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
           path: coverage/
+          retention-days: 7
+
+      - name: Upload benchmark artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-gallery
+          path: test/benchmarks/output/
           retention-days: 7
 
   deploy:
@@ -60,6 +70,13 @@ jobs:
         with:
           name: coverage-report
           path: coverage
+        continue-on-error: true
+
+      - name: Download benchmark artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-gallery
+          path: test/benchmarks/output
         continue-on-error: true
 
       - name: Setup Node.js

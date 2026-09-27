@@ -1,6 +1,6 @@
 import { describe, it, afterAll, expect } from 'vitest';
 import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync } from 'node:fs';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { layoutProcess } from '../../src/index';
 import { scoreDiagram } from '../../src/layout-metrics';
@@ -49,10 +49,19 @@ interface TierResult {
   error?: string;
 }
 
-function renderTierPng(name: string, xml: string): void {
+function ensureOutputDir(): void {
   if (!existsSync(OUTPUT_DIR)) {
     mkdirSync(OUTPUT_DIR, { recursive: true });
   }
+}
+
+function writeTierXml(name: string, xml: string): void {
+  ensureOutputDir();
+  writeFileSync(join(OUTPUT_DIR, `${name}.bpmn`), xml, 'utf8');
+}
+
+function renderTierPng(name: string, xml: string): void {
+  ensureOutputDir();
   execFileSync(
     'bpmn-to-image',
     [
@@ -108,6 +117,11 @@ function formatTable(results: TierResult[]): string {
     formatLine([...REPORT_COLUMNS]),
     ...rows.map((row) => formatLine(REPORT_COLUMNS.map((col) => row[col]))),
   ].join('\n');
+}
+
+function writeResultsJson(results: TierResult[]): void {
+  ensureOutputDir();
+  writeFileSync(join(OUTPUT_DIR, 'results.json'), JSON.stringify(results, null, 2), 'utf8');
 }
 
 function printReport(results: TierResult[]): void {
@@ -189,6 +203,7 @@ describe.skipIf(!process.env.BENCHMARK)(
           });
 
           if (tier.render) {
+            writeTierXml(tier.name, laidOutXml);
             try {
               renderTierPng(tier.name, laidOutXml);
             } catch (error) {
@@ -208,6 +223,7 @@ describe.skipIf(!process.env.BENCHMARK)(
 
     afterAll(() => {
       printReport(results);
+      writeResultsJson(results);
     });
   }
 );

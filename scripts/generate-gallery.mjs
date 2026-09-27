@@ -1,4 +1,12 @@
-import { readdirSync, copyFileSync, mkdirSync, existsSync, cpSync, writeFileSync } from 'node:fs';
+import {
+  readdirSync,
+  copyFileSync,
+  mkdirSync,
+  existsSync,
+  cpSync,
+  writeFileSync,
+  readFileSync,
+} from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -6,9 +14,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const rootDir = join(__dirname, '..');
 const snapshotsDir = join(rootDir, 'test/snapshots');
+const benchmarkDir = join(rootDir, 'test/benchmarks/output');
 const coverageDir = join(rootDir, 'coverage');
 const publicDir = join(rootDir, 'public');
 const publicSnapshotsDir = join(publicDir, 'snapshots');
+const publicBenchmarkDir = join(publicDir, 'benchmarks');
 const publicCoverageDir = join(publicDir, 'coverage');
 
 const SNAPSHOT_METADATA = {
@@ -265,6 +275,55 @@ const SNAPSHOT_METADATA = {
   },
 };
 
+function readBenchmarkResults() {
+  const resultsPath = join(benchmarkDir, 'results.json');
+  if (!existsSync(resultsPath)) {
+    return [];
+  }
+  try {
+    return JSON.parse(readFileSync(resultsPath, 'utf-8'));
+  } catch {
+    return [];
+  }
+}
+
+function capitalize(text) {
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+function buildBenchmarkItems(results) {
+  if (!existsSync(benchmarkDir)) {
+    return [];
+  }
+  mkdirSync(publicBenchmarkDir, { recursive: true });
+
+  const files = readdirSync(benchmarkDir);
+  const pngFiles = new Set(files.filter((f) => f.endsWith('.png')));
+  const bpmnFiles = new Set(files.filter((f) => f.endsWith('.bpmn')));
+  for (const file of files) {
+    if (file.endsWith('.png') || file.endsWith('.bpmn')) {
+      copyFileSync(join(benchmarkDir, file), join(publicBenchmarkDir, file));
+    }
+  }
+
+  return results
+    .filter((r) => pngFiles.has(`${r.name}.png`))
+    .map((r) => ({
+      file: `benchmarks/${r.name}.png`,
+      bpmnFile: bpmnFiles.has(`${r.name}.bpmn`) ? `benchmarks/${r.name}.bpmn` : null,
+      title: `${capitalize(r.name)} Tier (${r.repeats} Repeats)`,
+      iteration: 'Bench',
+      category: 'Scale Benchmarks',
+      description: `Composed by chaining ${r.repeats} of the same motifs proven in iterations 01-24: ${r.nodeCount} nodes, ${r.edgeCount} edges, laid out in ${Math.round(r.elapsedMs)}ms (${r.msPerNode.toFixed(2)} ms/node), ${r.edgeCrossings} crossings, ${r.totalBends} bends.`,
+      tags: [
+        `${r.nodeCount} Nodes`,
+        `${Math.round(r.elapsedMs)}ms`,
+        `${r.edgeCrossings} Crossings`,
+        `${r.shapeOverlaps} Overlaps`,
+      ],
+    }));
+}
+
 export function generateGallery() {
   mkdirSync(publicSnapshotsDir, { recursive: true });
 
@@ -285,7 +344,7 @@ export function generateGallery() {
     hasCoverage = true;
   }
 
-  const items = pngFiles.map((file) => {
+  const snapshotItems = pngFiles.map((file) => {
     const baseName = file.replace('.png', '');
     const bpmnFile = `${baseName}.bpmn`;
     const hasBpmn = bpmnFiles.has(bpmnFile);
@@ -296,23 +355,94 @@ export function generateGallery() {
       description: 'Rendered diagram snapshot.',
       tags: [],
     };
-    return { file, bpmnFile: hasBpmn ? bpmnFile : null, ...meta };
+    return {
+      file: `snapshots/${file}`,
+      bpmnFile: hasBpmn ? `snapshots/${bpmnFile}` : null,
+      ...meta,
+    };
   });
 
+  const benchmarkResults = readBenchmarkResults();
+  const benchmarkItems = buildBenchmarkItems(benchmarkResults);
+  const items = [...snapshotItems, ...benchmarkItems];
+
   const categories = ['All', ...new Set(items.map((i) => i.category))];
-  const html = generateHtml({ items, categories, hasCoverage });
+  const html = generateHtml({ items, categories, hasCoverage, benchmarkResults });
   writeFileSync(join(publicDir, 'index.html'), html, 'utf-8');
 
   console.log(`Gallery generated at ${publicDir}/index.html with ${items.length} snapshots.`);
 }
 
-function generateHtml({ items, categories, hasCoverage }) {
+function benchmarkTableRows(results) {
+  return results
+    .map((r, i) => {
+      const previous = results[i - 1];
+      const jumped =
+        r.status === 'ok' &&
+        previous?.status === 'ok' &&
+        previous.msPerNode > 0 &&
+        r.msPerNode / previous.msPerNode > 3;
+      return `
+        <tr class="${jumped ? 'benchmark-row-flag' : ''}">
+          <td>${escapeHtml(r.name)}</td>
+          <td>${escapeHtml(r.status)}</td>
+          <td>${r.nodeCount}</td>
+          <td>${r.edgeCount}</td>
+          <td>${Math.round(r.elapsedMs)}</td>
+          <td>${Number.isFinite(r.msPerNode) ? r.msPerNode.toFixed(2) : 'n/a'}</td>
+          <td>${Number.isFinite(r.edgeCrossings) ? r.edgeCrossings : 'n/a'}</td>
+          <td>${Number.isFinite(r.totalBends) ? r.totalBends : 'n/a'}</td>
+          <td>${Number.isFinite(r.shapeOverlaps) ? r.shapeOverlaps : 'n/a'}</td>
+        </tr>`;
+    })
+    .join('\n');
+}
+
+function benchmarkTableSection(results) {
+  if (!results || results.length === 0) {
+    return '';
+  }
+  return `
+    <section class="benchmark-section">
+      <h2 class="benchmark-title">Scale Benchmark Results</h2>
+      <p class="subtitle" style="margin: 0 0 1.5rem;">
+        Diagrams composed by chaining the same motifs proven in iterations 01-24
+        (chains, branch/join, cycles, boundary events, subprocesses) into
+        progressively bigger processes, to find where layout correctness or
+        performance breaks down. Rows highlighted in orange show a
+        super-linear jump in per-node layout time versus the previous tier.
+        See <code>test/benchmarks/scale-benchmark.test.ts</code>.
+      </p>
+      <div class="benchmark-table-wrap">
+        <table class="benchmark-table">
+          <thead>
+            <tr>
+              <th>Tier</th>
+              <th>Status</th>
+              <th>Nodes</th>
+              <th>Edges</th>
+              <th>ms</th>
+              <th>ms/node</th>
+              <th>Crossings</th>
+              <th>Bends</th>
+              <th>Overlaps</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${benchmarkTableRows(results)}
+          </tbody>
+        </table>
+      </div>
+    </section>`;
+}
+
+function generateHtml({ items, categories, hasCoverage, benchmarkResults }) {
   const cardsHtml = items
     .map(
       (item) => `
     <article class="card" data-category="${item.category}" data-iteration="${item.iteration}">
-      <div class="card-image-wrap" onclick="openModal('snapshots/${item.file}', '${escapeHtml(item.title)}', ${item.bpmnFile ? `'snapshots/${item.bpmnFile}'` : 'null'})">
-        <img src="snapshots/${item.file}" alt="${escapeHtml(item.title)}" loading="lazy" />
+      <div class="card-image-wrap" onclick="openModal('${item.file}', '${escapeHtml(item.title)}', ${item.bpmnFile ? `'${item.bpmnFile}'` : 'null'})">
+        <img src="${item.file}" alt="${escapeHtml(item.title)}" loading="lazy" />
         <div class="zoom-hint">Click to enlarge</div>
       </div>
       <div class="card-content">
@@ -328,7 +458,7 @@ function generateHtml({ items, categories, hasCoverage }) {
           </div>
           ${
             item.bpmnFile
-              ? `<a class="bpmn-btn" href="snapshots/${item.bpmnFile}" download title="Download BPMN 2.0 XML">
+              ? `<a class="bpmn-btn" href="${item.bpmnFile}" download title="Download BPMN 2.0 XML">
                   <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
                     <polyline points="7 10 12 15 17 10"/>
@@ -717,6 +847,61 @@ function generateHtml({ items, categories, hasCoverage }) {
       border-top: 1px solid var(--border);
       padding-top: 2rem;
     }
+
+    .benchmark-section {
+      margin-top: 3.5rem;
+      padding-top: 2.5rem;
+      border-top: 1px solid var(--border);
+    }
+
+    .benchmark-title {
+      font-size: 1.5rem;
+      font-weight: 800;
+      margin-bottom: 0.75rem;
+    }
+
+    .benchmark-table-wrap {
+      overflow-x: auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+    }
+
+    .benchmark-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+      white-space: nowrap;
+    }
+
+    .benchmark-table th,
+    .benchmark-table td {
+      padding: 0.6rem 1rem;
+      text-align: right;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .benchmark-table th:first-child,
+    .benchmark-table td:first-child {
+      text-align: left;
+    }
+
+    .benchmark-table th {
+      color: var(--text-muted);
+      font-weight: 700;
+      text-transform: uppercase;
+      font-size: 0.75rem;
+      letter-spacing: 0.05em;
+    }
+
+    .benchmark-table tbody tr:last-child td {
+      border-bottom: none;
+    }
+
+    .benchmark-row-flag td {
+      background: rgba(217, 119, 6, 0.12);
+      color: #fbbf24;
+    }
   </style>
 </head>
 <body>
@@ -768,6 +953,8 @@ function generateHtml({ items, categories, hasCoverage }) {
     <section class="gallery-grid" id="galleryGrid">
       ${cardsHtml}
     </section>
+
+    ${benchmarkTableSection(benchmarkResults)}
   </main>
 
   <!-- Lightbox Modal -->

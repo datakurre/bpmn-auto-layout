@@ -73,7 +73,7 @@ nix develop --command npm run benchmark:scale          # up to ~5,000-node "extr
 nix develop --command npm run benchmark:scale:extreme  # also runs the ~12,500-node "breaking-point" tier
 ```
 
-The run prints a size/time/quality table and flags the first tier with hard violations or a super-linear time jump. Rendered PNGs for the two smallest tiers land in the gitignored `test/benchmarks/output/` for visual inspection.
+The run prints a size/time/quality table and flags the first tier with hard violations or a super-linear time jump. Rendered PNGs, BPMN XML, and a `results.json` for the two smallest tiers land in the gitignored `test/benchmarks/output/` for visual inspection. CI runs `benchmark:scale` as part of the Pages workflow's `test` job and uploads that output as a `benchmark-gallery` artifact, which the `deploy` job downloads so `scripts/generate-gallery.mjs` can publish a "Scale Benchmarks" section (calibration/medium diagrams) plus a full results table for every tier, published to https://datakurre.github.io/bpmn-auto-layout/.
 
 ---
 
