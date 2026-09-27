@@ -64,6 +64,17 @@ Before reporting work complete, always run:
 nix develop --command sh -c "npm run typecheck && npm run build && npm test && npm run lint && npm run format:check"
 ```
 
+### 5. Scale Benchmarking
+
+`test/benchmarks/scale-benchmark.test.ts` composes the same motifs proven in iterations 01-24 (chains, branch/join, cycles, boundary events, subprocesses) into progressively bigger diagrams to find where layout correctness or performance breaks down. It's skipped during normal `npm test` runs; run it explicitly:
+
+```bash
+nix develop --command npm run benchmark:scale          # up to ~5,000-node "extreme" tier
+nix develop --command npm run benchmark:scale:extreme  # also runs the ~12,500-node "breaking-point" tier
+```
+
+The run prints a size/time/quality table and flags the first tier with hard violations or a super-linear time jump. Rendered PNGs for the two smallest tiers land in the gitignored `test/benchmarks/output/` for visual inspection.
+
 ---
 
 ## What is `bpmn-to-image`?
