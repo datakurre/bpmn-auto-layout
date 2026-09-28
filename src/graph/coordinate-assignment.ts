@@ -9,7 +9,7 @@ import {
 } from '../di-constants';
 import { alignMergeNodeTrack } from './dummy-nodes';
 import { computeNodeDimensions } from './text-fit';
-import type { AutoLayoutOptions, Bounds } from '../types';
+import type { AutoLayoutOptions, Bounds, ElementDimension } from '../types';
 
 export interface CoordinateOptions extends AutoLayoutOptions {
   feedbackEdges?: Set<string>;
@@ -28,6 +28,7 @@ interface ColConfig {
   startX: number;
   gridSpacing: number;
   widthBudget?: number;
+  activityDimensions?: ElementDimension;
 }
 
 export function assignCoordinates(
@@ -46,13 +47,21 @@ export function assignCoordinates(
     startX,
     gridSpacing,
     widthBudget: hasLanes ? undefined : options?.widthBudget,
+    activityDimensions: options?.activityDimensions,
   });
 
   const tracks = hasLanes
     ? computeLaneAwareTracks(graph, ranks, options!)
     : computeFlatTracks(graph, ranks, options?.feedbackEdges);
 
-  return computeFinalBounds(nodes, tracks, { colWidths, colX, ranks, rankRows, graph });
+  return computeFinalBounds(nodes, tracks, {
+    colWidths,
+    colX,
+    ranks,
+    rankRows,
+    graph,
+    activityDimensions: options?.activityDimensions,
+  });
 }
 
 function groupNodesByRank(
@@ -77,6 +86,7 @@ interface ColInfo {
   ranks: Map<string, number>;
   rankRows: Map<number, number>;
   graph?: DirectedGraph;
+  activityDimensions?: ElementDimension;
 }
 
 interface TrackExtent {
@@ -91,11 +101,14 @@ interface TrackYContext {
   rowOffsets: Map<number, number>;
 }
 
-function getNodeDimensions(node: { data?: any }): { width: number; height: number } {
+function getNodeDimensions(
+  node: { data?: any },
+  activityDimensions?: ElementDimension
+): ElementDimension {
   if (node.data?.isDummy) {
     return { width: 0, height: 0 };
   }
-  return computeNodeDimensions(node.data?.$type, node.data?.name);
+  return computeNodeDimensions(node.data?.$type, node.data?.name, activityDimensions);
 }
 
 function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
@@ -109,7 +122,7 @@ function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
     const rowOffset = ctx.rowOffsets.get(row) || 0;
     const track = baseTrack + rowOffset;
 
-    const dim = getNodeDimensions(node);
+    const dim = getNodeDimensions(node, ctx.colInfo.activityDimensions);
     const h = node.data?.customHeight ?? dim.height;
     const hasBottomBoundary = Boolean(
       graph && graph.outEdges(node.id).some((e) => isAttachEdge(e))
@@ -207,7 +220,7 @@ function computeFinalBounds(
   for (const node of nodes) {
     const rank = colInfo.ranks.get(node.id) || 0;
     const row = colInfo.rankRows.get(rank) || 0;
-    const dim = getNodeDimensions(node);
+    const dim = getNodeDimensions(node, colInfo.activityDimensions);
     const w = node.data?.customWidth ?? dim.width;
     const h = node.data?.customHeight ?? dim.height;
     const colWidth = colInfo.colWidths.get(rank)!;
@@ -240,7 +253,7 @@ function computeColumnPositions(
     let maxWidth = 0;
     for (const id of nodeIds) {
       const node = graph.getNode(id)!;
-      const dim = getNodeDimensions(node);
+      const dim = getNodeDimensions(node, config.activityDimensions);
       const w = node.data?.customWidth ?? dim.width;
       maxWidth = Math.max(maxWidth, w);
     }

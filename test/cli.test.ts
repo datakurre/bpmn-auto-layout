@@ -238,4 +238,32 @@ describe('cli', () => {
     const codeDangling = await runCli(['in.bpmn', '-s'], io);
     expect(codeDangling).toBe(0);
   });
+
+  it('sizes each activity to its own label with --no-normalize-sizes', async () => {
+    const twoTasks = `<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" id="Definitions_1" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:process id="Process_1" isExecutable="false">
+    <bpmn:task id="Task_Short" name="Short" />
+    <bpmn:task id="Task_Long" name="Record permission-to-print decision and opponent appointments" />
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Task_Short" targetRef="Task_Long" />
+  </bpmn:process>
+</bpmn:definitions>`;
+    const shortTaskWidth = async (args: string[]): Promise<number> => {
+      let written = '';
+      const io: CliIo = {
+        stdout: () => {},
+        stderr: () => {},
+        readFile: () => twoTasks,
+        writeFile: (_, content) => {
+          written = content;
+        },
+      };
+      expect(await runCli([...args, 'in.bpmn', 'out.bpmn'], io)).toBe(0);
+      const shape = written.match(/bpmnElement="Task_Short">\s*<dc:Bounds[^>]*width="(\d+)"/);
+      return Number(shape![1]);
+    };
+
+    expect(await shortTaskWidth([])).toBeGreaterThan(100);
+    expect(await shortTaskWidth(['--no-normalize-sizes'])).toBe(100);
+  });
 });

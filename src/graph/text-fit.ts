@@ -1,4 +1,4 @@
-import { getElementDimensions } from '../di-constants';
+import { getElementDimensions, isSubProcessType } from '../di-constants';
 import { estimateWordWidth } from './label-layout';
 import type { ElementDimension } from '../types';
 
@@ -79,14 +79,25 @@ export function computeHeaderLabelLength(name: string | undefined): number {
 }
 
 /**
- * Size of a flow node: its default box, except that an activity whose label
- * doesn't fit that box is widened first (up to 140px, so the label needs at
+ * Size of a flow node: `uniformActivity` for an activity when the diagram
+ * normalizes activity sizes, otherwise its default box, except that an
+ * activity whose label doesn't fit that box is widened first (up to 140px, so the label needs at
  * most three lines) and then made taller. A task with a type icon in its
  * top-left corner also keeps the label's first line clear of that icon.
  */
-export function computeNodeDimensions(type: string | undefined, name?: string): ElementDimension {
+export function computeNodeDimensions(
+  type: string | undefined,
+  name?: string,
+  uniformActivity?: ElementDimension
+): ElementDimension {
   const base = getElementDimensions(type ?? '');
-  if (!type || !LABELED_ACTIVITY_TYPES.has(type) || !name || name.trim() === '') {
+  if (!type || !LABELED_ACTIVITY_TYPES.has(type)) {
+    return base;
+  }
+  if (uniformActivity) {
+    return uniformActivity;
+  }
+  if (!name || name.trim() === '') {
     return base;
   }
   let width = base.width;
@@ -100,4 +111,34 @@ export function computeNodeDimensions(type: string | undefined, name?: string): 
     : TASK_LABEL_VERTICAL_ALLOWANCE / 2;
   const neededHeight = Math.ceil((lines * TASK_LABEL_LINE_HEIGHT + 2 * clearance) / 10) * 10;
   return { width, height: Math.max(base.height, neededHeight) };
+}
+
+function collectActivities(container: any, activities: any[]): void {
+  for (const element of container.flowElements || []) {
+    if (isSubProcessType(element.$type)) {
+      // A sub-process is sized to its content, but the activities inside it count.
+      collectActivities(element, activities);
+    } else if (LABELED_ACTIVITY_TYPES.has(element.$type)) {
+      activities.push(element);
+    }
+  }
+}
+
+/**
+ * The one size every activity in the diagram shares: the smallest box that
+ * fits the label of each of them, never below the default size.
+ */
+export function computeUniformActivityDimensions(processes: any[]): ElementDimension {
+  const activities: any[] = [];
+  for (const process of processes) {
+    collectActivities(process, activities);
+  }
+  let width = getElementDimensions('bpmn:Task').width;
+  let height = getElementDimensions('bpmn:Task').height;
+  for (const activity of activities) {
+    const dim = computeNodeDimensions(activity.$type, activity.name);
+    width = Math.max(width, dim.width);
+    height = Math.max(height, dim.height);
+  }
+  return { width, height };
 }

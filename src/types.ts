@@ -42,6 +42,20 @@ export interface AutoLayoutOptions {
    * Defaults to false.
    */
   alignEndEvents?: boolean;
+
+  /**
+   * Whether every activity (task, call activity) gets the same size: the
+   * smallest box that fits the longest label in the diagram. When false, each
+   * activity is sized to its own label. Defaults to true.
+   */
+  normalizeActivitySizes?: boolean;
+
+  /**
+   * The uniform activity size, resolved from `normalizeActivitySizes` by the
+   * layout engine for each diagram. Not meant to be set by callers.
+   * @internal
+   */
+  activityDimensions?: ElementDimension;
 }
 
 export interface HardViolations {

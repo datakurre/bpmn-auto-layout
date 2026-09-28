@@ -30,6 +30,7 @@ Auto-layout BPMN 2.0 diagrams, generating missing DI information.
 Options:
   -i, --in-place         Overwrite the input file in place
   -s, --spacing <number> Set grid spacing between elements (default: 60)
+  --no-normalize-sizes   Size each activity to its own label instead of one shared size
   -v, --version          Show version number
   -h, --help             Show help
 `;
@@ -37,6 +38,7 @@ Options:
 interface ParsedArgs {
   inPlace: boolean;
   spacing?: number;
+  normalizeSizes: boolean;
   showHelp: boolean;
   showVersion: boolean;
   input?: string;
@@ -46,6 +48,7 @@ interface ParsedArgs {
 function parseCliArgs(args: string[]): ParsedArgs {
   let inPlace = false;
   let spacing: number | undefined;
+  let normalizeSizes = true;
   let showHelp = false;
   let showVersion = false;
   const positional: string[] = [];
@@ -58,6 +61,8 @@ function parseCliArgs(args: string[]): ParsedArgs {
       showVersion = true;
     } else if (arg === '-i' || arg === '--in-place') {
       inPlace = true;
+    } else if (arg === '--no-normalize-sizes') {
+      normalizeSizes = false;
     } else if (arg === '-s' || arg === '--spacing') {
       i++;
       if (i < args.length) {
@@ -71,6 +76,7 @@ function parseCliArgs(args: string[]): ParsedArgs {
   return {
     inPlace,
     spacing,
+    normalizeSizes,
     showHelp,
     showVersion,
     input: positional[0],
@@ -93,7 +99,10 @@ export async function runCli(args: string[], io: CliIo = defaultIo): Promise<num
 
   try {
     const xml = io.readFile(parsed.input, 'utf-8');
-    const result = await layoutProcess(xml, { gridSpacing: parsed.spacing });
+    const result = await layoutProcess(xml, {
+      gridSpacing: parsed.spacing,
+      normalizeActivitySizes: parsed.normalizeSizes,
+    });
 
     if (parsed.inPlace) {
       io.writeFile(parsed.input, result, 'utf-8');

@@ -12,7 +12,7 @@ import {
   isMessageCorridorBlocked,
 } from './hierarchy/swimlane-layout';
 import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/label-layout';
-import { computeHeaderLabelLength } from './graph/text-fit';
+import { computeHeaderLabelLength, computeUniformActivityDimensions } from './graph/text-fit';
 import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
@@ -72,9 +72,12 @@ interface PoolAndLanesParams {
 export class LayoutEngine {
   private moddle: BPMNModdle;
   private diGenerator: DiGenerator;
+  private readonly userOptions?: AutoLayoutOptions;
+  // The user's options plus what depends on the diagram being laid out.
   private options?: AutoLayoutOptions;
 
   constructor(options?: AutoLayoutOptions) {
+    this.userOptions = options;
     this.options = options;
     this.moddle = new BpmnModdle(options?.moddleExtensions);
     this.diGenerator = new DiGenerator(this.moddle);
@@ -99,6 +102,7 @@ export class LayoutEngine {
       return { xml: unformatted, warnings };
     }
 
+    this.options = this.resolveOptions(definitions);
     const diagram = this.diGenerator.ensureDiagram(definitions, targetElement);
     const existingParticipantY = extractExistingParticipantY(diagram.plane);
     diagram.plane.planeElement = [];
@@ -120,6 +124,14 @@ export class LayoutEngine {
 
     const { xml: resultXml } = await this.moddle.toXML(definitions, { format: true });
     return { xml: resultXml, warnings };
+  }
+
+  private resolveOptions(definitions: any): AutoLayoutOptions | undefined {
+    if (this.userOptions?.normalizeActivitySizes === false) {
+      return this.userOptions;
+    }
+    const processes = definitions.rootElements.filter((el: any) => el.$type === 'bpmn:Process');
+    return { ...this.userOptions, activityDimensions: computeUniformActivityDimensions(processes) };
   }
 
   private selectTargetElement(definitions: any): any {

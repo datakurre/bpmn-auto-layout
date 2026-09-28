@@ -7,10 +7,14 @@ import { scoreDiagram } from '../src/layout-metrics';
 import {
   computeHeaderLabelLength,
   computeNodeDimensions,
+  computeUniformActivityDimensions,
   countWrappedLines,
 } from '../src/graph/text-fit';
 import { expectSnapshotMatch } from './helpers/snapshot-helper';
 import { measureLabelFit, readLaidOutShapes } from './helpers/label-fit-metrics';
+
+const task = (name?: string) => ({ $type: 'bpmn:UserTask', name });
+const process = (flowElements: any[]) => ({ flowElements });
 
 const LONG_TASK =
   'Enter confirmed public-exam details and upload the final dissertation for printing approval';
@@ -56,6 +60,32 @@ describe('text-fit helpers', () => {
     expect(tall.height).toBeGreaterThan(80);
   });
 
+  it('gives every activity the uniform size when one is given, and leaves other nodes alone', () => {
+    const uniform = { width: 140, height: 100 };
+    expect(computeNodeDimensions('bpmn:UserTask', 'Short', uniform)).toEqual(uniform);
+    expect(computeNodeDimensions('bpmn:Task', undefined, uniform)).toEqual(uniform);
+    expect(computeNodeDimensions('bpmn:EndEvent', 'Done', uniform)).toEqual({
+      width: 36,
+      height: 36,
+    });
+  });
+
+  it('computes the uniform size from the largest label, including nested activities', () => {
+    expect(computeUniformActivityDimensions([])).toEqual({ width: 100, height: 80 });
+    expect(computeUniformActivityDimensions([{}, process([task('Short')])])).toEqual({
+      width: 100,
+      height: 80,
+    });
+    const nested = process([
+      task('Short'),
+      { $type: 'bpmn:StartEvent', name: LONG_TASK },
+      { $type: 'bpmn:SubProcess', flowElements: [task(LONG_TASK)] },
+    ]);
+    expect(computeUniformActivityDimensions([nested])).toEqual(
+      computeNodeDimensions('bpmn:UserTask', LONG_TASK)
+    );
+  });
+
   it('reserves room for the task-type icon only on tasks that draw one', () => {
     const name = 'Review and release the statement to the student now';
     const plain = computeNodeDimensions('bpmn:Task', name);
@@ -77,6 +107,27 @@ describe('Long labels in collaborations with lanes', () => {
     expect(score.isValid).toBe(true);
     expect(score.metrics.edgeCrossings).toBe(0);
     expectSnapshotMatch(resultXml, '25-grant-review-collaboration');
+  });
+
+  it('gives every activity the same size by default', async () => {
+    const { shapes } = await readLaidOutShapes(await layoutProcess(fixture));
+    const sizes = new Set(
+      [...shapes].filter(([id]) => id.startsWith('Task_')).map(([, b]) => `${b.width}x${b.height}`)
+    );
+    expect([...sizes]).toHaveLength(1);
+    expect(shapes.get('Task_DraftProposal')!.width).toBeGreaterThan(100);
+  });
+
+  it('sizes each activity to its own label when normalizeActivitySizes is false', async () => {
+    const xml = await layoutProcess(fixture, { normalizeActivitySizes: false });
+    const layout = await readLaidOutShapes(xml);
+    const sizes = new Set(
+      [...layout.shapes]
+        .filter(([id]) => id.startsWith('Task_'))
+        .map(([, b]) => `${b.width}x${b.height}`)
+    );
+    expect(sizes.size).toBeGreaterThan(1);
+    expect(measureLabelFit(layout).overflowingTasks).toEqual([]);
   });
 
   it('fits every header, task label and element label', async () => {
@@ -139,9 +190,9 @@ describe('Pool headers without lanes', () => {
     }
     expect(shapes.get('Pool_Box')!.height).toBeGreaterThan(60);
     const pool = shapes.get('Pool_Long')!;
-    const task = shapes.get('Task_1')!;
-    const above = task.y - pool.y;
-    const below = pool.y + pool.height - (task.y + task.height);
+    const box = shapes.get('Task_1')!;
+    const above = box.y - pool.y;
+    const below = pool.y + pool.height - (box.y + box.height);
     expect(Math.abs(above - below)).toBeLessThanOrEqual(10);
   });
 });
