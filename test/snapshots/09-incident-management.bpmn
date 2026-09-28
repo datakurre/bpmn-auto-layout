@@ -31,7 +31,7 @@
         <bpmn:flowNodeRef>Task_Deploy_Hotfix</bpmn:flowNodeRef>
       </bpmn:lane>
     </bpmn:laneSet>
-    <bpmn:startEvent id="Start_Incident" name="Incident Reported" />
+    <bpmn:startEvent id="Start_Incident" name="Incident&#10;Reported" />
     <bpmn:task id="Task_Log" name="Log Incident" />
     <bpmn:exclusiveGateway id="Gateway_Merge_Triage" name="Triage Intake" />
     <bpmn:task id="Task_Triage" name="Initial Triage" />
@@ -87,7 +87,7 @@
       <bpmndi:BPMNShape id="Start_Incident_di" bpmnElement="Start_Incident">
         <dc:Bounds x="180" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="151" y="173" width="94" height="14" />
+          <dc:Bounds x="171" y="173" width="50" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Task_Log_di" bpmnElement="Task_Log">

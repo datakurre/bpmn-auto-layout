@@ -7,7 +7,7 @@
     <bpmn:messageFlow id="MF_Proposal" name="Commercial Proposal" sourceRef="V_DeliverQuote" targetRef="Client_WaitQuote" />
   </bpmn:collaboration>
   <bpmn:process id="Proc_Client" isExecutable="false">
-    <bpmn:startEvent id="Client_Start" name="Project Needed" />
+    <bpmn:startEvent id="Client_Start" name="Project&#10;Needed" />
     <bpmn:task id="Client_Inquire" name="Send Request for Quote" />
     <bpmn:intermediateCatchEvent id="Client_WaitQuote" name="Receive Proposal" />
     <bpmn:endEvent id="Client_End" name="Decision Made" />
@@ -68,7 +68,7 @@
       <bpmndi:BPMNShape id="Client_Start_di" bpmnElement="Client_Start">
         <dc:Bounds x="150" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="127" y="173" width="82" height="14" />
+          <dc:Bounds x="145" y="173" width="42" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Client_Inquire_di" bpmnElement="Client_Inquire">
@@ -187,14 +187,14 @@
         <di:waypoint x="296" y="185" />
         <di:waypoint x="296" y="357" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="306" y="247" width="90" height="14" />
+          <dc:Bounds x="306" y="233" width="90" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_Proposal_di" bpmnElement="MF_Proposal">
         <di:waypoint x="1476" y="335" />
         <di:waypoint x="1476" y="163" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="1486" y="242" width="114" height="14" />
+          <dc:Bounds x="1486" y="233" width="114" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

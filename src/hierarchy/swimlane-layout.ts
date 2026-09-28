@@ -1,6 +1,7 @@
 import type { Bounds, Point } from '../types';
 import { LANE_MIN_HEIGHT } from '../di-constants';
 import { verticalSegmentHitsBox } from '../graph/obstacles';
+import { computeHeaderLabelLength } from '../graph/text-fit';
 
 export interface LaneLayoutResult {
   lanes: Array<{ element: any; bounds: Bounds }>;
@@ -11,6 +12,8 @@ export interface LaneLayoutOptions {
   startX: number;
   startY: number;
   totalWidth: number;
+  /** Height the pool needs for its own header label; the last lane grows to reach it. */
+  minTotalHeight?: number;
   edges?: Array<{ element: any; waypoints: Point[]; isFeedback?: boolean }>;
 }
 
@@ -60,7 +63,15 @@ export function layoutProcessLanes(
     return computeSingleLaneExtent(laneElements, laneNodeIds, options.edges);
   });
 
-  const laneDividers = computeLaneDividers(extents, options.startY);
+  const laneMinHeights = rawLanes.map((lane: any) =>
+    Math.max(LANE_MIN_HEIGHT, computeHeaderLabelLength(lane.name))
+  );
+  const laneDividers = computeLaneDividers(extents, options.startY, laneMinHeights);
+  const lastIndex = laneDividers.length - 1;
+  laneDividers[lastIndex] = Math.max(
+    laneDividers[lastIndex],
+    options.startY + (options.minTotalHeight ?? 0)
+  );
   const laneResults: Array<{ element: any; bounds: Bounds }> = [];
   let prevY = options.startY;
 
@@ -124,7 +135,11 @@ function computeSingleLaneExtent(
   return { hasContent: true, minY, maxY };
 }
 
-function computeLaneDividers(extents: LaneContentExtent[], startY: number): number[] {
+function computeLaneDividers(
+  extents: LaneContentExtent[],
+  startY: number,
+  minHeights: number[]
+): number[] {
   const n = extents.length;
   const dividers: number[] = [];
   let prevY = startY;
@@ -133,7 +148,7 @@ function computeLaneDividers(extents: LaneContentExtent[], startY: number): numb
     const curr = extents[i];
     const next = extents[i + 1];
 
-    let minBottom = prevY + LANE_MIN_HEIGHT;
+    let minBottom = prevY + minHeights[i];
     if (curr.hasContent) {
       minBottom = Math.max(minBottom, curr.maxY + 20);
     }
@@ -153,7 +168,7 @@ function computeLaneDividers(extents: LaneContentExtent[], startY: number): numb
   }
 
   const last = extents[n - 1];
-  let lastBottom = prevY + LANE_MIN_HEIGHT;
+  let lastBottom = prevY + minHeights[n - 1];
   if (last?.hasContent) {
     lastBottom = Math.max(lastBottom, last.maxY + 25);
   }

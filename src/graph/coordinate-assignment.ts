@@ -1,6 +1,5 @@
 import { isAttachEdge, type DirectedGraph } from './graph';
 import {
-  getElementDimensions,
   DEFAULT_GRID_SPACING,
   GRID_START_X,
   GRID_START_X_WITH_LANES,
@@ -9,6 +8,7 @@ import {
   BOUNDARY_TRACK_PADDING,
 } from '../di-constants';
 import { alignMergeNodeTrack } from './dummy-nodes';
+import { computeNodeDimensions } from './text-fit';
 import type { AutoLayoutOptions, Bounds } from '../types';
 
 export interface CoordinateOptions extends AutoLayoutOptions {
@@ -91,6 +91,13 @@ interface TrackYContext {
   rowOffsets: Map<number, number>;
 }
 
+function getNodeDimensions(node: { data?: any }): { width: number; height: number } {
+  if (node.data?.isDummy) {
+    return { width: 0, height: 0 };
+  }
+  return computeNodeDimensions(node.data?.$type, node.data?.name);
+}
+
 function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
   const extents = new Map<number, TrackExtent>();
   const graph = ctx.colInfo.graph;
@@ -102,9 +109,7 @@ function collectTrackExtents(ctx: TrackYContext): Map<number, TrackExtent> {
     const rowOffset = ctx.rowOffsets.get(row) || 0;
     const track = baseTrack + rowOffset;
 
-    const dim = node.data?.isDummy
-      ? { width: 0, height: 0 }
-      : getElementDimensions(node.data?.$type);
+    const dim = getNodeDimensions(node);
     const h = node.data?.customHeight ?? dim.height;
     const hasBottomBoundary = Boolean(
       graph && graph.outEdges(node.id).some((e) => isAttachEdge(e))
@@ -202,9 +207,7 @@ function computeFinalBounds(
   for (const node of nodes) {
     const rank = colInfo.ranks.get(node.id) || 0;
     const row = colInfo.rankRows.get(rank) || 0;
-    const dim = node.data?.isDummy
-      ? { width: 0, height: 0 }
-      : getElementDimensions(node.data?.$type);
+    const dim = getNodeDimensions(node);
     const w = node.data?.customWidth ?? dim.width;
     const h = node.data?.customHeight ?? dim.height;
     const colWidth = colInfo.colWidths.get(rank)!;
@@ -237,9 +240,7 @@ function computeColumnPositions(
     let maxWidth = 0;
     for (const id of nodeIds) {
       const node = graph.getNode(id)!;
-      const dim = node.data?.isDummy
-        ? { width: 0, height: 0 }
-        : getElementDimensions(node.data?.$type);
+      const dim = getNodeDimensions(node);
       const w = node.data?.customWidth ?? dim.width;
       maxWidth = Math.max(maxWidth, w);
     }

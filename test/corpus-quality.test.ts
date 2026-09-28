@@ -40,6 +40,10 @@ import { scoreDiagram } from '../src/layout-metrics';
 //   a channel. The dummy-sweep guard alone changed no snapshot, so it wasn't
 //   added. (The third crossing in this fixture, LF_UW_Cond x LF_SLA_Flow, is a
 //   boundary-event exit edge and was never part of #99.)
+//
+// The baseline went 144 -> 152 only because 25-grant-review-collaboration (8
+// bends, 0 crossings) joined the corpus; every existing snapshot kept its
+// bend and crossing counts when headers and task boxes started fitting labels.
 describe('Corpus layout quality', () => {
   it('keeps total edge crossings and bends within the pinned baseline', async () => {
     const snapshotsDir = join(__dirname, 'snapshots');
@@ -63,6 +67,6 @@ describe('Corpus layout quality', () => {
     expect(totalShapeOverlaps).toBe(0);
     expect(totalEdgeShapeCrossings).toBe(0);
     expect(totalCrossings).toBeLessThanOrEqual(12);
-    expect(totalBends).toBeLessThanOrEqual(144);
+    expect(totalBends).toBeLessThanOrEqual(152);
   });
 });

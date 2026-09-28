@@ -12,6 +12,7 @@ import {
   isMessageCorridorBlocked,
 } from './hierarchy/swimlane-layout';
 import { layoutAllLabels, type PlacedEdge, type PlacedShape } from './graph/label-layout';
+import { computeHeaderLabelLength } from './graph/text-fit';
 import { normalizePlaneOrigin } from './plane-normalization';
 import { validateFlowContainers } from './validation/bpmn-validation';
 import { collectPlaneDiagnostics, type LayoutWarning } from './layout-warnings';
@@ -334,10 +335,11 @@ export class LayoutEngine {
       edges: provisionalEdges,
     });
     const contentHeight = maxContentY - minContentY;
+    const poolMinHeight = Math.max(MIN_POOL_HEIGHT, computeHeaderLabelLength(participant.name));
     const deltaX = hasLanes ? 0 : PARTICIPANT_CONTENT_X - result.minX;
     const padY = hasLanes
       ? POOL_CONTENT_PADDING_Y
-      : Math.max(POOL_CONTENT_PADDING_Y, Math.round((MIN_POOL_HEIGHT - contentHeight) / 2));
+      : Math.max(POOL_CONTENT_PADDING_Y, Math.round((poolMinHeight - contentHeight) / 2));
     const deltaY = currentY + padY - minContentY;
 
     translateScopeResult(result, { x: deltaX, y: deltaY }, provisionalEdges);
@@ -368,7 +370,7 @@ export class LayoutEngine {
       x: POOL_X,
       y: currentY,
       width: BLACKBOX_POOL_WIDTH,
-      height: BLACKBOX_POOL_HEIGHT,
+      height: Math.max(BLACKBOX_POOL_HEIGHT, computeHeaderLabelLength(participant.name)),
     };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;
@@ -393,6 +395,7 @@ export class LayoutEngine {
         startX: laneStartX,
         startY: currentY,
         totalWidth: laneWidth,
+        minTotalHeight: computeHeaderLabelLength(participant.name),
         edges,
       });
 
@@ -412,7 +415,11 @@ export class LayoutEngine {
       x: POOL_X,
       y: currentY,
       width: Math.max(MIN_POOL_WIDTH, result.width + POOL_WIDTH_MARGIN),
-      height: Math.max(MIN_POOL_HEIGHT, contentHeight + POOL_HEIGHT_MARGIN),
+      height: Math.max(
+        MIN_POOL_HEIGHT,
+        contentHeight + POOL_HEIGHT_MARGIN,
+        computeHeaderLabelLength(participant.name)
+      ),
     };
     allPools?.push({ element: participant, bounds: poolBounds });
     return poolBounds;

@@ -30,6 +30,7 @@
     "snapshots:render": "node scripts/render-snapshots.mjs",
     "benchmark:scale": "BENCHMARK=1 vitest run test/benchmarks/scale-benchmark.test.ts --testTimeout=300000 --coverage.enabled=false --reporter=verbose",
     "benchmark:scale:extreme": "BENCHMARK=1 BENCHMARK_EXTREME=1 vitest run test/benchmarks/scale-benchmark.test.ts --testTimeout=600000 --coverage.enabled=false --reporter=verbose",
+    "benchmark:labels": "BENCHMARK=1 vitest run test/benchmarks/label-fit-benchmark.test.ts --coverage.enabled=false --reporter=verbose",
     "gallery": "node scripts/generate-gallery.mjs",
     "prepare": "npm run build"
   },

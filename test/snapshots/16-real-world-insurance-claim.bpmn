@@ -8,7 +8,7 @@
     <bpmn:messageFlow id="MF_Wire" name="Direct Deposit Receipt" sourceRef="Task_Disburse" targetRef="Cust_ReceiveFunds" />
   </bpmn:collaboration>
   <bpmn:process id="Proc_Policyholder" isExecutable="false">
-    <bpmn:startEvent id="Cust_Start" name="Accident Occurs" />
+    <bpmn:startEvent id="Cust_Start" name="Accident&#10;Occurs" />
     <bpmn:task id="Cust_Submit" name="Submit Claim Dossier" />
     <bpmn:eventBasedGateway id="Cust_AwaitOutcome" name="Await Insurer Decision" />
     <bpmn:intermediateCatchEvent id="Cust_WaitNotice" name="Receive Ineligibility Notice" />
@@ -104,7 +104,7 @@
       <bpmndi:BPMNShape id="Cust_Start_di" bpmnElement="Cust_Start">
         <dc:Bounds x="150" y="127" width="36" height="36" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="124" y="173" width="88" height="14" />
+          <dc:Bounds x="141" y="173" width="50" height="28" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNShape>
       <bpmndi:BPMNShape id="Cust_Submit_di" bpmnElement="Cust_Submit">
@@ -350,21 +350,21 @@
         <di:waypoint x="296" y="185" />
         <di:waypoint x="296" y="415" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="306" y="293" width="106" height="14" />
+          <dc:Bounds x="306" y="331" width="106" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_Rejection_di" bpmnElement="MF_Rejection">
         <di:waypoint x="694" y="393" />
         <di:waypoint x="694" y="163" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="704" y="271" width="88" height="14" />
+          <dc:Bounds x="704" y="331" width="88" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
       <bpmndi:BPMNEdge id="MF_Wire_di" bpmnElement="MF_Wire">
         <di:waypoint x="2012" y="963" />
         <di:waypoint x="2012" y="283" />
         <bpmndi:BPMNLabel>
-          <dc:Bounds x="2022" y="616" width="118" height="14" />
+          <dc:Bounds x="2022" y="331" width="118" height="14" />
         </bpmndi:BPMNLabel>
       </bpmndi:BPMNEdge>
     </bpmndi:BPMNPlane>

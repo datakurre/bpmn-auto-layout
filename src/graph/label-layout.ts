@@ -6,6 +6,7 @@ import {
   FLOW_LABEL_MARGIN,
   GATEWAY_LABEL_MARGIN,
   LABEL_LINE_HEIGHT,
+  LANE_HEADER_WIDTH,
 } from '../di-constants';
 import type { Bounds, Point, ElementDimension } from '../types';
 
@@ -304,24 +305,18 @@ function doesBoxCollideWithShapes(box: Bounds, cctx: CollisionContext): boolean 
   return false;
 }
 
+// A pool's or lane's name is drawn rotated in a band along its left edge.
+function doesBoxCollideWithContainerHeader(box: Bounds, containerBounds: Bounds): boolean {
+  return boxesOverlap(box, { ...containerBounds, width: LANE_HEADER_WIDTH });
+}
+
 function doesBoxCollideWithContainers(box: Bounds, cctx: CollisionContext): boolean {
-  if (cctx.lanes) {
-    for (const lane of cctx.lanes) {
-      if (doesBoxCollideWithContainerBoundaries(box, lane.bounds)) {
-        return true;
-      }
-    }
-  }
-
-  if (cctx.pools) {
-    for (const pool of cctx.pools) {
-      if (doesBoxCollideWithContainerBoundaries(box, pool.bounds)) {
-        return true;
-      }
-    }
-  }
-
-  return false;
+  const containers = [...(cctx.lanes ?? []), ...(cctx.pools ?? [])];
+  return containers.some(
+    (container) =>
+      doesBoxCollideWithContainerBoundaries(box, container.bounds) ||
+      doesBoxCollideWithContainerHeader(box, container.bounds)
+  );
 }
 
 export function doesBoxCollide(box: Bounds, cctx: CollisionContext): boolean {
@@ -681,6 +676,48 @@ function findClearPathLabelPlacement(
   return undefined;
 }
 
+interface VerticalGap {
+  top: number;
+  bottom: number;
+}
+
+/**
+ * The gap between pools just below the pool a message flow leaves upward from
+ * (or arrives in from above): flows between the same pools share it, so their
+ * labels can share one row.
+ */
+function findMessageFlowGap(wps: Point[], pools: Bounds[] | undefined): VerticalGap | undefined {
+  const topY = Math.min(...wps.map((wp) => wp.y));
+  const sorted = [...(pools ?? [])].sort((a, b) => a.y - b.y);
+  const upper = sorted.findIndex((pool) => topY >= pool.y && topY <= pool.y + pool.height);
+  const next = upper === -1 ? undefined : sorted[upper + 1];
+  return next && { top: sorted[upper].y + sorted[upper].height, bottom: next.y };
+}
+
+// Centers a label in the gap, beside the flow, instead of at the flow's midpoint.
+function findGapPathLabelPlacement(
+  geom: PathLabelGeom,
+  gap: VerticalGap,
+  cctx: CollisionContext
+): Bounds | undefined {
+  const y = Math.round((gap.top + gap.bottom - geom.dim.height) / 2);
+  const segmentTop = Math.min(geom.p1.y, geom.p2.y);
+  const segmentBottom = Math.max(geom.p1.y, geom.p2.y);
+  if (
+    y < Math.max(gap.top, segmentTop) ||
+    y + geom.dim.height > Math.min(gap.bottom, segmentBottom)
+  ) {
+    return undefined;
+  }
+  for (const side of ['right', 'left'] as const) {
+    const candidate = { ...computePathSegmentLabel(geom, side), y };
+    if (!doesBoxCollide(candidate, cctx)) {
+      return candidate;
+    }
+  }
+  return undefined;
+}
+
 export function layoutPathLabel(
   edge: PlacedEdge,
   placedLabels: Bounds[],
@@ -720,10 +757,20 @@ export function layoutPathLabel(
     pools: ctx.pools,
   };
 
+  const gap =
+    edge.element.$type === 'bpmn:MessageFlow' && !isHorizontal
+      ? findMessageFlowGap(
+          wps,
+          ctx.pools?.map((pool) => pool.bounds)
+        )
+      : undefined;
+
   for (const text of wrapCandidates) {
     const dim = estimateLabelDimensions(text);
     const geom: PathLabelGeom = { p1, p2, dim, margin, text };
-    const clearPlacement = findClearPathLabelPlacement(geom, sides, cctx);
+    const clearPlacement =
+      (gap && findGapPathLabelPlacement(geom, gap, cctx)) ||
+      findClearPathLabelPlacement(geom, sides, cctx);
     if (clearPlacement) {
       edge.labelBounds = clearPlacement;
       edge.element.name = text;

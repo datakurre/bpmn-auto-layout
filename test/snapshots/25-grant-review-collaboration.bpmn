@@ -1,0 +1,329 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL" xmlns:bpmndi="http://www.omg.org/spec/BPMN/20100524/DI" xmlns:dc="http://www.omg.org/spec/DD/20100524/DC" xmlns:di="http://www.omg.org/spec/DD/20100524/DI" id="Definitions_GrantReview" targetNamespace="http://bpmn.io/schema/bpmn">
+  <bpmn:collaboration id="Collaboration_GrantReview">
+    <bpmn:participant id="Participant_Grant" name="Research grant workflow — funder-guide-derived happy path; partial evidence" processRef="Process_Grant" />
+    <bpmn:participant id="Participant_Reviewer" name="External expert reviewer — invited by the funding committee, unobserved path" processRef="Process_Reviewer" />
+    <bpmn:participant id="Participant_Partner" name="Partner institution — guide-derived path" processRef="Process_Partner" />
+    <bpmn:messageFlow id="Message_ReviewInvitation" name="Review invitation" sourceRef="Task_RequestReviews" targetRef="Start_InvitationReceived" />
+    <bpmn:messageFlow id="Message_ReviewReport" name="Submitted review report" sourceRef="Task_UploadReport" targetRef="Task_CollectReviews" />
+    <bpmn:messageFlow id="Message_PartnerRequest" name="Partner commitment request" sourceRef="Task_DraftProposal" targetRef="Start_RequestReceived" />
+    <bpmn:messageFlow id="Message_LettersDelivered" name="Support letters delivered" sourceRef="Task_SendLetter" targetRef="Event_LettersDelivered" />
+  </bpmn:collaboration>
+  <bpmn:process id="Process_Grant" isExecutable="false">
+    <bpmn:laneSet id="LaneSet_Grant">
+      <bpmn:lane id="Lane_Applicant" name="Principal investigator">
+        <bpmn:flowNodeRef>Start_CallOpens</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_DraftProposal</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SignAgreement</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Event_LettersDelivered</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>End_Awarded</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Office" name="Research services office / grants coordination team">
+        <bpmn:flowNodeRef>Task_CheckBudget</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_SubmitApplication</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_ReleaseFeedback</bpmn:flowNodeRef>
+      </bpmn:lane>
+      <bpmn:lane id="Lane_Committee" name="Funding committee">
+        <bpmn:flowNodeRef>Task_RequestReviews</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_CollectReviews</bpmn:flowNodeRef>
+        <bpmn:flowNodeRef>Task_RankApplications</bpmn:flowNodeRef>
+      </bpmn:lane>
+    </bpmn:laneSet>
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_CallOpens" targetRef="Task_DraftProposal" />
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_DraftProposal" targetRef="Event_LettersDelivered" />
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Event_LettersDelivered" targetRef="Task_CheckBudget" />
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Task_CheckBudget" targetRef="Task_SubmitApplication" />
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_SubmitApplication" targetRef="Task_RequestReviews" />
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_RequestReviews" targetRef="Task_CollectReviews" />
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Task_CollectReviews" targetRef="Task_RankApplications" />
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_RankApplications" targetRef="Task_ReleaseFeedback" />
+    <bpmn:sequenceFlow id="Flow_9" sourceRef="Task_ReleaseFeedback" targetRef="Task_SignAgreement" />
+    <bpmn:sequenceFlow id="Flow_10" sourceRef="Task_SignAgreement" targetRef="End_Awarded" />
+    <bpmn:startEvent id="Start_CallOpens" name="Grant call&#10;opens for&#10;applicants">
+      <bpmn:outgoing>Flow_1</bpmn:outgoing>
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_DraftProposal" name="Draft the research proposal and collect letters of support from co-applicants">
+      <bpmn:incoming>Flow_1</bpmn:incoming>
+      <bpmn:outgoing>Flow_2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:intermediateThrowEvent id="Event_LettersDelivered" name="Support letters delivered">
+      <bpmn:incoming>Flow_2</bpmn:incoming>
+      <bpmn:outgoing>Flow_3</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_Letters" />
+    </bpmn:intermediateThrowEvent>
+    <bpmn:userTask id="Task_CheckBudget" name="Check budget, compliance and institutional co-funding commitments">
+      <bpmn:incoming>Flow_3</bpmn:incoming>
+      <bpmn:outgoing>Flow_4</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_SubmitApplication" name="Submit the endorsed application to the funder portal">
+      <bpmn:incoming>Flow_4</bpmn:incoming>
+      <bpmn:outgoing>Flow_5</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="Task_RequestReviews" name="Request external expert reviews">
+      <bpmn:incoming>Flow_5</bpmn:incoming>
+      <bpmn:outgoing>Flow_6</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:receiveTask id="Task_CollectReviews" name="Collect expert review reports">
+      <bpmn:incoming>Flow_6</bpmn:incoming>
+      <bpmn:outgoing>Flow_7</bpmn:outgoing>
+    </bpmn:receiveTask>
+    <bpmn:userTask id="Task_RankApplications" name="Rank applications and prepare funding recommendation for the board">
+      <bpmn:incoming>Flow_7</bpmn:incoming>
+      <bpmn:outgoing>Flow_8</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_ReleaseFeedback" name="Review and release reviewer feedback to the applicant">
+      <bpmn:incoming>Flow_8</bpmn:incoming>
+      <bpmn:outgoing>Flow_9</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_SignAgreement" name="Sign the grant agreement">
+      <bpmn:incoming>Flow_9</bpmn:incoming>
+      <bpmn:outgoing>Flow_10</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_Awarded" name="Grant awarded">
+      <bpmn:incoming>Flow_10</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="Process_Reviewer" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_R1" sourceRef="Start_InvitationReceived" targetRef="Task_AssessProposal" />
+    <bpmn:sequenceFlow id="Flow_R2" sourceRef="Task_AssessProposal" targetRef="Task_UploadReport" />
+    <bpmn:sequenceFlow id="Flow_R3" sourceRef="Task_UploadReport" targetRef="End_ReportSubmitted" />
+    <bpmn:startEvent id="Start_InvitationReceived" name="Review invitation received">
+      <bpmn:outgoing>Flow_R1</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_Invitation" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_AssessProposal" name="Assess the proposal against the published criteria and draft comments">
+      <bpmn:incoming>Flow_R1</bpmn:incoming>
+      <bpmn:outgoing>Flow_R2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:userTask id="Task_UploadReport" name="Upload review report (guide-derived)">
+      <bpmn:incoming>Flow_R2</bpmn:incoming>
+      <bpmn:outgoing>Flow_R3</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:endEvent id="End_ReportSubmitted" name="Review report submitted">
+      <bpmn:incoming>Flow_R3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:process id="Process_Partner" isExecutable="false">
+    <bpmn:sequenceFlow id="Flow_P1" sourceRef="Start_RequestReceived" targetRef="Task_ConfirmParticipation" />
+    <bpmn:sequenceFlow id="Flow_P2" sourceRef="Task_ConfirmParticipation" targetRef="Task_SendLetter" />
+    <bpmn:sequenceFlow id="Flow_P3" sourceRef="Task_SendLetter" targetRef="End_LetterSent" />
+    <bpmn:startEvent id="Start_RequestReceived" name="Commitment request received">
+      <bpmn:outgoing>Flow_P1</bpmn:outgoing>
+      <bpmn:messageEventDefinition messageRef="Message_Request" />
+    </bpmn:startEvent>
+    <bpmn:userTask id="Task_ConfirmParticipation" name="Confirm participation and institutional commitments">
+      <bpmn:incoming>Flow_P1</bpmn:incoming>
+      <bpmn:outgoing>Flow_P2</bpmn:outgoing>
+    </bpmn:userTask>
+    <bpmn:sendTask id="Task_SendLetter" name="Send signed letter of support">
+      <bpmn:incoming>Flow_P2</bpmn:incoming>
+      <bpmn:outgoing>Flow_P3</bpmn:outgoing>
+    </bpmn:sendTask>
+    <bpmn:endEvent id="End_LetterSent" name="Letter sent">
+      <bpmn:incoming>Flow_P3</bpmn:incoming>
+    </bpmn:endEvent>
+  </bpmn:process>
+  <bpmn:message id="Message_Letters" name="Support letters delivered" />
+  <bpmn:message id="Message_Invitation" name="Review invitation" />
+  <bpmn:message id="Message_Request" name="Partner commitment request" />
+  <bpmndi:BPMNDiagram id="BPMNDiagram_1">
+    <bpmndi:BPMNPlane id="BPMNPlane_1" bpmnElement="Collaboration_GrantReview">
+      <bpmndi:BPMNShape id="Participant_Grant_di" bpmnElement="Participant_Grant">
+        <dc:Bounds x="100" y="80" width="2176" height="460" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Applicant_di" bpmnElement="Lane_Applicant">
+        <dc:Bounds x="130" y="80" width="2146" height="155" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Office_di" bpmnElement="Lane_Office">
+        <dc:Bounds x="130" y="235" width="2146" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Lane_Committee_di" bpmnElement="Lane_Committee">
+        <dc:Bounds x="130" y="385" width="2146" height="155" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Reviewer_di" bpmnElement="Participant_Reviewer">
+        <dc:Bounds x="100" y="600" width="2176" height="230" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Participant_Partner_di" bpmnElement="Participant_Partner">
+        <dc:Bounds x="100" y="890" width="2176" height="150" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_CallOpens_di" bpmnElement="Start_CallOpens">
+        <dc:Bounds x="180" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="167" y="188" width="58" height="40" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_DraftProposal_di" bpmnElement="Task_DraftProposal">
+        <dc:Bounds x="276" y="105" width="140" height="110" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Event_LettersDelivered_di" bpmnElement="Event_LettersDelivered">
+        <dc:Bounds x="656" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="610" y="118" width="128" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CheckBudget_di" bpmnElement="Task_CheckBudget">
+        <dc:Bounds x="752" y="255" width="140" height="110" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SubmitApplication_di" bpmnElement="Task_SubmitApplication">
+        <dc:Bounds x="952" y="260" width="140" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RequestReviews_di" bpmnElement="Task_RequestReviews">
+        <dc:Bounds x="1152" y="410" width="100" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_CollectReviews_di" bpmnElement="Task_CollectReviews">
+        <dc:Bounds x="1480" y="420" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_RankApplications_di" bpmnElement="Task_RankApplications">
+        <dc:Bounds x="1640" y="405" width="140" height="110" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ReleaseFeedback_di" bpmnElement="Task_ReleaseFeedback">
+        <dc:Bounds x="1840" y="260" width="120" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SignAgreement_di" bpmnElement="Task_SignAgreement">
+        <dc:Bounds x="2020" y="120" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_Awarded_di" bpmnElement="End_Awarded">
+        <dc:Bounds x="2180" y="142" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="2159" y="188" width="78" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_InvitationReceived_di" bpmnElement="Start_InvitationReceived">
+        <dc:Bounds x="1184" y="697" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1132" y="743" width="140" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_AssessProposal_di" bpmnElement="Task_AssessProposal">
+        <dc:Bounds x="1280" y="660" width="140" height="110" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_UploadReport_di" bpmnElement="Task_UploadReport">
+        <dc:Bounds x="1480" y="665" width="100" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_ReportSubmitted_di" bpmnElement="End_ReportSubmitted">
+        <dc:Bounds x="1640" y="697" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1594" y="743" width="128" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Start_RequestReceived_di" bpmnElement="Start_RequestReceived">
+        <dc:Bounds x="328" y="947" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="268" y="993" width="156" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_ConfirmParticipation_di" bpmnElement="Task_ConfirmParticipation">
+        <dc:Bounds x="424" y="915" width="140" height="100" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="Task_SendLetter_di" bpmnElement="Task_SendLetter">
+        <dc:Bounds x="624" y="925" width="100" height="80" />
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNShape id="End_LetterSent_di" bpmnElement="End_LetterSent">
+        <dc:Bounds x="784" y="947" width="36" height="36" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="772" y="993" width="60" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNShape>
+      <bpmndi:BPMNEdge id="Flow_1_di" bpmnElement="Flow_1">
+        <di:waypoint x="216" y="160" />
+        <di:waypoint x="276" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_2_di" bpmnElement="Flow_2">
+        <di:waypoint x="416" y="160" />
+        <di:waypoint x="656" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_3_di" bpmnElement="Flow_3">
+        <di:waypoint x="692" y="160" />
+        <di:waypoint x="722" y="160" />
+        <di:waypoint x="722" y="310" />
+        <di:waypoint x="752" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_4_di" bpmnElement="Flow_4">
+        <di:waypoint x="892" y="310" />
+        <di:waypoint x="952" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_5_di" bpmnElement="Flow_5">
+        <di:waypoint x="1092" y="310" />
+        <di:waypoint x="1122" y="310" />
+        <di:waypoint x="1122" y="460" />
+        <di:waypoint x="1152" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_6_di" bpmnElement="Flow_6">
+        <di:waypoint x="1252" y="460" />
+        <di:waypoint x="1480" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_7_di" bpmnElement="Flow_7">
+        <di:waypoint x="1580" y="460" />
+        <di:waypoint x="1640" y="460" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_8_di" bpmnElement="Flow_8">
+        <di:waypoint x="1780" y="460" />
+        <di:waypoint x="1810" y="460" />
+        <di:waypoint x="1810" y="310" />
+        <di:waypoint x="1840" y="310" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_9_di" bpmnElement="Flow_9">
+        <di:waypoint x="1960" y="310" />
+        <di:waypoint x="1990" y="310" />
+        <di:waypoint x="1990" y="160" />
+        <di:waypoint x="2020" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_10_di" bpmnElement="Flow_10">
+        <di:waypoint x="2120" y="160" />
+        <di:waypoint x="2180" y="160" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_R1_di" bpmnElement="Flow_R1">
+        <di:waypoint x="1220" y="715" />
+        <di:waypoint x="1280" y="715" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_R2_di" bpmnElement="Flow_R2">
+        <di:waypoint x="1420" y="715" />
+        <di:waypoint x="1480" y="715" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_R3_di" bpmnElement="Flow_R3">
+        <di:waypoint x="1580" y="715" />
+        <di:waypoint x="1640" y="715" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P1_di" bpmnElement="Flow_P1">
+        <di:waypoint x="364" y="965" />
+        <di:waypoint x="424" y="965" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P2_di" bpmnElement="Flow_P2">
+        <di:waypoint x="564" y="965" />
+        <di:waypoint x="624" y="965" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Flow_P3_di" bpmnElement="Flow_P3">
+        <di:waypoint x="724" y="965" />
+        <di:waypoint x="784" y="965" />
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Message_ReviewInvitation_di" bpmnElement="Message_ReviewInvitation">
+        <di:waypoint x="1202" y="510" />
+        <di:waypoint x="1202" y="697" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1212" y="563" width="94" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Message_ReviewReport_di" bpmnElement="Message_ReviewReport">
+        <di:waypoint x="1530" y="665" />
+        <di:waypoint x="1530" y="500" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="1540" y="563" width="126" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Message_PartnerRequest_di" bpmnElement="Message_PartnerRequest">
+        <di:waypoint x="346" y="215" />
+        <di:waypoint x="346" y="947" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="356" y="563" width="148" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+      <bpmndi:BPMNEdge id="Message_LettersDelivered_di" bpmnElement="Message_LettersDelivered">
+        <di:waypoint x="674" y="925" />
+        <di:waypoint x="674" y="178" />
+        <bpmndi:BPMNLabel>
+          <dc:Bounds x="684" y="563" width="128" height="14" />
+        </bpmndi:BPMNLabel>
+      </bpmndi:BPMNEdge>
+    </bpmndi:BPMNPlane>
+  </bpmndi:BPMNDiagram>
+</bpmn:definitions>
